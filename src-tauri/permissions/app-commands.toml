@@ -1,0 +1,154 @@
+[[permission]]
+identifier = "allow-load-config"
+description = "Load app config"
+commands.allow = ["load_config"]
+
+[[permission]]
+identifier = "allow-save-config"
+description = "Save app config"
+commands.allow = ["save_config"]
+
+[[permission]]
+identifier = "allow-list-projects"
+description = "List projects in workspace"
+commands.allow = ["list_projects"]
+
+[[permission]]
+identifier = "allow-scan-project"
+description = "Scan project details"
+commands.allow = ["scan_project"]
+
+[[permission]]
+identifier = "allow-git-branches"
+description = "List git branches"
+commands.allow = ["git_branches"]
+
+[[permission]]
+identifier = "allow-git-status"
+description = "Get git working tree status"
+commands.allow = ["git_status"]
+
+[[permission]]
+identifier = "allow-git-checkout"
+description = "Checkout git branch"
+commands.allow = ["git_checkout"]
+
+[[permission]]
+identifier = "allow-git-fetch"
+description = "Fetch git remotes"
+commands.allow = ["git_fetch"]
+
+[[permission]]
+identifier = "allow-list-env-files"
+description = "List env files"
+commands.allow = ["list_env_files"]
+
+[[permission]]
+identifier = "allow-read-env-file"
+description = "Read env file"
+commands.allow = ["read_env_file"]
+
+[[permission]]
+identifier = "allow-run-command"
+description = "Run project command"
+commands.allow = ["run_command"]
+
+[[permission]]
+identifier = "allow-kill-command"
+description = "Kill running command"
+commands.allow = ["kill_command"]
+
+[[permission]]
+identifier = "allow-write-terminal-stdin"
+description = "Write to running terminal stdin"
+commands.allow = ["write_terminal_stdin"]
+
+[[permission]]
+identifier = "allow-detect-ides"
+description = "Detect IDEs"
+commands.allow = ["detect_ides"]
+
+[[permission]]
+identifier = "allow-list-installed-editors"
+description = "List installed editors for quick add"
+commands.allow = ["list_installed_editors"]
+
+[[permission]]
+identifier = "allow-open-in-ide"
+description = "Open project in IDE"
+commands.allow = ["open_in_ide"]
+
+[[permission]]
+identifier = "allow-save-ides"
+description = "Save IDE configs"
+commands.allow = ["save_ides"]
+
+[[permission]]
+identifier = "allow-set-project-tags"
+description = "Set project tags"
+commands.allow = ["set_project_tags"]
+
+[[permission]]
+identifier = "allow-touch-command-history"
+description = "Record command history"
+commands.allow = ["touch_command_history"]
+
+[[permission]]
+identifier = "allow-touch-branch-history"
+description = "Record branch history"
+commands.allow = ["touch_branch_history"]
+
+[[permission]]
+identifier = "allow-set-history-pinned"
+description = "Pin history item"
+commands.allow = ["set_history_pinned"]
+
+[[permission]]
+identifier = "allow-delete-history"
+description = "Delete history item"
+commands.allow = ["delete_history"]
+
+[[permission]]
+identifier = "allow-touch-search-history"
+description = "Record search history"
+commands.allow = ["touch_search_history"]
+
+[[permission]]
+identifier = "allow-touch-project-access"
+description = "Record project access time"
+commands.allow = ["touch_project_access"]
+
+[[permission]]
+identifier = "allow-set-locale"
+description = "Set UI locale"
+commands.allow = ["set_locale"]
+
+[[permission]]
+identifier = "allow-pick-directory"
+description = "Pick directory"
+commands.allow = ["pick_directory"]
+
+[[permission]]
+identifier = "allow-pick-executable"
+description = "Pick executable"
+commands.allow = ["pick_executable"]
+
+[[permission]]
+identifier = "allow-pick-image"
+description = "Pick image file"
+commands.allow = ["pick_image"]
+
+[[permission]]
+identifier = "allow-import-ide-icon"
+description = "Import IDE icon from path into cache"
+commands.allow = ["import_ide_icon"]
+
+[[permission]]
+identifier = "allow-import-ide-icon-bytes"
+description = "Import IDE icon bytes into cache"
+commands.allow = ["import_ide_icon_bytes"]
+
+[[permission]]
+identifier = "allow-extract-ide-icon-from-exe"
+description = "Extract IDE icon from executable"
+commands.allow = ["extract_ide_icon_from_exe"]
