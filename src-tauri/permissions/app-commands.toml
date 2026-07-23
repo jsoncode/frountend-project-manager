@@ -114,6 +114,11 @@ description = "Open project in IDE"
 commands.allow = ["open_in_ide"]
 
 [[permission]]
+identifier = "allow-reveal-in-file-manager"
+description = "Reveal path in system file manager"
+commands.allow = ["reveal_in_file_manager"]
+
+[[permission]]
 identifier = "allow-save-ides"
 description = "Save IDE configs"
 commands.allow = ["save_ides"]

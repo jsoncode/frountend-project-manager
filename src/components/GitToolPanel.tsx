@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import { useEffect, useState, type MouseEvent } from 'react'
+import { useCallback, useState, type MouseEvent } from 'react'
 import { useI18n } from '../i18n/useI18n'
 import { writeToTerminal } from '../lib/ptyHost'
 import type { BranchItem } from '../lib/types'
@@ -7,6 +7,7 @@ import { useProjectStore } from '../stores/projectStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useTerminalStore } from '../stores/terminalStore'
 import { BranchSwitchModal } from './BranchSwitchModal'
+import { ContextMenuPortal } from './ContextMenuPortal'
 import { HistoryChips } from './HistoryChips'
 import { ModalShell } from './ModalShell'
 
@@ -36,16 +37,7 @@ export function GitToolPanel() {
   const branchHistory =
     selected && config ? (config.branchHistory?.[selected.path] ?? []) : []
 
-  useEffect(() => {
-    if (!menu) return
-    const close = () => setMenu(null)
-    window.addEventListener('click', close)
-    window.addEventListener('scroll', close, true)
-    return () => {
-      window.removeEventListener('click', close)
-      window.removeEventListener('scroll', close, true)
-    }
-  }, [menu])
+  const closeMenu = useCallback(() => setMenu(null), [])
 
   if (!selected) return null
 
@@ -181,14 +173,11 @@ export function GitToolPanel() {
       </div>
 
       {menu && (
-        <div
-          className="branch-menu"
-          style={{ left: menu.x, top: menu.y }}
-          onClick={(e) => e.stopPropagation()}
-        >
+        <ContextMenuPortal x={menu.x} y={menu.y} onClose={closeMenu}>
           {!menu.branch.isRemote && git?.current !== menu.branch.name && (
             <button
               type="button"
+              role="menuitem"
               onClick={() => {
                 setSwitchTarget(menu.branch.name)
                 setMenu(null)
@@ -199,6 +188,7 @@ export function GitToolPanel() {
           )}
           <button
             type="button"
+            role="menuitem"
             disabled={pulling}
             onClick={() => {
               const target = menu.branch
@@ -206,11 +196,16 @@ export function GitToolPanel() {
               void pullBranch(target)
             }}
           >
-            {t('git.ctx.pull')}
+            {git?.current === menu.branch.name ||
+            (!menu.branch.isRemote &&
+              git?.current === localName(menu.branch.name))
+              ? t('git.ctx.pull')
+              : t('git.ctx.pullOther')}
           </button>
           {!menu.branch.isRemote && (
             <button
               type="button"
+              role="menuitem"
               onClick={() => {
                 const name = localName(menu.branch.name)
                 const isCurrent = git?.current === menu.branch.name
@@ -227,6 +222,7 @@ export function GitToolPanel() {
           )}
           <button
             type="button"
+            role="menuitem"
             onClick={() => {
               setMenu(null)
               void (async () => {
@@ -248,6 +244,7 @@ export function GitToolPanel() {
           {!menu.branch.isRemote && (
             <button
               type="button"
+              role="menuitem"
               onClick={() => {
                 setCommitTarget(menu.branch.name)
                 setMenu(null)
@@ -258,6 +255,7 @@ export function GitToolPanel() {
           )}
           <button
             type="button"
+            role="menuitem"
             onClick={() => {
               runGit('git status')
               setMenu(null)
@@ -267,6 +265,7 @@ export function GitToolPanel() {
           </button>
           <button
             type="button"
+            role="menuitem"
             onClick={() => {
               runGit('git log --oneline -20')
               setMenu(null)
@@ -274,7 +273,7 @@ export function GitToolPanel() {
           >
             {t('git.ctx.log')}
           </button>
-        </div>
+        </ContextMenuPortal>
       )}
 
       {commitTarget && (

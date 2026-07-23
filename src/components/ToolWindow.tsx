@@ -58,6 +58,16 @@ export function ToolWindow() {
     }
   }
 
+  const revealSelected = async () => {
+    if (!selected) return
+    setIdeError(null)
+    try {
+      await invoke('reveal_in_file_manager', { path: selected.path })
+    } catch (e) {
+      setIdeError(String(e))
+    }
+  }
+
   const renderBody = (id: SideTool): ReactNode => {
     if (!selected && id !== 'ide' && id !== 'cmd') {
       return <div className="muted">{t('tool.needProject')}</div>
@@ -166,6 +176,20 @@ export function ToolWindow() {
             {selected ? t('tool.ideHint') : t('top.ideNeedProject')}
           </p>
           <div className="ide-open-list">
+            <button
+              type="button"
+              className="ide-open-item"
+              disabled={!selected}
+              title={
+                selected ? t('open.inFileManager') : t('top.ideNeedProject')
+              }
+              onClick={() => void revealSelected()}
+            >
+              <span className="ide-open-folder" aria-hidden>
+                ⌂
+              </span>
+              <span className="ide-open-name">{t('open.inFileManager')}</span>
+            </button>
             {ides.map((ide) => (
               <button
                 key={ide.id}

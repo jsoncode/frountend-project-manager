@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useI18n } from '../i18n/useI18n'
 import { useProjectStore } from '../stores/projectStore'
 import { useWorkspaceStore } from '../stores/workspaceStore'
+import { OpenWithMenu } from './OpenWithMenu'
 
 export function ProjectList() {
   const projects = useWorkspaceStore((s) => s.projects)
@@ -15,6 +16,9 @@ export function ProjectList() {
   const { t } = useI18n()
   const itemRefs = useRef(new Map<string, HTMLButtonElement>())
   const scrollRef = useRef<HTMLDivElement>(null)
+  const [menu, setMenu] = useState<{ path: string; x: number; y: number } | null>(
+    null,
+  )
 
   const q = search.trim().toLowerCase()
 
@@ -70,6 +74,12 @@ export function ProjectList() {
                 void selectProject(p)
                 if (search.trim()) setSearch('')
               }}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                void selectProject(p)
+                setMenu({ path: p.path, x: e.clientX, y: e.clientY })
+              }}
             >
               <span className="project-capsule-name">{p.folderName}</span>
               <span className="project-capsule-meta muted">
@@ -82,6 +92,15 @@ export function ProjectList() {
           <div className="empty">{t('projects.noMatch')}</div>
         )}
       </div>
+
+      {menu && (
+        <OpenWithMenu
+          path={menu.path}
+          x={menu.x}
+          y={menu.y}
+          onClose={() => setMenu(null)}
+        />
+      )}
     </aside>
   )
 }

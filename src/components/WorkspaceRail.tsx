@@ -4,6 +4,7 @@ import { useI18n } from '../i18n/useI18n'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import { ModalShell } from './ModalShell'
+import { OpenWithMenu } from './OpenWithMenu'
 
 export function WorkspaceRail() {
   const config = useSettingsStore((s) => s.config)
@@ -12,6 +13,9 @@ export function WorkspaceRail() {
   const setActiveWorkspace = useWorkspaceStore((s) => s.setActiveWorkspace)
   const refreshProjects = useWorkspaceStore((s) => s.refreshProjects)
   const [pendingRemove, setPendingRemove] = useState<string | null>(null)
+  const [menu, setMenu] = useState<{ path: string; x: number; y: number } | null>(
+    null,
+  )
   const { t } = useI18n()
 
   const addWorkspace = async () => {
@@ -71,6 +75,11 @@ export function WorkspaceRail() {
             key={ws}
             className={`rail-item ${activeWorkspace === ws ? 'active' : ''}`}
             onClick={() => setActiveWorkspace(ws)}
+            onContextMenu={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setMenu({ path: ws, x: e.clientX, y: e.clientY })
+            }}
             title={ws}
           >
             <div className="rail-item-body">
@@ -95,6 +104,15 @@ export function WorkspaceRail() {
           <div className="empty">{t('ws.empty')}</div>
         )}
       </div>
+
+      {menu && (
+        <OpenWithMenu
+          path={menu.path}
+          x={menu.x}
+          y={menu.y}
+          onClose={() => setMenu(null)}
+        />
+      )}
 
       {pendingRemove && (
         <ModalShell title={t('ws.removeTitle')} onClose={() => setPendingRemove(null)}>

@@ -872,3 +872,59 @@ pub fn open_in_ide(ide: &IdeConfig, project_path: &str) -> Result<(), String> {
     })?;
     Ok(())
 }
+
+/// Open a folder (or reveal a file) in the system file manager.
+pub fn reveal_in_file_manager(path: &str) -> Result<(), String> {
+    let p = PathBuf::from(path.trim());
+    if !p.exists() {
+        return Err(format!("路径不存在: {path}"));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let mut cmd = Command::new("explorer");
+        if p.is_file() {
+            cmd.arg(format!("/select,{}", p.to_string_lossy()));
+        } else {
+            cmd.arg(p.as_os_str());
+        }
+        cmd.stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .map_err(|e| format!("打开文件管理器失败: {e}"))?;
+        Ok(())
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let mut cmd = Command::new("open");
+        if p.is_file() {
+            cmd.args(["-R", path]);
+        } else {
+            cmd.arg(path);
+        }
+        cmd.spawn()
+            .map_err(|e| format!("打开 Finder 失败: {e}"))?;
+        Ok(())
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let target = if p.is_file() {
+            p.parent()
+                .map(|x| x.to_string_lossy().to_string())
+                .unwrap_or_else(|| path.to_string())
+        } else {
+            path.to_string()
+        };
+        Command::new("xdg-open")
+            .arg(&target)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .map_err(|e| format!("打开文件管理器失败: {e}"))?;
+        Ok(())
+    }
+}

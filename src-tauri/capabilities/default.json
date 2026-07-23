@@ -36,6 +36,7 @@
     "allow-detect-ides",
     "allow-list-installed-editors",
     "allow-open-in-ide",
+    "allow-reveal-in-file-manager",
     "allow-save-ides",
     "allow-set-project-tags",
     "allow-touch-command-history",

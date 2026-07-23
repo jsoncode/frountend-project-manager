@@ -179,6 +179,11 @@ fn open_in_ide(app: AppHandle, ide_id: String, project_path: String) -> Result<(
 }
 
 #[tauri::command]
+fn reveal_in_file_manager(path: String) -> Result<(), String> {
+    ide::reveal_in_file_manager(&path)
+}
+
+#[tauri::command]
 fn save_ides(app: AppHandle, ides: Vec<IdeConfig>) -> Result<AppConfig, String> {
     let mut cfg = config::load_or_default(&app)?;
     cfg.ides = ides;
@@ -421,6 +426,7 @@ pub fn run() {
             detect_ides,
             list_installed_editors,
             open_in_ide,
+            reveal_in_file_manager,
             save_ides,
             set_project_tags,
             touch_command_history,
