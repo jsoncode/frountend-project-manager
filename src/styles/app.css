@@ -425,6 +425,7 @@ body.resizing-row * {
   flex-direction: column;
   gap: 8px;
   padding: 8px 10px 12px;
+  scroll-behavior: smooth;
 }
 
 .project-capsule {
@@ -475,15 +476,6 @@ body.resizing-row * {
 .muted {
   opacity: 0.65;
   font-size: 13px;
-}
-
-.tags-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 8px 12px 12px;
-  border-top: 1px solid var(--border-dim);
-  margin-top: auto;
 }
 
 .chip {
@@ -566,6 +558,33 @@ body.resizing-row * {
   align-items: stretch;
 }
 
+.tool-panels-col {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.tool-panels-col.stack {
+  gap: 0;
+}
+
+.tool-panels-col.stack .tool-panel {
+  flex: 1 1 0;
+  min-height: 120px;
+  border-bottom: 1px solid var(--border-dim);
+}
+
+.tool-panels-col.stack .tool-panel:last-child {
+  border-bottom: none;
+}
+
+.tool-panels-col.single .tool-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .tool-panel {
   display: flex;
   flex-direction: column;
@@ -620,6 +639,32 @@ body.resizing-row * {
   background: var(--bg-0);
   overflow-x: hidden;
   overflow-y: auto;
+}
+
+.tool-strip-mode {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 2px;
+  margin-bottom: 4px;
+  border: 1px solid var(--border-dim);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  border-radius: 2px;
+}
+
+.tool-strip-mode.active {
+  border-color: var(--cyan);
+  color: var(--cyan-soft);
+  background: rgba(34, 211, 238, 0.08);
+}
+
+.tool-strip-mode:hover {
+  color: var(--cyan-soft);
 }
 
 .tool-strip-btn {
@@ -928,14 +973,7 @@ body.resizing-row * {
 }
 
 .side-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-height: 0;
-}
-
-.side-stack .panel {
-  flex: 1;
+  display: none;
 }
 
 .branch-list {
@@ -1153,22 +1191,40 @@ body.resizing-row * {
   display: none;
 }
 
+/* Outer shell: padding only. Do NOT open xterm here — FitAddon would
+   over-count height (border-box includes padding) and clip the last row. */
 .xterm-session {
   position: absolute;
   inset: 0;
-  padding: 4px 6px 6px;
+  padding: 6px 8px 10px;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .xterm-session[hidden] {
   display: none !important;
 }
 
+.xterm-fit-host {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .xterm-session .xterm {
   height: 100%;
+  width: 100%;
+  padding: 0;
 }
 
 .xterm-session .xterm-viewport {
   overflow-y: auto !important;
+}
+
+/* Keep the last row fully inside the scrollport */
+.xterm-session .xterm-screen {
+  margin-bottom: 0;
 }
 
 .terminal-input-row {

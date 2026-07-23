@@ -24,111 +24,255 @@ pub struct IdeConfig {
     pub icon_path: Option<String>,
 }
 
-/// Fast defaults for first launch — no PATH scans, no console flashes.
-pub fn default_ides() -> Vec<IdeConfig> {
-    vec![
-        IdeConfig {
-            id: "vscode".into(),
-            name: "VS Code".into(),
-            executable: "code".into(),
-            args_template: "{path}".into(),
-            enabled: true,
-            builtin: true,
-            icon_path: None,
-        },
-        IdeConfig {
-            id: "webstorm".into(),
-            name: "WebStorm".into(),
-            executable: "webstorm".into(),
-            args_template: "{path}".into(),
-            enabled: true,
-            builtin: true,
-            icon_path: None,
-        },
-        IdeConfig {
-            id: "cursor".into(),
-            name: "Cursor".into(),
-            executable: "cursor".into(),
-            args_template: "{path}".into(),
-            enabled: true,
-            builtin: true,
-            icon_path: None,
-        },
-    ]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InstalledEditor {
+    pub name: String,
+    pub executable: String,
+    /// True when the executable path exists on disk.
+    pub available: bool,
 }
 
-fn first_existing(candidates: &[&str]) -> Option<String> {
+/// One probe rule: display name, PATH cli names, Windows path templates, registry keywords.
+#[derive(Clone)]
+struct IdeProbe {
+    id: &'static str,
+    name: &'static str,
+    /// `where` / `which` names
+    cli: &'static [&'static str],
+    /// Path templates with `%LOCALAPPDATA%` / `%PROGRAMFILES%` / `%USERPROFILE%`
+    win_paths: &'static [&'static str],
+    /// JetBrains Toolbox folder names under `%LOCALAPPDATA%\JetBrains\Toolbox\apps`
+    toolbox_dirs: &'static [&'static str],
+    /// Binary under toolbox version `\bin\`
+    toolbox_bin: Option<&'static str>,
+    /// Uninstall DisplayName keywords
+    keywords: &'static [&'static str],
+}
+
+/// Built-in catalog. Extend at runtime via `FPM_IDE_EXTRA` / `FPM_IDE_KEYWORDS`.
+///
+/// `FPM_IDE_EXTRA` format (semicolon-separated):
+///   `Name|cli|path1,path2;Other|cli2|%LOCALAPPDATA%\Programs\Other\Other.exe`
+/// `FPM_IDE_KEYWORDS` (comma-separated) adds Uninstall registry match keywords.
+const BUILTIN_PROBES: &[IdeProbe] = &[
+    IdeProbe {
+        id: "vscode",
+        name: "VS Code",
+        cli: &["code"],
+        win_paths: &[
+            r"%LOCALAPPDATA%\Programs\Microsoft VS Code\Code.exe",
+            r"%LOCALAPPDATA%\Programs\Microsoft VS Code\bin\code.cmd",
+            r"%PROGRAMFILES%\Microsoft VS Code\Code.exe",
+            r"%PROGRAMFILES%\Microsoft VS Code\bin\code.cmd",
+        ],
+        toolbox_dirs: &[],
+        toolbox_bin: None,
+        keywords: &["Visual Studio Code"],
+    },
+    IdeProbe {
+        id: "cursor",
+        name: "Cursor",
+        cli: &["cursor"],
+        win_paths: &[
+            r"%LOCALAPPDATA%\Programs\cursor\Cursor.exe",
+            r"%LOCALAPPDATA%\Programs\Cursor\Cursor.exe",
+            r"%LOCALAPPDATA%\Programs\cursor\resources\app\bin\cursor.cmd",
+        ],
+        toolbox_dirs: &[],
+        toolbox_bin: None,
+        keywords: &["Cursor"],
+    },
+    IdeProbe {
+        id: "webstorm",
+        name: "WebStorm",
+        cli: &["webstorm", "webstorm64"],
+        win_paths: &[],
+        toolbox_dirs: &["WebStorm"],
+        toolbox_bin: Some("webstorm64.exe"),
+        keywords: &["WebStorm"],
+    },
+    IdeProbe {
+        id: "pycharm",
+        name: "PyCharm",
+        cli: &["pycharm", "pycharm64"],
+        win_paths: &[],
+        toolbox_dirs: &["PyCharm-P", "PyCharm-C", "PyCharm"],
+        toolbox_bin: Some("pycharm64.exe"),
+        keywords: &["PyCharm"],
+    },
+    IdeProbe {
+        id: "trae",
+        name: "Trae",
+        cli: &["trae"],
+        win_paths: &[
+            r"%LOCALAPPDATA%\Programs\Trae\Trae.exe",
+            r"%LOCALAPPDATA%\Programs\trae\Trae.exe",
+            r"%LOCALAPPDATA%\Programs\Trae\bin\trae.cmd",
+        ],
+        toolbox_dirs: &[],
+        toolbox_bin: None,
+        keywords: &["Trae"],
+    },
+    IdeProbe {
+        id: "trae-work",
+        name: "Trae Work",
+        cli: &["trae-work", "traework"],
+        win_paths: &[
+            r"%LOCALAPPDATA%\Programs\Trae Work\Trae Work.exe",
+            r"%LOCALAPPDATA%\Programs\TraeWork\TraeWork.exe",
+            r"%LOCALAPPDATA%\Programs\Trae Work\TraeWork.exe",
+            r"%LOCALAPPDATA%\Programs\TRAE Work\TRAE Work.exe",
+        ],
+        toolbox_dirs: &[],
+        toolbox_bin: None,
+        keywords: &["Trae Work", "TRAE Work"],
+    },
+    IdeProbe {
+        id: "qoder",
+        name: "Qoder",
+        cli: &["qoder"],
+        win_paths: &[
+            r"%LOCALAPPDATA%\Programs\Qoder\Qoder.exe",
+            r"%LOCALAPPDATA%\Programs\qoder\Qoder.exe",
+            r"%LOCALAPPDATA%\Qoder\Qoder.exe",
+        ],
+        toolbox_dirs: &[],
+        toolbox_bin: None,
+        keywords: &["Qoder"],
+    },
+    IdeProbe {
+        id: "workbuddy",
+        name: "WorkBuddy",
+        cli: &["workbuddy"],
+        win_paths: &[
+            r"%LOCALAPPDATA%\Programs\WorkBuddy\WorkBuddy.exe",
+            r"%LOCALAPPDATA%\Programs\workbuddy\WorkBuddy.exe",
+            r"%LOCALAPPDATA%\WorkBuddy\WorkBuddy.exe",
+            r"%USERPROFILE%\.workbuddy\WorkBuddy.exe",
+        ],
+        toolbox_dirs: &[],
+        toolbox_bin: None,
+        keywords: &["WorkBuddy"],
+    },
+    IdeProbe {
+        id: "codebuddy",
+        name: "CodeBuddy",
+        cli: &["codebuddy"],
+        win_paths: &[
+            r"%LOCALAPPDATA%\Programs\CodeBuddy\CodeBuddy.exe",
+            r"%LOCALAPPDATA%\Programs\codebuddy\CodeBuddy.exe",
+            r"%LOCALAPPDATA%\codebuddy\CodeBuddy.exe",
+            r"%LOCALAPPDATA%\codebuddy\bin\codebuddy.exe",
+            r"%USERPROFILE%\.codebuddy\CodeBuddy.exe",
+        ],
+        toolbox_dirs: &[],
+        toolbox_bin: None,
+        keywords: &["CodeBuddy"],
+    },
+    IdeProbe {
+        id: "chatgpt",
+        name: "ChatGPT",
+        cli: &["chatgpt"],
+        win_paths: &[
+            r"%LOCALAPPDATA%\Programs\ChatGPT\ChatGPT.exe",
+            r"%LOCALAPPDATA%\ChatGPT\ChatGPT.exe",
+            r"%LOCALAPPDATA%\Programs\OpenAI ChatGPT\ChatGPT.exe",
+        ],
+        toolbox_dirs: &[],
+        toolbox_bin: None,
+        keywords: &["ChatGPT"],
+    },
+    IdeProbe {
+        id: "codex",
+        name: "Codex",
+        cli: &["codex"],
+        win_paths: &[
+            r"%LOCALAPPDATA%\Programs\Codex\Codex.exe",
+            r"%LOCALAPPDATA%\Programs\OpenAI Codex\Codex.exe",
+            r"%LOCALAPPDATA%\codex\codex.exe",
+            r"%USERPROFILE%\.local\bin\codex.exe",
+            r"%USERPROFILE%\.codex\bin\codex.exe",
+        ],
+        toolbox_dirs: &[],
+        toolbox_bin: None,
+        keywords: &["Codex", "OpenAI Codex"],
+    },
+    IdeProbe {
+        id: "windsurf",
+        name: "Windsurf",
+        cli: &["windsurf"],
+        win_paths: &[r"%LOCALAPPDATA%\Programs\Windsurf\Windsurf.exe"],
+        toolbox_dirs: &[],
+        toolbox_bin: None,
+        keywords: &["Windsurf"],
+    },
+    IdeProbe {
+        id: "vscodium",
+        name: "VSCodium",
+        cli: &["codium"],
+        win_paths: &[
+            r"%LOCALAPPDATA%\Programs\VSCodium\VSCodium.exe",
+            r"%PROGRAMFILES%\VSCodium\VSCodium.exe",
+        ],
+        toolbox_dirs: &[],
+        toolbox_bin: None,
+        keywords: &["VSCodium"],
+    },
+];
+
+/// Fast defaults for first launch — short CLI names (PATH may resolve later).
+pub fn default_ides() -> Vec<IdeConfig> {
+    BUILTIN_PROBES
+        .iter()
+        .take(4)
+        .map(|p| IdeConfig {
+            id: p.id.into(),
+            name: p.name.into(),
+            executable: p.cli.first().copied().unwrap_or(p.id).into(),
+            args_template: "{path}".into(),
+            enabled: true,
+            builtin: true,
+            icon_path: None,
+        })
+        .collect()
+}
+
+fn env_var_ci(name: &str) -> Option<String> {
+    std::env::var(name).ok().filter(|s| !s.trim().is_empty())
+}
+
+fn expand_path_template(raw: &str) -> String {
+    let mut out = raw.to_string();
+    let replacements: &[(&str, Option<String>)] = &[
+        ("%LOCALAPPDATA%", env_var_ci("LOCALAPPDATA")),
+        ("%APPDATA%", env_var_ci("APPDATA")),
+        ("%PROGRAMFILES%", env_var_ci("PROGRAMFILES")),
+        ("%PROGRAMFILES(X86)%", env_var_ci("PROGRAMFILES(X86)")),
+        ("%USERPROFILE%", env_var_ci("USERPROFILE")),
+        ("$LOCALAPPDATA", env_var_ci("LOCALAPPDATA")),
+        ("$APPDATA", env_var_ci("APPDATA")),
+        (
+            "$HOME",
+            env_var_ci("USERPROFILE").or_else(|| env_var_ci("HOME")),
+        ),
+    ];
+    for (key, val) in replacements {
+        if let Some(v) = val {
+            out = out.replace(key, v);
+        }
+    }
+    out
+}
+
+fn first_existing_path(candidates: &[String]) -> Option<String> {
     for c in candidates {
         let p = PathBuf::from(c);
-        if p.exists() {
+        if p.is_file() {
             return Some(p.to_string_lossy().to_string());
         }
     }
     None
-}
-
-fn detect_vscode() -> Option<String> {
-    #[cfg(target_os = "windows")]
-    {
-        let local = std::env::var("LOCALAPPDATA").ok();
-        let mut candidates = Vec::new();
-        if let Some(local) = local {
-            candidates.push(format!(
-                r"{local}\Programs\Microsoft VS Code\Code.exe"
-            ));
-            candidates.push(format!(
-                r"{local}\Programs\Microsoft VS Code\bin\code.cmd"
-            ));
-        }
-        candidates.push(r"C:\Program Files\Microsoft VS Code\Code.exe".into());
-        candidates.push(r"C:\Program Files\Microsoft VS Code\bin\code.cmd".into());
-        let refs: Vec<&str> = candidates.iter().map(|s| s.as_str()).collect();
-        if let Some(p) = first_existing(&refs) {
-            return Some(p);
-        }
-    }
-    which_cmd("code")
-}
-
-fn detect_cursor() -> Option<String> {
-    #[cfg(target_os = "windows")]
-    {
-        let local = std::env::var("LOCALAPPDATA").ok();
-        let mut candidates = Vec::new();
-        if let Some(local) = local {
-            candidates.push(format!(r"{local}\Programs\cursor\Cursor.exe"));
-            candidates.push(format!(
-                r"{local}\Programs\cursor\resources\app\bin\cursor.cmd"
-            ));
-        }
-        let refs: Vec<&str> = candidates.iter().map(|s| s.as_str()).collect();
-        if let Some(p) = first_existing(&refs) {
-            return Some(p);
-        }
-    }
-    which_cmd("cursor")
-}
-
-fn detect_webstorm() -> Option<String> {
-    #[cfg(target_os = "windows")]
-    {
-        let local = std::env::var("LOCALAPPDATA").ok();
-        if let Some(local) = local {
-            let toolbox = PathBuf::from(format!(r"{local}\JetBrains\Toolbox\apps\WebStorm"));
-            if toolbox.is_dir() {
-                // Only scan one level of version folders — avoid walking huge trees.
-                if let Ok(walker) = fs::read_dir(&toolbox) {
-                    for entry in walker.flatten().take(12) {
-                        let bin = entry.path().join("bin").join("webstorm64.exe");
-                        if bin.exists() {
-                            return Some(bin.to_string_lossy().to_string());
-                        }
-                    }
-                }
-            }
-        }
-    }
-    which_cmd("webstorm")
 }
 
 fn which_cmd(name: &str) -> Option<String> {
@@ -170,45 +314,102 @@ fn which_cmd(name: &str) -> Option<String> {
     }
 }
 
-pub fn detect_ides() -> Vec<IdeConfig> {
-    vec![
-        IdeConfig {
-            id: "vscode".into(),
-            name: "VS Code".into(),
-            executable: detect_vscode().unwrap_or_else(|| "code".into()),
-            args_template: "{path}".into(),
-            enabled: true,
-            builtin: true,
-            icon_path: None,
-        },
-        IdeConfig {
-            id: "webstorm".into(),
-            name: "WebStorm".into(),
-            executable: detect_webstorm().unwrap_or_else(|| "webstorm".into()),
-            args_template: "{path}".into(),
-            enabled: true,
-            builtin: true,
-            icon_path: None,
-        },
-        IdeConfig {
-            id: "cursor".into(),
-            name: "Cursor".into(),
-            executable: detect_cursor().unwrap_or_else(|| "cursor".into()),
-            args_template: "{path}".into(),
-            enabled: true,
-            builtin: true,
-            icon_path: None,
-        },
-    ]
+fn find_toolbox_bin(dirs: &[&str], bin: &str) -> Option<String> {
+    #[cfg(target_os = "windows")]
+    {
+        let local = env_var_ci("LOCALAPPDATA")?;
+        let root = PathBuf::from(format!(r"{local}\JetBrains\Toolbox\apps"));
+        if !root.is_dir() {
+            return None;
+        }
+        for dir_name in dirs {
+            let app_dir = root.join(dir_name);
+            if !app_dir.is_dir() {
+                continue;
+            }
+            if let Ok(walker) = fs::read_dir(&app_dir) {
+                for entry in walker.flatten().take(12) {
+                    let exe = entry.path().join("bin").join(bin);
+                    if exe.is_file() {
+                        return Some(exe.to_string_lossy().to_string());
+                    }
+                }
+            }
+        }
+        None
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (dirs, bin);
+        None
+    }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct InstalledEditor {
-    pub name: String,
-    pub executable: String,
-    /// True when the executable path exists on disk.
-    pub available: bool,
+fn resolve_probe(probe: &IdeProbe) -> Option<String> {
+    if let Some(bin) = probe.toolbox_bin {
+        if let Some(found) = find_toolbox_bin(probe.toolbox_dirs, bin) {
+            return Some(found);
+        }
+    }
+
+    let candidates: Vec<String> = probe
+        .win_paths
+        .iter()
+        .map(|p| expand_path_template(p))
+        .collect();
+    if let Some(found) = first_existing_path(&candidates) {
+        return Some(found);
+    }
+
+    for cli in probe.cli {
+        if let Some(found) = which_cmd(cli) {
+            return Some(found);
+        }
+    }
+    None
+}
+
+/// Parse `FPM_IDE_EXTRA`: `Name|cli|path1,path2;Name2|cli2|pathA`
+fn probes_from_env_extra() -> Vec<(String, String, Vec<String>, Vec<String>)> {
+    let raw = match env_var_ci("FPM_IDE_EXTRA") {
+        Some(v) => v,
+        None => return Vec::new(),
+    };
+    let mut out = Vec::new();
+    for entry in raw.split(';') {
+        let entry = entry.trim();
+        if entry.is_empty() {
+            continue;
+        }
+        let parts: Vec<&str> = entry.split('|').map(|s| s.trim()).collect();
+        if parts.len() < 2 {
+            continue;
+        }
+        let name = parts[0].to_string();
+        let cli = parts[1].to_string();
+        let paths: Vec<String> = parts
+            .get(2)
+            .unwrap_or(&"")
+            .split(',')
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .map(expand_path_template)
+            .collect();
+        let keywords = vec![name.clone()];
+        out.push((name, cli, paths, keywords));
+    }
+    out
+}
+
+fn extra_keywords_from_env() -> Vec<String> {
+    env_var_ci("FPM_IDE_KEYWORDS")
+        .map(|s| {
+            s.split(',')
+                .map(|x| x.trim().to_string())
+                .filter(|x| !x.is_empty())
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn push_unique(out: &mut Vec<InstalledEditor>, name: &str, executable: String) {
@@ -239,159 +440,36 @@ fn push_unique(out: &mut Vec<InstalledEditor>, name: &str, executable: String) {
 
 fn known_path_editors() -> Vec<InstalledEditor> {
     let mut out = Vec::new();
-    let catalog: &[(&str, Option<String>)] = &[
-        ("VS Code", detect_vscode()),
-        ("Cursor", detect_cursor()),
-        ("WebStorm", detect_webstorm()),
-        ("VSCodium", {
-            #[cfg(target_os = "windows")]
-            {
-                let local = std::env::var("LOCALAPPDATA").ok();
-                let mut c = Vec::new();
-                if let Some(local) = &local {
-                    c.push(format!(r"{local}\Programs\VSCodium\VSCodium.exe"));
-                }
-                c.push(r"C:\Program Files\VSCodium\VSCodium.exe".into());
-                let refs: Vec<&str> = c.iter().map(|s| s.as_str()).collect();
-                first_existing(&refs).or_else(|| which_cmd("codium"))
-            }
-            #[cfg(not(target_os = "windows"))]
-            {
-                which_cmd("codium")
-            }
-        }),
-        ("Sublime Text", {
-            #[cfg(target_os = "windows")]
-            {
-                first_existing(&[
-                    r"C:\Program Files\Sublime Text\sublime_text.exe",
-                    r"C:\Program Files\Sublime Text 3\sublime_text.exe",
-                    r"C:\Program Files\Sublime Text 4\sublime_text.exe",
-                ])
-                .or_else(|| which_cmd("subl"))
-            }
-            #[cfg(not(target_os = "windows"))]
-            {
-                which_cmd("subl").or_else(|| which_cmd("sublime_text"))
-            }
-        }),
-        ("Zed", {
-            #[cfg(target_os = "windows")]
-            {
-                let local = std::env::var("LOCALAPPDATA").ok();
-                let mut c = Vec::new();
-                if let Some(local) = &local {
-                    c.push(format!(r"{local}\Programs\Zed\Zed.exe"));
-                }
-                let refs: Vec<&str> = c.iter().map(|s| s.as_str()).collect();
-                first_existing(&refs).or_else(|| which_cmd("zed"))
-            }
-            #[cfg(not(target_os = "windows"))]
-            {
-                which_cmd("zed")
-            }
-        }),
-        ("Windsurf", {
-            #[cfg(target_os = "windows")]
-            {
-                let local = std::env::var("LOCALAPPDATA").ok();
-                let mut c = Vec::new();
-                if let Some(local) = &local {
-                    c.push(format!(r"{local}\Programs\Windsurf\Windsurf.exe"));
-                }
-                let refs: Vec<&str> = c.iter().map(|s| s.as_str()).collect();
-                first_existing(&refs).or_else(|| which_cmd("windsurf"))
-            }
-            #[cfg(not(target_os = "windows"))]
-            {
-                which_cmd("windsurf")
-            }
-        }),
-        ("Trae", {
-            #[cfg(target_os = "windows")]
-            {
-                let local = std::env::var("LOCALAPPDATA").ok();
-                let mut c = Vec::new();
-                if let Some(local) = &local {
-                    c.push(format!(r"{local}\Programs\Trae\Trae.exe"));
-                }
-                let refs: Vec<&str> = c.iter().map(|s| s.as_str()).collect();
-                first_existing(&refs).or_else(|| which_cmd("trae"))
-            }
-            #[cfg(not(target_os = "windows"))]
-            {
-                which_cmd("trae")
-            }
-        }),
-        ("Notepad++", {
-            #[cfg(target_os = "windows")]
-            {
-                first_existing(&[
-                    r"C:\Program Files\Notepad++\notepad++.exe",
-                    r"C:\Program Files (x86)\Notepad++\notepad++.exe",
-                ])
-            }
-            #[cfg(not(target_os = "windows"))]
-            {
-                None
-            }
-        }),
-    ];
 
-    for (name, path) in catalog {
-        if let Some(exe) = path {
-            push_unique(&mut out, name, exe.clone());
+    for probe in BUILTIN_PROBES {
+        if let Some(exe) = resolve_probe(probe) {
+            push_unique(&mut out, probe.name, exe);
         }
     }
 
-    // JetBrains Toolbox apps (one level).
+    for (name, cli, paths, _) in probes_from_env_extra() {
+        if let Some(exe) = first_existing_path(&paths).or_else(|| which_cmd(&cli)) {
+            push_unique(&mut out, &name, exe);
+        }
+    }
+
     #[cfg(target_os = "windows")]
     {
-        if let Ok(local) = std::env::var("LOCALAPPDATA") {
-            let toolbox = PathBuf::from(format!(r"{local}\JetBrains\Toolbox\apps"));
-            let jet_apps = [
-                ("IntelliJ IDEA", "idea64.exe"),
-                ("WebStorm", "webstorm64.exe"),
-                ("PyCharm", "pycharm64.exe"),
-                ("PhpStorm", "phpstorm64.exe"),
-                ("GoLand", "goland64.exe"),
-                ("Rider", "rider64.exe"),
-                ("CLion", "clion64.exe"),
-                ("RustRover", "rustrover64.exe"),
-            ];
-            for (label, bin) in jet_apps {
-                let candidates = [
-                    toolbox.join(label.replace(' ', "")),
-                    toolbox.join(label),
-                    toolbox.join("IDEA-U"),
-                    toolbox.join("IDEA-C"),
-                    toolbox.join("WebStorm"),
-                    toolbox.join("PyCharm-P"),
-                    toolbox.join("PyCharm-C"),
-                    toolbox.join("PhpStorm"),
-                    toolbox.join("Goland"),
-                    toolbox.join("Rider"),
-                    toolbox.join("CLion"),
-                    toolbox.join("RustRover"),
-                ];
-                'found: for dir in candidates {
-                    if !dir.is_dir() {
-                        continue;
-                    }
-                    if let Ok(walker) = fs::read_dir(&dir) {
-                        for entry in walker.flatten().take(8) {
-                            let exe = entry.path().join("bin").join(bin);
-                            if exe.is_file() {
-                                push_unique(
-                                    &mut out,
-                                    label,
-                                    exe.to_string_lossy().to_string(),
-                                );
-                                break 'found;
-                            }
-                        }
-                    }
-                }
+        let jet_apps = [
+            (
+                "IntelliJ IDEA",
+                "idea64.exe",
+                &["IDEA-U", "IDEA-C", "IntelliJ IDEA"][..],
+            ),
+            ("PhpStorm", "phpstorm64.exe", &["PhpStorm"][..]),
+            ("GoLand", "goland64.exe", &["Goland", "GoLand"][..]),
+            ("Rider", "rider64.exe", &["Rider"][..]),
+            ("CLion", "clion64.exe", &["CLion"][..]),
+            ("RustRover", "rustrover64.exe", &["RustRover"][..]),
+        ];
+        for (label, bin, dirs) in jet_apps {
+            if let Some(exe) = find_toolbox_bin(dirs, bin) {
+                push_unique(&mut out, label, exe);
             }
         }
     }
@@ -399,37 +477,76 @@ fn known_path_editors() -> Vec<InstalledEditor> {
     out
 }
 
+fn all_registry_keywords() -> Vec<String> {
+    let mut kw: Vec<String> = BUILTIN_PROBES
+        .iter()
+        .flat_map(|p| p.keywords.iter().map(|s| (*s).to_string()))
+        .collect();
+    for (name, _, _, kws) in probes_from_env_extra() {
+        kw.push(name);
+        kw.extend(kws);
+    }
+    kw.extend(extra_keywords_from_env());
+    kw.extend(
+        [
+            "IntelliJ",
+            "PhpStorm",
+            "GoLand",
+            "Rider",
+            "CLion",
+            "RustRover",
+            "Android Studio",
+            "Sublime Text",
+            "Notepad++",
+            "Neovim",
+            "Zed",
+            "Antigravity",
+            "Void",
+            "Lapce",
+            "Fleet",
+        ]
+        .into_iter()
+        .map(String::from),
+    );
+    kw.sort();
+    kw.dedup();
+    kw
+}
+
 #[cfg(target_os = "windows")]
 fn editors_from_powershell_pipeline() -> Vec<InstalledEditor> {
-    // Registry Uninstall → filter editor keywords → DisplayIcon → JSON (piped, no window).
-    let script = r#"
+    let keywords = all_registry_keywords();
+    let kw_ps = keywords
+        .iter()
+        .map(|k| format!("'{}'", k.replace('\'', "''")))
+        .collect::<Vec<_>>()
+        .join(",");
+
+    let script = format!(
+        r#"
 $ErrorActionPreference = 'SilentlyContinue'
 $keys = @(
   'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
   'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*',
   'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*'
 )
-$keywords = @(
-  'Visual Studio Code','VSCodium','Cursor','Windsurf','Trae','Zed',
-  'WebStorm','IntelliJ','PyCharm','PhpStorm','GoLand','Rider','CLion','RustRover',
-  'Android Studio','Sublime Text','Notepad++','Neovim','Helix','Fleet',
-  'Antigravity','Void','Lapce','Eclipse','NetBeans','Kate','Geany'
-)
+$keywords = @({kw_ps})
 Get-ItemProperty $keys |
-  Where-Object { $_.DisplayName -and $_.DisplayIcon } |
-  Where-Object {
+  Where-Object {{ $_.DisplayName -and $_.DisplayIcon }} |
+  Where-Object {{
     $n = $_.DisplayName
-    @($keywords | Where-Object { $n -like ("*{0}*" -f $_) })[0]
-  } |
-  ForEach-Object {
+    @($keywords | Where-Object {{ $n -like ('*' + $_ + '*') }})[0]
+  }} |
+  ForEach-Object {{
     $exe = ($_.DisplayIcon -split ',')[0].Trim().Trim('"')
-    if ($exe -and (Test-Path -LiteralPath $exe)) {
-      [pscustomobject]@{ name = $_.DisplayName; executable = $exe; available = $true }
-    }
-  } |
+    if ($exe -and (Test-Path -LiteralPath $exe)) {{
+      [pscustomobject]@{{ name = $_.DisplayName; executable = $exe; available = $true }}
+    }}
+  }} |
   Sort-Object executable -Unique |
   ConvertTo-Json -Compress
-"#;
+"#
+    );
 
     let mut cmd = Command::new("powershell");
     cmd.args([
@@ -438,7 +555,7 @@ Get-ItemProperty $keys |
         "-ExecutionPolicy",
         "Bypass",
         "-Command",
-        script,
+        &script,
     ])
     .stdin(std::process::Stdio::null())
     .stdout(std::process::Stdio::piped())
@@ -488,7 +605,7 @@ Get-ItemProperty $keys |
         .collect()
 }
 
-/// List installed editors: known paths + Windows Uninstall registry via PowerShell pipeline.
+/// List installed editors: catalog paths + env extras + Windows Uninstall registry.
 pub fn list_installed_editors() -> Vec<InstalledEditor> {
     let mut out = known_path_editors();
 
@@ -505,6 +622,46 @@ pub fn list_installed_editors() -> Vec<InstalledEditor> {
             .then(a.name.to_ascii_lowercase().cmp(&b.name.to_ascii_lowercase()))
     });
     out
+}
+
+/// Detect available IDEs from the catalog (for「重新探测」).
+pub fn detect_ides() -> Vec<IdeConfig> {
+    let mut configs = Vec::new();
+    for probe in BUILTIN_PROBES {
+        if let Some(exe) = resolve_probe(probe) {
+            configs.push(IdeConfig {
+                id: probe.id.into(),
+                name: probe.name.into(),
+                executable: exe,
+                args_template: "{path}".into(),
+                enabled: true,
+                builtin: true,
+                icon_path: None,
+            });
+        }
+    }
+    for (name, cli, paths, _) in probes_from_env_extra() {
+        if let Some(exe) = first_existing_path(&paths).or_else(|| which_cmd(&cli)) {
+            let id = name
+                .to_ascii_lowercase()
+                .chars()
+                .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+                .collect::<String>();
+            configs.push(IdeConfig {
+                id,
+                name,
+                executable: exe,
+                args_template: "{path}".into(),
+                enabled: true,
+                builtin: false,
+                icon_path: None,
+            });
+        }
+    }
+    if configs.is_empty() {
+        return default_ides();
+    }
+    configs
 }
 
 fn ide_icons_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -582,6 +739,12 @@ fn resolve_icon_source(executable: &str) -> Option<PathBuf> {
             "VSCodium.exe",
             "Windsurf.exe",
             "Trae.exe",
+            "TraeWork.exe",
+            "Qoder.exe",
+            "WorkBuddy.exe",
+            "CodeBuddy.exe",
+            "ChatGPT.exe",
+            "Codex.exe",
             "Zed.exe",
             "sublime_text.exe",
             "notepad++.exe",

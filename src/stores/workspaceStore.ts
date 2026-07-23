@@ -8,10 +8,7 @@ type WorkspaceState = {
   loading: boolean
   error: string | null
   search: string
-  activeTagFilters: string[]
   setSearch: (q: string) => void
-  toggleTagFilter: (tag: string) => void
-  clearTagFilters: () => void
   setActiveWorkspace: (path: string | null) => void
   refreshProjects: () => Promise<void>
 }
@@ -22,17 +19,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   loading: false,
   error: null,
   search: '',
-  activeTagFilters: [],
   setSearch: (q) => set({ search: q }),
-  toggleTagFilter: (tag) => {
-    const cur = get().activeTagFilters
-    set({
-      activeTagFilters: cur.includes(tag)
-        ? cur.filter((t) => t !== tag)
-        : [...cur, tag],
-    })
-  },
-  clearTagFilters: () => set({ activeTagFilters: [] }),
   setActiveWorkspace: (path) => {
     set({ activeWorkspace: path, projects: [], error: null })
     if (path) void get().refreshProjects()

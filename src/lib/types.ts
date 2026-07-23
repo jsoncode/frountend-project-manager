@@ -102,11 +102,6 @@ export type TermSession = {
   running: boolean
 }
 
-export function tagKey(workspace: string, projectFolder: string) {
-  return `${workspace}::${projectFolder}`
-}
-
-/** Prefer scripts named like: dev / start / build / preview / test / lint … */
 export function sortScriptNames(names: string[]): string[] {
   const priority = [
     'dev',

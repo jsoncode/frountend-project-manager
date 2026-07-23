@@ -7,7 +7,7 @@ const zh = {
   'app.selectProject': '从左侧选择项目，或先添加一个工作区。',
   'app.tauriOnly': '请通过 npm run tauri dev 启动桌面应用',
 
-  'top.search': '⌕ 筛选项目 / 标签…',
+  'top.search': '⌕ 筛选项目…',
   'top.settings': '设置',
   'top.ideSettings': 'IDE 设置',
   'top.openInIde': '用 {name} 打开当前项目',
@@ -32,8 +32,6 @@ const zh = {
   'projects.title': '项目',
   'projects.scanning': '扫描中…',
   'projects.noMatch': '没有匹配的项目。',
-  'projects.filterTags': '筛选标签',
-  'projects.noTags': '暂无标签',
 
   'header.noGit': '非 Git',
 
@@ -70,7 +68,7 @@ const zh = {
   'term.interactiveHint': '完整 PTY 终端：支持 Ctrl+C、方向键历史、Tab 补全',
 
   'git.title': 'Git 分支',
-  'git.hint': '双击切换分支 · 右键更多操作 · 点「检查更新」拉取远端并统计未同步提交',
+  'git.hint': '双击切换 · 右键可拉取任意分支（无需先切换）· 「检查更新」同步远端',
   'git.history': '分支历史',
   'git.historyEmpty': '切换过的分支会出现在这里',
   'git.allBranches': '全部分支',
@@ -83,7 +81,7 @@ const zh = {
   'git.behindHint': '远端超前 {n} 个提交（本地未拉取）',
   'git.aheadHint': '本地超前 {n} 个提交（未推送）',
   'git.ctx.checkout': '切换到此分支',
-  'git.ctx.pull': '拉取 (pull)',
+  'git.ctx.pull': '拉取更新',
   'git.ctx.push': '推送 (push)',
   'git.ctx.fetch': '获取 (fetch)',
   'git.ctx.commit': '提交…',
@@ -99,7 +97,8 @@ const zh = {
 
   'meta.title': '元信息',
   'meta.lang': '语言 / 样式',
-  'meta.tags': '标签',
+  'meta.package': '包信息',
+  'meta.frameworks': '框架',
   'meta.more': '更多',
   'meta.moreHint': '右侧扩展区预留 · 后续可加更多工具面板',
 
@@ -133,14 +132,15 @@ const zh = {
   'ide.on': '启用',
   'ide.add': '+ 添加 IDE',
   'ide.pickTitle': '从已安装应用添加',
-  'ide.pickHint': '搜索本机常见编辑器；也可手动选择可执行文件。',
+  'ide.pickHint': '自动搜索本机 Cursor / WebStorm / PyCharm / Trae / Qoder 等；也可手动选 exe。可用环境变量 FPM_IDE_EXTRA 扩展。',
   'ide.pickSearch': '搜索应用…',
   'ide.pickEmpty': '没有匹配的应用',
   'ide.pickUnavailable': '未检测到安装路径',
   'ide.pickManual': '手动选择可执行文件…',
   'ide.pickBlank': '添加空白项',
   'ide.pickAdded': '已添加',
-  'ide.redetect': '重新探测',
+  'ide.redetect': '扫描并添加已安装',
+  'ide.envHint': '扩展：FPM_IDE_EXTRA=Name|cli|%LOCALAPPDATA%\\Programs\\App\\App.exe',
   'ide.cancel': '取消',
   'ide.save': '保存',
   'ide.del': '删除',
@@ -163,6 +163,10 @@ const zh = {
   'tool.collapse': '收起面板',
   'tool.needProject': '请先选择一个项目',
   'tool.ideHint': '点击下方 IDE 在当前项目中打开',
+  'tool.modeSingle': '单栏',
+  'tool.modeStack': '并列',
+  'tool.modeSingleHint': '当前：单一展开 · 点击切换为上下并列',
+  'tool.modeStackHint': '当前：上下并列 · 点击切换为单一展开',
 } as const
 
 const en: Record<MessageKey, string> = {
@@ -170,7 +174,7 @@ const en: Record<MessageKey, string> = {
   'app.selectProject': 'Select a project from the list — or add a workspace to get started.',
   'app.tauriOnly': 'Please launch via npm run tauri dev',
 
-  'top.search': '⌕ filter projects / tags…',
+  'top.search': '⌕ filter projects…',
   'top.settings': 'Settings',
   'top.ideSettings': 'IDE Settings',
   'top.openInIde': 'Open current project in {name}',
@@ -195,8 +199,6 @@ const en: Record<MessageKey, string> = {
   'projects.title': 'PROJECTS',
   'projects.scanning': 'scanning…',
   'projects.noMatch': 'No projects match.',
-  'projects.filterTags': 'FILTER TAGS',
-  'projects.noTags': 'no tags yet',
 
   'header.noGit': 'no git',
 
@@ -233,7 +235,7 @@ const en: Record<MessageKey, string> = {
   'term.interactiveHint': 'Full PTY terminal: Ctrl+C, arrow-key history, Tab completion',
 
   'git.title': 'GIT BRANCHES',
-  'git.hint': 'Double-click to switch · Right-click for actions · “Check updates” fetches remotes',
+  'git.hint': 'Double-click to switch · Right-click pull any branch · “Check updates” syncs remotes',
   'git.history': 'Branch history',
   'git.historyEmpty': 'Branches you switch to will appear here',
   'git.allBranches': 'All branches',
@@ -246,7 +248,7 @@ const en: Record<MessageKey, string> = {
   'git.behindHint': '{n} commit(s) on remote not pulled',
   'git.aheadHint': '{n} local commit(s) not pushed',
   'git.ctx.checkout': 'Checkout',
-  'git.ctx.pull': 'Pull',
+  'git.ctx.pull': 'Pull / update',
   'git.ctx.push': 'Push',
   'git.ctx.fetch': 'Fetch',
   'git.ctx.commit': 'Commit…',
@@ -262,7 +264,8 @@ const en: Record<MessageKey, string> = {
 
   'meta.title': 'META',
   'meta.lang': 'LANG / STYLE',
-  'meta.tags': 'TAGS',
+  'meta.package': 'Package',
+  'meta.frameworks': 'Frameworks',
   'meta.more': 'MORE',
   'meta.moreHint': 'Reserved for future side panels',
 
@@ -296,14 +299,15 @@ const en: Record<MessageKey, string> = {
   'ide.on': 'On',
   'ide.add': '+ Add IDE',
   'ide.pickTitle': 'Add from installed apps',
-  'ide.pickHint': 'Search common editors on this machine, or pick an executable manually.',
+  'ide.pickHint': 'Auto-scan Cursor / WebStorm / PyCharm / Trae / Qoder and more; or pick an exe. Extend via FPM_IDE_EXTRA.',
   'ide.pickSearch': 'Search apps…',
   'ide.pickEmpty': 'No matching apps',
   'ide.pickUnavailable': 'Install path not found',
   'ide.pickManual': 'Browse executable…',
   'ide.pickBlank': 'Add blank entry',
   'ide.pickAdded': 'Added',
-  'ide.redetect': 'Re-detect',
+  'ide.redetect': 'Scan & add installed',
+  'ide.envHint': 'Extend: FPM_IDE_EXTRA=Name|cli|%LOCALAPPDATA%\\Programs\\App\\App.exe',
   'ide.cancel': 'Cancel',
   'ide.save': 'Save',
   'ide.del': 'Delete',
@@ -326,6 +330,10 @@ const en: Record<MessageKey, string> = {
   'tool.collapse': 'Collapse panel',
   'tool.needProject': 'Select a project first',
   'tool.ideHint': 'Open the current project in an IDE below',
+  'tool.modeSingle': 'Single',
+  'tool.modeStack': 'Stack',
+  'tool.modeSingleHint': 'Single panel · click for stacked panels',
+  'tool.modeStackHint': 'Stacked panels · click for single panel',
 }
 
 const catalogs: Record<Locale, Record<MessageKey, string>> = {

@@ -39,6 +39,11 @@ description = "Fetch git remotes"
 commands.allow = ["git_fetch"]
 
 [[permission]]
+identifier = "allow-git-pull-branch"
+description = "Pull/update a branch without requiring checkout"
+commands.allow = ["git_pull_branch"]
+
+[[permission]]
 identifier = "allow-list-env-files"
 description = "List env files"
 commands.allow = ["list_env_files"]

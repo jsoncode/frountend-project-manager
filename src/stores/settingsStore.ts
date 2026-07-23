@@ -18,7 +18,6 @@ const EMPTY_CONFIG: AppConfig = {
 
 const EMPTY_HISTORY = EMPTY_CONFIG.searchHistory
 const EMPTY_IDES = EMPTY_CONFIG.ides
-const EMPTY_TAGS = EMPTY_CONFIG.tags
 const EMPTY_CMD_HISTORY = EMPTY_CONFIG.commandHistory
 const EMPTY_BRANCH_HISTORY = EMPTY_CONFIG.branchHistory
 const EMPTY_ACCESS = EMPTY_CONFIG.projectAccess
@@ -53,7 +52,7 @@ function normalizeConfig(cfg: AppConfig): AppConfig {
   return {
     ...EMPTY_CONFIG,
     ...cfg,
-    tags: cfg.tags ?? EMPTY_TAGS,
+    tags: {},
     ides: cfg.ides ?? EMPTY_IDES,
     commandHistory: cfg.commandHistory ?? EMPTY_CMD_HISTORY,
     branchHistory: cfg.branchHistory ?? EMPTY_BRANCH_HISTORY,
@@ -72,11 +71,6 @@ type SettingsState = {
   load: () => Promise<void>
   saveWorkspaces: (workspaces: string[]) => Promise<void>
   saveIdes: (ides: IdeConfig[]) => Promise<void>
-  setProjectTags: (
-    workspace: string,
-    projectFolder: string,
-    tags: string[],
-  ) => Promise<void>
   touchCommandHistory: (projectPath: string, command: string) => Promise<void>
   touchBranchHistory: (projectPath: string, branch: string) => Promise<void>
   touchSearchHistory: (query: string) => Promise<void>
@@ -146,14 +140,6 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
   saveIdes: async (ides) => {
     const cfg = await invoke<AppConfig>('save_ides', { ides })
-    set({ config: cfg })
-  },
-  setProjectTags: async (workspace, projectFolder, tags) => {
-    const cfg = await invoke<AppConfig>('set_project_tags', {
-      workspace,
-      projectFolder,
-      tags,
-    })
     set({ config: cfg })
   },
   touchCommandHistory: async (projectPath, command) => {

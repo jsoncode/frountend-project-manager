@@ -38,7 +38,8 @@ export function XtermSession({ sessionId, cwd, active }: Props) {
       fontSize: 13,
       fontFamily:
         "'JetBrains Mono', 'Cascadia Code', 'Fira Code', Consolas, ui-monospace, monospace",
-      lineHeight: 1.2,
+      // Integer-friendly line box avoids half-row clipping at the bottom.
+      lineHeight: 1.0,
       theme: {
         background: '#071018',
         foreground: '#e0f7fa',
@@ -151,8 +152,10 @@ export function XtermSession({ sessionId, cwd, active }: Props) {
   return (
     <div
       className={`xterm-session ${active ? 'active' : ''}`}
-      ref={hostRef}
       hidden={!active}
-    />
+    >
+      {/* FitAddon must measure an unpadded box; padding lives on the outer shell. */}
+      <div className="xterm-fit-host" ref={hostRef} />
+    </div>
   )
 }

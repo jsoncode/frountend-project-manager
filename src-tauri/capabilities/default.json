@@ -21,6 +21,7 @@
     "allow-git-status",
     "allow-git-checkout",
     "allow-git-fetch",
+    "allow-git-pull-branch",
     "allow-list-env-files",
     "allow-read-env-file",
     "allow-run-command",

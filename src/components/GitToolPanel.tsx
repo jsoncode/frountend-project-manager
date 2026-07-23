@@ -1,5 +1,7 @@
+import { invoke } from '@tauri-apps/api/core'
 import { useEffect, useState, type MouseEvent } from 'react'
 import { useI18n } from '../i18n/useI18n'
+import { writeToTerminal } from '../lib/ptyHost'
 import type { BranchItem } from '../lib/types'
 import { useProjectStore } from '../stores/projectStore'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -22,11 +24,13 @@ export function GitToolPanel() {
   const setHistoryPinned = useSettingsStore((s) => s.setHistoryPinned)
   const deleteHistory = useSettingsStore((s) => s.deleteHistory)
   const runRaw = useTerminalStore((s) => s.runRaw)
+  const ensureRunTarget = useTerminalStore((s) => s.ensureRunTarget)
   const [switchTarget, setSwitchTarget] = useState<string | null>(null)
   const [menu, setMenu] = useState<MenuState | null>(null)
   const [commitTarget, setCommitTarget] = useState<string | null>(null)
   const [commitMsg, setCommitMsg] = useState('')
   const [checking, setChecking] = useState(false)
+  const [pulling, setPulling] = useState(false)
   const { t } = useI18n()
 
   const branchHistory =
@@ -49,6 +53,11 @@ export function GitToolPanel() {
     void runRaw(selected.path, selected.folderName, command)
   }
 
+  const echoTerm = (text: string) => {
+    const id = ensureRunTarget(selected.path, selected.folderName)
+    writeToTerminal(id, text)
+  }
+
   const checkUpdates = async () => {
     setChecking(true)
     try {
@@ -60,6 +69,25 @@ export function GitToolPanel() {
 
   const localName = (name: string) =>
     name.replace(/^remotes\//, '').replace(/^origin\//, '')
+
+  const pullBranch = async (branch: BranchItem) => {
+    const name = localName(branch.name)
+    setPulling(true)
+    echoTerm(`\r\n\x1b[36m$ git pull/update ${name}\x1b[0m\r\n`)
+    try {
+      const msg = await invoke<string>('git_pull_branch', {
+        path: selected.path,
+        branch: name,
+      })
+      echoTerm(`\x1b[32m${msg}\x1b[0m\r\n`)
+      // Re-read tracking counts (no full remote fetch needed after pull)
+      await refreshGit()
+    } catch (e) {
+      echoTerm(`\x1b[31m${String(e)}\x1b[0m\r\n`)
+    } finally {
+      setPulling(false)
+    }
+  }
 
   const onContext = (e: MouseEvent, branch: BranchItem) => {
     e.preventDefault()
@@ -81,21 +109,13 @@ export function GitToolPanel() {
     runGit(cmds)
   }
 
-  const pullCmd = (branch: BranchItem) => {
-    if (branch.isRemote) {
-      const short = localName(branch.name)
-      return `git pull origin ${JSON.stringify(short)}`
-    }
-    return 'git pull'
-  }
-
   return (
     <>
       <div className="git-toolbar">
         <button
           type="button"
           className="btn btn-sm primary"
-          disabled={checking}
+          disabled={checking || pulling}
           onClick={() => void checkUpdates()}
         >
           {checking ? t('git.checking') : t('git.checkUpdates')}
@@ -179,9 +199,11 @@ export function GitToolPanel() {
           )}
           <button
             type="button"
+            disabled={pulling}
             onClick={() => {
-              runGit(pullCmd(menu.branch))
+              const target = menu.branch
               setMenu(null)
+              void pullBranch(target)
             }}
           >
             {t('git.ctx.pull')}
@@ -190,7 +212,13 @@ export function GitToolPanel() {
             <button
               type="button"
               onClick={() => {
-                runGit('git push')
+                const name = localName(menu.branch.name)
+                const isCurrent = git?.current === menu.branch.name
+                runGit(
+                  isCurrent
+                    ? 'git push'
+                    : `git push -u origin ${JSON.stringify(name)}:${name}`,
+                )
                 setMenu(null)
               }}
             >
@@ -200,9 +228,19 @@ export function GitToolPanel() {
           <button
             type="button"
             onClick={() => {
-              runGit('git fetch --all --prune')
               setMenu(null)
-              void refreshGit()
+              void (async () => {
+                echoTerm(`\r\n\x1b[36m$ git fetch --all --prune\x1b[0m\r\n`)
+                try {
+                  const msg = await invoke<string>('git_fetch', {
+                    path: selected.path,
+                  })
+                  echoTerm(`\x1b[32m${msg}\x1b[0m\r\n`)
+                  await refreshGit()
+                } catch (e) {
+                  echoTerm(`\x1b[31m${String(e)}\x1b[0m\r\n`)
+                }
+              })()
             }}
           >
             {t('git.ctx.fetch')}

@@ -78,6 +78,11 @@ fn git_fetch(path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+fn git_pull_branch(path: String, branch: String) -> Result<String, String> {
+    git::git_pull_branch(&path, &branch)
+}
+
+#[tauri::command]
 fn list_env_files(path: String) -> Result<Vec<env_files::EnvFileInfo>, String> {
     env_files::list_env_files(&path)
 }
@@ -401,6 +406,7 @@ pub fn run() {
             git_status,
             git_checkout,
             git_fetch,
+            git_pull_branch,
             list_env_files,
             read_env_file,
             run_command,

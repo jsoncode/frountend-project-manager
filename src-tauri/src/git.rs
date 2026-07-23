@@ -346,3 +346,96 @@ pub fn git_checkout(path: &str, branch: &str) -> Result<String, String> {
         err
     })
 }
+
+fn normalize_branch_name(branch: &str) -> String {
+    branch
+        .strip_prefix("remotes/origin/")
+        .or_else(|| branch.strip_prefix("remotes/"))
+        .or_else(|| branch.strip_prefix("origin/"))
+        .unwrap_or(branch)
+        .to_string()
+}
+
+fn current_branch_name(path: &str) -> Option<String> {
+    git_command(path)
+        .args(["rev-parse", "--abbrev-ref", "HEAD"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .filter(|s| !s.is_empty() && s != "HEAD")
+}
+
+/// Pull / fast-forward a branch. Works without checking it out:
+/// - current branch → `git pull --ff-only`
+/// - other local branch → `git fetch origin <branch>:<branch>` (FF only)
+/// - remote-only name → same fetch into local ref
+pub fn git_pull_branch(path: &str, branch: &str) -> Result<String, String> {
+    let git_dir = std::path::Path::new(path).join(".git");
+    if !git_dir.exists() {
+        return Err("非 Git 仓库".into());
+    }
+
+    let local = normalize_branch_name(branch.trim());
+    if local.is_empty() {
+        return Err("分支名为空".into());
+    }
+
+    let current = current_branch_name(path);
+    if current.as_deref() == Some(local.as_str()) {
+        let output = git_command(path)
+            .args(["pull", "--ff-only", "--prune"])
+            .output()
+            .map_err(|e| e.to_string())?;
+        if !output.status.success() {
+            // Fallback without --ff-only for repos that allow merge pulls
+            let retry = git_command(path)
+                .args(["pull", "--prune"])
+                .output()
+                .map_err(|e| e.to_string())?;
+            if !retry.status.success() {
+                let err = String::from_utf8_lossy(&retry.stderr).trim().to_string();
+                return Err(if err.is_empty() {
+                    String::from_utf8_lossy(&output.stderr).trim().to_string()
+                } else {
+                    err
+                });
+            }
+            let msg = String::from_utf8_lossy(&retry.stdout).trim().to_string();
+            return Ok(if msg.is_empty() {
+                format!("pulled {local}")
+            } else {
+                msg
+            });
+        }
+        let msg = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        return Ok(if msg.is_empty() {
+            format!("pulled {local}")
+        } else {
+            msg
+        });
+    }
+
+    // Update local branch ref from origin without checkout (fast-forward only).
+    let spec = format!("{local}:{local}");
+    let output = git_command(path)
+        .args(["fetch", "origin", &spec])
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    if !output.status.success() {
+        let err = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(if err.is_empty() {
+            format!("无法更新分支 {local}（可能需要先建立与 origin/{local} 的跟踪，或存在分叉）")
+        } else {
+            err
+        });
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    Ok(if stderr.is_empty() {
+        format!("updated {local} ← origin/{local}")
+    } else {
+        format!("updated {local}: {stderr}")
+    })
+}

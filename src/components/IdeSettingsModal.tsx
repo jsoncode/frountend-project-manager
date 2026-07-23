@@ -317,8 +317,24 @@ export function IdeSettingsModal() {
             type="button"
             className="btn"
             onClick={async () => {
-              const detected = await invoke<IdeConfig[]>('detect_ides')
-              setDraft(detected)
+              const found = await invoke<InstalledEditor[]>('list_installed_editors')
+              const available = found.filter((e) => e.available)
+              const next = [...ides]
+              for (const ed of available) {
+                if (alreadyAdded(ed.executable)) continue
+                const iconPath = await extractIcon(ed.executable)
+                next.push(
+                  newIde({
+                    name: ed.name,
+                    executable: ed.executable,
+                    argsTemplate: '{path}',
+                    enabled: true,
+                    builtin: false,
+                    iconPath,
+                  }),
+                )
+              }
+              setDraft(next)
             }}
           >
             {t('ide.redetect')}
@@ -417,6 +433,9 @@ function IdePickerModal({
   return (
     <ModalShell title={t('ide.pickTitle')} onClose={onClose}>
       <p className="muted">{t('ide.pickHint')}</p>
+      <p className="muted" style={{ fontSize: 12, marginTop: -4 }}>
+        {t('ide.envHint')}
+      </p>
       <input
         className="ide-pick-search"
         value={query}

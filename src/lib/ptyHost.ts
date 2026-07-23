@@ -91,6 +91,11 @@ export function fitTerminal(id: string) {
   if (!entry) return
   try {
     entry.fit.fit()
+    // After refit, keep the prompt visible when already at the bottom.
+    const { term } = entry
+    if (term.buffer.active.viewportY === term.buffer.active.baseY) {
+      term.scrollToBottom()
+    }
   } catch {
     /* ignore layout races */
   }
