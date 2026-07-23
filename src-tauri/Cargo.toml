@@ -2,7 +2,7 @@
 name = "frontend-project-manager"
 version = "0.1.0"
 description = "Frontend Project Manager"
-authors = ["you"]
+authors = ["Frontend Project Manager contributors"]
 edition = "2021"
 rust-version = "1.77.2"
 

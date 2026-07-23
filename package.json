@@ -1,7 +1,7 @@
 {
   "name": "frontend-project-manager",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,14 +9,11 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "tauri": "tauri",
-    "tauri:build": "tauri build",
     "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
+    "tauri:build:win": "tauri build --bundles nsis",
+    "version:sync": "node scripts/sync-version.mjs",
     "tauri:preview": "tauri preview",
-    "tauri:lint": "tauri lint",
-    "tauri:test": "tauri test",
-    "tauri:update": "tauri update",
-    "tauri:upgrade": "tauri upgrade",
-    "tauri:version": "tauri version",
     "test": "vitest run"
   },
   "dependencies": {

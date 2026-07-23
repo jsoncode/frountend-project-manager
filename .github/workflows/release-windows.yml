@@ -1,0 +1,81 @@
+name: Release Windows
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build (e.g. 0.1.0). Leave empty to use tauri.conf.json.'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Resolve version
+        id: ver
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          elif [[ -n "${{ inputs.version }}" ]]; then
+            VERSION="${{ inputs.version }}"
+            VERSION="${VERSION#v}"
+          else
+            VERSION="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: ${VERSION}"
+
+      - name: Sync version files
+        shell: bash
+        run: node scripts/sync-version.mjs "${{ steps.ver.outputs.version }}"
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build Windows installer & publish release
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ steps.ver.outputs.tag }}
+          releaseName: 'FPM ${{ steps.ver.outputs.tag }}'
+          releaseBody: |
+            ## Frontend Project Manager ${{ steps.ver.outputs.tag }}
+
+            下载下方 **Windows 安装包**（`.exe`）安装即可。
+
+            ### 本版本包含
+            - 多工作区项目管理
+            - 内置终端 / 脚本一键执行
+            - IDE 打开与 Git 分支工具
+
+            完整说明见 [README](../blob/master/README.md)。
+          releaseDraft: false
+          prerelease: false
+          args: '--bundles nsis'
