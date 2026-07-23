@@ -12,6 +12,9 @@
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
     "tauri:build:win": "tauri build --bundles nsis",
+    "tauri:build:mac": "tauri build --bundles dmg",
+    "tauri:build:mac:app": "tauri build --bundles app",
+    "tauri:build:mac:universal": "tauri build --target universal-apple-darwin --bundles dmg",
     "version:sync": "node scripts/sync-version.mjs",
     "tauri:preview": "tauri preview",
     "test": "vitest run"

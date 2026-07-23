@@ -33,20 +33,24 @@ pub struct InstalledEditor {
     pub available: bool,
 }
 
-/// One probe rule: display name, PATH cli names, Windows path templates, registry keywords.
+/// One probe rule: display name, PATH cli names, OS path templates, registry keywords.
 #[derive(Clone)]
 struct IdeProbe {
     id: &'static str,
     name: &'static str,
     /// `where` / `which` names
     cli: &'static [&'static str],
-    /// Path templates with `%LOCALAPPDATA%` / `%PROGRAMFILES%` / `%USERPROFILE%`
+    /// Windows path templates (`%LOCALAPPDATA%` / `%PROGRAMFILES%` / …)
+    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
     win_paths: &'static [&'static str],
-    /// JetBrains Toolbox folder names under `%LOCALAPPDATA%\JetBrains\Toolbox\apps`
+    /// macOS path templates (`/Applications/…`, `$HOME/…`)
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    mac_paths: &'static [&'static str],
+    /// JetBrains Toolbox folder names
     toolbox_dirs: &'static [&'static str],
-    /// Binary under toolbox version `\bin\`
+    /// Binary under toolbox version `\bin\` (Windows often `*64.exe`)
     toolbox_bin: Option<&'static str>,
-    /// Uninstall DisplayName keywords
+    /// Uninstall DisplayName / Applications folder keywords
     keywords: &'static [&'static str],
 }
 
@@ -54,7 +58,8 @@ struct IdeProbe {
 ///
 /// `FPM_IDE_EXTRA` format (semicolon-separated):
 ///   `Name|cli|path1,path2;Other|cli2|%LOCALAPPDATA%\Programs\Other\Other.exe`
-/// `FPM_IDE_KEYWORDS` (comma-separated) adds Uninstall registry match keywords.
+/// On macOS paths may be `/Applications/App.app` or `$HOME/Applications/App.app`.
+/// `FPM_IDE_KEYWORDS` (comma-separated) adds Uninstall / Applications match keywords.
 const BUILTIN_PROBES: &[IdeProbe] = &[
     IdeProbe {
         id: "vscode",
@@ -65,6 +70,10 @@ const BUILTIN_PROBES: &[IdeProbe] = &[
             r"%LOCALAPPDATA%\Programs\Microsoft VS Code\bin\code.cmd",
             r"%PROGRAMFILES%\Microsoft VS Code\Code.exe",
             r"%PROGRAMFILES%\Microsoft VS Code\bin\code.cmd",
+        ],
+        mac_paths: &[
+            "/Applications/Visual Studio Code.app",
+            "$HOME/Applications/Visual Studio Code.app",
         ],
         toolbox_dirs: &[],
         toolbox_bin: None,
@@ -79,6 +88,7 @@ const BUILTIN_PROBES: &[IdeProbe] = &[
             r"%LOCALAPPDATA%\Programs\Cursor\Cursor.exe",
             r"%LOCALAPPDATA%\Programs\cursor\resources\app\bin\cursor.cmd",
         ],
+        mac_paths: &["/Applications/Cursor.app", "$HOME/Applications/Cursor.app"],
         toolbox_dirs: &[],
         toolbox_bin: None,
         keywords: &["Cursor"],
@@ -88,6 +98,7 @@ const BUILTIN_PROBES: &[IdeProbe] = &[
         name: "WebStorm",
         cli: &["webstorm", "webstorm64"],
         win_paths: &[],
+        mac_paths: &["/Applications/WebStorm.app", "$HOME/Applications/WebStorm.app"],
         toolbox_dirs: &["WebStorm"],
         toolbox_bin: Some("webstorm64.exe"),
         keywords: &["WebStorm"],
@@ -97,6 +108,12 @@ const BUILTIN_PROBES: &[IdeProbe] = &[
         name: "PyCharm",
         cli: &["pycharm", "pycharm64"],
         win_paths: &[],
+        mac_paths: &[
+            "/Applications/PyCharm.app",
+            "/Applications/PyCharm CE.app",
+            "$HOME/Applications/PyCharm.app",
+            "$HOME/Applications/PyCharm CE.app",
+        ],
         toolbox_dirs: &["PyCharm-P", "PyCharm-C", "PyCharm"],
         toolbox_bin: Some("pycharm64.exe"),
         keywords: &["PyCharm"],
@@ -110,6 +127,7 @@ const BUILTIN_PROBES: &[IdeProbe] = &[
             r"%LOCALAPPDATA%\Programs\trae\Trae.exe",
             r"%LOCALAPPDATA%\Programs\Trae\bin\trae.cmd",
         ],
+        mac_paths: &["/Applications/Trae.app", "$HOME/Applications/Trae.app"],
         toolbox_dirs: &[],
         toolbox_bin: None,
         keywords: &["Trae"],
@@ -124,6 +142,11 @@ const BUILTIN_PROBES: &[IdeProbe] = &[
             r"%LOCALAPPDATA%\Programs\Trae Work\TraeWork.exe",
             r"%LOCALAPPDATA%\Programs\TRAE Work\TRAE Work.exe",
         ],
+        mac_paths: &[
+            "/Applications/Trae Work.app",
+            "/Applications/TraeWork.app",
+            "$HOME/Applications/Trae Work.app",
+        ],
         toolbox_dirs: &[],
         toolbox_bin: None,
         keywords: &["Trae Work", "TRAE Work"],
@@ -137,6 +160,7 @@ const BUILTIN_PROBES: &[IdeProbe] = &[
             r"%LOCALAPPDATA%\Programs\qoder\Qoder.exe",
             r"%LOCALAPPDATA%\Qoder\Qoder.exe",
         ],
+        mac_paths: &["/Applications/Qoder.app", "$HOME/Applications/Qoder.app"],
         toolbox_dirs: &[],
         toolbox_bin: None,
         keywords: &["Qoder"],
@@ -150,6 +174,10 @@ const BUILTIN_PROBES: &[IdeProbe] = &[
             r"%LOCALAPPDATA%\Programs\workbuddy\WorkBuddy.exe",
             r"%LOCALAPPDATA%\WorkBuddy\WorkBuddy.exe",
             r"%USERPROFILE%\.workbuddy\WorkBuddy.exe",
+        ],
+        mac_paths: &[
+            "/Applications/WorkBuddy.app",
+            "$HOME/Applications/WorkBuddy.app",
         ],
         toolbox_dirs: &[],
         toolbox_bin: None,
@@ -166,6 +194,10 @@ const BUILTIN_PROBES: &[IdeProbe] = &[
             r"%LOCALAPPDATA%\codebuddy\bin\codebuddy.exe",
             r"%USERPROFILE%\.codebuddy\CodeBuddy.exe",
         ],
+        mac_paths: &[
+            "/Applications/CodeBuddy.app",
+            "$HOME/Applications/CodeBuddy.app",
+        ],
         toolbox_dirs: &[],
         toolbox_bin: None,
         keywords: &["CodeBuddy"],
@@ -179,6 +211,7 @@ const BUILTIN_PROBES: &[IdeProbe] = &[
             r"%LOCALAPPDATA%\ChatGPT\ChatGPT.exe",
             r"%LOCALAPPDATA%\Programs\OpenAI ChatGPT\ChatGPT.exe",
         ],
+        mac_paths: &["/Applications/ChatGPT.app", "$HOME/Applications/ChatGPT.app"],
         toolbox_dirs: &[],
         toolbox_bin: None,
         keywords: &["ChatGPT"],
@@ -194,6 +227,12 @@ const BUILTIN_PROBES: &[IdeProbe] = &[
             r"%USERPROFILE%\.local\bin\codex.exe",
             r"%USERPROFILE%\.codex\bin\codex.exe",
         ],
+        mac_paths: &[
+            "/Applications/Codex.app",
+            "$HOME/Applications/Codex.app",
+            "$HOME/.local/bin/codex",
+            "$HOME/.codex/bin/codex",
+        ],
         toolbox_dirs: &[],
         toolbox_bin: None,
         keywords: &["Codex", "OpenAI Codex"],
@@ -203,6 +242,7 @@ const BUILTIN_PROBES: &[IdeProbe] = &[
         name: "Windsurf",
         cli: &["windsurf"],
         win_paths: &[r"%LOCALAPPDATA%\Programs\Windsurf\Windsurf.exe"],
+        mac_paths: &["/Applications/Windsurf.app", "$HOME/Applications/Windsurf.app"],
         toolbox_dirs: &[],
         toolbox_bin: None,
         keywords: &["Windsurf"],
@@ -215,6 +255,7 @@ const BUILTIN_PROBES: &[IdeProbe] = &[
             r"%LOCALAPPDATA%\Programs\VSCodium\VSCodium.exe",
             r"%PROGRAMFILES%\VSCodium\VSCodium.exe",
         ],
+        mac_paths: &["/Applications/VSCodium.app", "$HOME/Applications/VSCodium.app"],
         toolbox_dirs: &[],
         toolbox_bin: None,
         keywords: &["VSCodium"],
@@ -244,18 +285,17 @@ fn env_var_ci(name: &str) -> Option<String> {
 
 fn expand_path_template(raw: &str) -> String {
     let mut out = raw.to_string();
+    let home = env_var_ci("HOME").or_else(|| env_var_ci("USERPROFILE"));
     let replacements: &[(&str, Option<String>)] = &[
         ("%LOCALAPPDATA%", env_var_ci("LOCALAPPDATA")),
         ("%APPDATA%", env_var_ci("APPDATA")),
         ("%PROGRAMFILES%", env_var_ci("PROGRAMFILES")),
         ("%PROGRAMFILES(X86)%", env_var_ci("PROGRAMFILES(X86)")),
-        ("%USERPROFILE%", env_var_ci("USERPROFILE")),
+        ("%USERPROFILE%", env_var_ci("USERPROFILE").or_else(|| home.clone())),
         ("$LOCALAPPDATA", env_var_ci("LOCALAPPDATA")),
         ("$APPDATA", env_var_ci("APPDATA")),
-        (
-            "$HOME",
-            env_var_ci("USERPROFILE").or_else(|| env_var_ci("HOME")),
-        ),
+        ("$HOME", home.clone()),
+        ("$USERPROFILE", env_var_ci("USERPROFILE").or_else(|| home.clone())),
     ];
     for (key, val) in replacements {
         if let Some(v) = val {
@@ -265,10 +305,24 @@ fn expand_path_template(raw: &str) -> String {
     out
 }
 
+fn is_launchable_path(p: &PathBuf) -> bool {
+    if p.is_file() {
+        return true;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        // `.app` bundles are directories.
+        if p.extension().and_then(|e| e.to_str()) == Some("app") && p.is_dir() {
+            return true;
+        }
+    }
+    false
+}
+
 fn first_existing_path(candidates: &[String]) -> Option<String> {
     for c in candidates {
         let p = PathBuf::from(c);
-        if p.is_file() {
+        if is_launchable_path(&p) {
             return Some(p.to_string_lossy().to_string());
         }
     }
@@ -314,6 +368,22 @@ fn which_cmd(name: &str) -> Option<String> {
     }
 }
 
+#[cfg(target_os = "macos")]
+fn toolbox_bin_names(win_bin: &str) -> Vec<String> {
+    let mut names = vec![win_bin.to_string()];
+    let stem = win_bin
+        .trim_end_matches(".exe")
+        .trim_end_matches("64")
+        .to_string();
+    if !stem.is_empty() && stem != win_bin {
+        names.push(stem.clone());
+        names.push(format!("{stem}64"));
+    }
+    names.sort();
+    names.dedup();
+    names
+}
+
 fn find_toolbox_bin(dirs: &[&str], bin: &str) -> Option<String> {
     #[cfg(target_os = "windows")]
     {
@@ -338,7 +408,46 @@ fn find_toolbox_bin(dirs: &[&str], bin: &str) -> Option<String> {
         }
         None
     }
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "macos")]
+    {
+        let home = env_var_ci("HOME")?;
+        let root = PathBuf::from(format!(
+            "{home}/Library/Application Support/JetBrains/Toolbox/apps"
+        ));
+        if !root.is_dir() {
+            return None;
+        }
+        let bins = toolbox_bin_names(bin);
+        for dir_name in dirs {
+            let app_dir = root.join(dir_name);
+            if !app_dir.is_dir() {
+                continue;
+            }
+            if let Ok(walker) = fs::read_dir(&app_dir) {
+                for entry in walker.flatten().take(16) {
+                    let base = entry.path();
+                    for name in &bins {
+                        let cand = base.join("bin").join(name);
+                        if cand.is_file() {
+                            return Some(cand.to_string_lossy().to_string());
+                        }
+                    }
+                    // Some Toolbox layouts ship a .app directly.
+                    if let Ok(inner) = fs::read_dir(&base) {
+                        for child in inner.flatten().take(8) {
+                            let p = child.path();
+                            if p.extension().and_then(|e| e.to_str()) == Some("app") && p.is_dir()
+                            {
+                                return Some(p.to_string_lossy().to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
     {
         let _ = (dirs, bin);
         None
@@ -352,8 +461,23 @@ fn resolve_probe(probe: &IdeProbe) -> Option<String> {
         }
     }
 
-    let candidates: Vec<String> = probe
-        .win_paths
+    let os_paths: &[&str] = {
+        #[cfg(target_os = "windows")]
+        {
+            probe.win_paths
+        }
+        #[cfg(target_os = "macos")]
+        {
+            probe.mac_paths
+        }
+        #[cfg(all(unix, not(target_os = "macos")))]
+        {
+            // Prefer CLI on Linux; still allow mac-style absolute paths from env extras.
+            &[]
+        }
+    };
+
+    let candidates: Vec<String> = os_paths
         .iter()
         .map(|p| expand_path_template(p))
         .collect();
@@ -423,14 +547,14 @@ fn push_unique(out: &mut Vec<InstalledEditor>, name: &str, executable: String) {
     {
         return;
     }
-    let resolved = if PathBuf::from(&exe).is_file() {
+    let resolved = if is_launchable_path(&PathBuf::from(&exe)) {
         exe
     } else if let Some(found) = which_cmd(&exe) {
         found
     } else {
         exe
     };
-    let available = PathBuf::from(&resolved).is_file();
+    let available = is_launchable_path(&PathBuf::from(&resolved));
     out.push(InstalledEditor {
         name: name.trim().to_string(),
         executable: resolved,
@@ -453,7 +577,7 @@ fn known_path_editors() -> Vec<InstalledEditor> {
         }
     }
 
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
     {
         let jet_apps = [
             (
@@ -470,6 +594,26 @@ fn known_path_editors() -> Vec<InstalledEditor> {
         for (label, bin, dirs) in jet_apps {
             if let Some(exe) = find_toolbox_bin(dirs, bin) {
                 push_unique(&mut out, label, exe);
+            }
+        }
+        #[cfg(target_os = "macos")]
+        {
+            let mac_apps = [
+                ("IntelliJ IDEA", "/Applications/IntelliJ IDEA.app"),
+                ("IntelliJ IDEA CE", "/Applications/IntelliJ IDEA CE.app"),
+                ("PhpStorm", "/Applications/PhpStorm.app"),
+                ("GoLand", "/Applications/GoLand.app"),
+                ("Rider", "/Applications/Rider.app"),
+                ("CLion", "/Applications/CLion.app"),
+                ("RustRover", "/Applications/RustRover.app"),
+                ("Sublime Text", "/Applications/Sublime Text.app"),
+                ("Zed", "/Applications/Zed.app"),
+            ];
+            for (label, path) in mac_apps {
+                let p = PathBuf::from(path);
+                if is_launchable_path(&p) {
+                    push_unique(&mut out, label, path.to_string());
+                }
             }
         }
     }
@@ -599,13 +743,13 @@ Get-ItemProperty $keys |
             Some(InstalledEditor {
                 name: r.name.trim().to_string(),
                 executable: exe.clone(),
-                available: r.available.unwrap_or_else(|| PathBuf::from(&exe).is_file()),
+                available: r.available.unwrap_or_else(|| is_launchable_path(&PathBuf::from(&exe))),
             })
         })
         .collect()
 }
 
-/// List installed editors: catalog paths + env extras + Windows Uninstall registry.
+/// List installed editors: catalog paths + env extras + OS discovery.
 pub fn list_installed_editors() -> Vec<InstalledEditor> {
     let mut out = known_path_editors();
 
@@ -616,11 +760,59 @@ pub fn list_installed_editors() -> Vec<InstalledEditor> {
         }
     }
 
+    #[cfg(target_os = "macos")]
+    {
+        for row in editors_from_applications_folder() {
+            push_unique(&mut out, &row.name, row.executable);
+        }
+    }
+
     out.sort_by(|a, b| {
         b.available
             .cmp(&a.available)
             .then(a.name.to_ascii_lowercase().cmp(&b.name.to_ascii_lowercase()))
     });
+    out
+}
+
+#[cfg(target_os = "macos")]
+fn editors_from_applications_folder() -> Vec<InstalledEditor> {
+    let keywords = all_registry_keywords();
+    let mut roots = vec![PathBuf::from("/Applications")];
+    if let Some(home) = env_var_ci("HOME") {
+        roots.push(PathBuf::from(format!("{home}/Applications")));
+    }
+    let mut out = Vec::new();
+    for root in roots {
+        let Ok(entries) = fs::read_dir(root) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("app") || !path.is_dir() {
+                continue;
+            }
+            let name = path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("")
+                .to_string();
+            if name.is_empty() {
+                continue;
+            }
+            let hit = keywords.iter().any(|k| {
+                name.to_ascii_lowercase()
+                    .contains(&k.to_ascii_lowercase())
+            });
+            if hit {
+                out.push(InstalledEditor {
+                    name: name.clone(),
+                    executable: path.to_string_lossy().to_string(),
+                    available: true,
+                });
+            }
+        }
+    }
     out
 }
 
@@ -723,6 +915,12 @@ fn resolve_icon_source(executable: &str) -> Option<PathBuf> {
     if !p.exists() {
         return None;
     }
+    #[cfg(target_os = "macos")]
+    {
+        if p.extension().and_then(|e| e.to_str()) == Some("app") && p.is_dir() {
+            return Some(p);
+        }
+    }
     let lower = p
         .extension()
         .and_then(|e| e.to_str())
@@ -815,7 +1013,7 @@ try {{
         .map_err(|e| e.to_string())
 }
 
-/// Extract the OS-associated icon from an executable and cache as PNG.
+/// Extract the OS-associated icon from an executable / .app and cache as PNG.
 pub fn extract_ide_icon_from_exe(
     app: &tauri::AppHandle,
     executable: &str,
@@ -829,11 +1027,80 @@ pub fn extract_ide_icon_from_exe(
         return import_ide_icon_bytes(app, bytes, "png".into());
     }
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "macos")]
+    {
+        let bytes = extract_macos_app_icon_png_bytes(&source)?;
+        return import_ide_icon_bytes(app, bytes, "png".into());
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
     {
         let _ = (app, source);
-        Err("Icon extraction from executables is only supported on Windows".into())
+        Err("从可执行文件提取图标目前仅支持 Windows / macOS".into())
     }
+}
+
+#[cfg(target_os = "macos")]
+fn extract_macos_app_icon_png_bytes(source: &PathBuf) -> Result<Vec<u8>, String> {
+    let app_bundle = if source.extension().and_then(|e| e.to_str()) == Some("app") {
+        source.clone()
+    } else if let Some(parent) = source.parent() {
+        // …/App.app/Contents/MacOS/binary → App.app
+        parent
+            .parent()
+            .and_then(|p| p.parent())
+            .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("app"))
+            .map(|p| p.to_path_buf())
+            .unwrap_or_else(|| source.clone())
+    } else {
+        source.clone()
+    };
+
+    let resources = app_bundle.join("Contents/Resources");
+    let icns = if resources.is_dir() {
+        fs::read_dir(&resources)
+            .ok()
+            .into_iter()
+            .flatten()
+            .flatten()
+            .map(|e| e.path())
+            .find(|p| p.extension().and_then(|e| e.to_str()) == Some("icns"))
+    } else {
+        None
+    }
+    .ok_or_else(|| "未在 .app 中找到 .icns 图标".to_string())?;
+
+    let tmp = std::env::temp_dir().join(format!(
+        "fpm-icon-{}.png",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0)
+    ));
+    let status = Command::new("sips")
+        .args([
+            "-s",
+            "format",
+            "png",
+            icns.to_str().unwrap_or_default(),
+            "--out",
+            tmp.to_str().unwrap_or_default(),
+        ])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map_err(|e| format!("sips 转换图标失败: {e}"))?;
+    if !status.success() {
+        let _ = fs::remove_file(&tmp);
+        return Err("sips 转换图标失败".into());
+    }
+    let bytes = fs::read(&tmp).map_err(|e| e.to_string())?;
+    let _ = fs::remove_file(&tmp);
+    if bytes.is_empty() {
+        return Err("图标数据为空".into());
+    }
+    Ok(bytes)
 }
 
 pub fn open_in_ide(ide: &IdeConfig, project_path: &str) -> Result<(), String> {
@@ -850,6 +1117,27 @@ pub fn open_in_ide(ide: &IdeConfig, project_path: &str) -> Result<(), String> {
         .split_whitespace()
         .map(|part| part.replace("{path}", project_path))
         .collect();
+
+    #[cfg(target_os = "macos")]
+    {
+        let path = PathBuf::from(exe);
+        let is_app = path.extension().and_then(|e| e.to_str()) == Some("app");
+        if is_app {
+            let mut cmd = Command::new("open");
+            cmd.arg("-na").arg(exe);
+            if !args.is_empty() {
+                cmd.arg("--args").args(&args);
+            }
+            cmd.stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn()
+                .map_err(|e| {
+                    format!("Failed to open {} with {}: {e}", project_path, ide.name)
+                })?;
+            return Ok(());
+        }
+    }
 
     let mut cmd = Command::new(exe);
     cmd.args(&args)

@@ -49,13 +49,24 @@ fn shell_command(cwd: &Path) -> CommandBuilder {
     }
     #[cfg(not(windows))]
     {
-        let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".into());
+        let shell = std::env::var("SHELL").unwrap_or_else(|_| {
+            #[cfg(target_os = "macos")]
+            {
+                "/bin/zsh".into()
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                "/bin/bash".into()
+            }
+        });
         let mut cmd = CommandBuilder::new(shell);
+        // Login shell so PATH / nvm / fnm from profile are available.
         cmd.arg("-l");
         cmd.cwd(cwd);
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
         cmd.env("FORCE_COLOR", "1");
+        cmd.env("LANG", std::env::var("LANG").unwrap_or_else(|_| "en_US.UTF-8".into()));
         cmd
     }
 }

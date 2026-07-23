@@ -1,4 +1,4 @@
-name: Release Windows
+name: Release
 
 on:
   push:
@@ -15,8 +15,21 @@ permissions:
   contents: write
 
 jobs:
-  release-windows:
-    runs-on: windows-latest
+  release:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+            args: '--bundles nsis'
+          - platform: macos-latest
+            rust_target: aarch64-apple-darwin
+            args: '--target aarch64-apple-darwin --bundles dmg'
+          - platform: macos-latest
+            rust_target: x86_64-apple-darwin
+            args: '--target x86_64-apple-darwin --bundles dmg'
+
+    runs-on: ${{ matrix.platform }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,6 +42,8 @@ jobs:
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target || '' }}
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
@@ -58,7 +73,7 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Build Windows installer & publish release
+      - name: Build & publish release
         uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -68,7 +83,12 @@ jobs:
           releaseBody: |
             ## Frontend Project Manager ${{ steps.ver.outputs.tag }}
 
-            下载下方 **Windows 安装包**（`.exe`）安装即可。
+            ### 下载
+            - **Windows**：`.exe`（NSIS 安装包）
+            - **macOS Apple Silicon**：`aarch64` `.dmg`
+            - **macOS Intel**：`x86_64` `.dmg`
+
+            > macOS 未签名时，首次打开可能需在「系统设置 → 隐私与安全性」中允许，或右键选择「打开」。
 
             ### 本版本包含
             - 多工作区项目管理
@@ -78,4 +98,4 @@ jobs:
             完整说明见 [README](../blob/master/README.md)。
           releaseDraft: false
           prerelease: false
-          args: '--bundles nsis'
+          args: ${{ matrix.args }}
