@@ -1142,71 +1142,33 @@ body.resizing-row * {
   gap: 10px;
 }
 
-.terminal-body {
+.terminal-xterm-stack {
   flex: 1;
-  overflow: auto;
-  padding: 8px 10px;
-  white-space: pre-wrap;
-  word-break: break-word;
   min-height: 0;
-  color: var(--text-bright);
+  position: relative;
+  overflow: hidden;
 }
 
-.terminal-body-interactive {
-  cursor: text;
-  outline: none;
+.terminal-xterm-stack.hidden {
+  display: none;
 }
 
-.terminal-body-interactive:focus {
-  box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.35);
+.xterm-session {
+  position: absolute;
+  inset: 0;
+  padding: 4px 6px 6px;
 }
 
-/* Stream colors intentionally omitted — ANSI / default fg only (no theme override). */
-
-.term-prompt-line {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 1.2em;
+.xterm-session[hidden] {
+  display: none !important;
 }
 
-.term-prompt {
-  color: var(--cyan);
-  font-weight: 700;
+.xterm-session .xterm {
+  height: 100%;
 }
 
-.term-draft {
-  color: var(--text-bright);
-  white-space: pre-wrap;
-}
-
-.term-draft.stdin {
-  color: var(--cyan-soft);
-}
-
-.term-caret {
-  display: inline-block;
-  width: 7px;
-  height: 1em;
-  background: var(--cyan);
-  animation: term-blink 1s step-end infinite;
-  flex-shrink: 0;
-}
-
-@keyframes term-blink {
-  50% {
-    opacity: 0;
-  }
-}
-
-.term-link {
-  cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-.term-link:hover {
-  filter: brightness(1.15);
+.xterm-session .xterm-viewport {
+  overflow-y: auto !important;
 }
 
 .terminal-input-row {

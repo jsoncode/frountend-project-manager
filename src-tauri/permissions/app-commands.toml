@@ -64,6 +64,36 @@ description = "Write to running terminal stdin"
 commands.allow = ["write_terminal_stdin"]
 
 [[permission]]
+identifier = "allow-pty-spawn"
+description = "Spawn interactive PTY shell"
+commands.allow = ["pty_spawn"]
+
+[[permission]]
+identifier = "allow-pty-write"
+description = "Write to PTY shell"
+commands.allow = ["pty_write"]
+
+[[permission]]
+identifier = "allow-pty-resize"
+description = "Resize PTY"
+commands.allow = ["pty_resize"]
+
+[[permission]]
+identifier = "allow-pty-kill"
+description = "Kill PTY shell"
+commands.allow = ["pty_kill"]
+
+[[permission]]
+identifier = "allow-pty-interrupt"
+description = "Send Ctrl+C to PTY"
+commands.allow = ["pty_interrupt"]
+
+[[permission]]
+identifier = "allow-preview-file"
+description = "Pretty-print a file with embedded bat"
+commands.allow = ["preview_file"]
+
+[[permission]]
 identifier = "allow-detect-ides"
 description = "Detect IDEs"
 commands.allow = ["detect_ides"]

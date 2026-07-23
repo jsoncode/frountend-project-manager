@@ -6,11 +6,14 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::{AppHandle, Manager, WindowEvent};
 use tauri_plugin_dialog::DialogExt;
 
+mod bat_view;
 mod config;
+mod console_decode;
 mod env_files;
 mod git;
 mod ide;
 mod process;
+mod pty_term;
 mod scan;
 
 #[cfg(windows)]
@@ -28,6 +31,7 @@ fn show_main_window(app: &AppHandle) {
 }
 
 fn quit_app(app: &AppHandle) {
+    pty_term::kill_all(app);
     process::kill_all_commands(app);
     ALLOW_EXIT.store(true, Ordering::SeqCst);
     app.exit(0);
@@ -101,6 +105,51 @@ fn kill_command(app: AppHandle, terminal_id: String) -> Result<(), String> {
 #[tauri::command]
 fn write_terminal_stdin(terminal_id: String, data: String) -> Result<(), String> {
     process::write_stdin(terminal_id, data)
+}
+
+#[tauri::command]
+fn pty_spawn(
+    app: AppHandle,
+    terminal_id: String,
+    cwd: String,
+    cols: u16,
+    rows: u16,
+) -> Result<(), String> {
+    pty_term::spawn(app, terminal_id, cwd, cols, rows)
+}
+
+#[tauri::command]
+fn pty_write(terminal_id: String, data: String) -> Result<(), String> {
+    pty_term::write(terminal_id, data)
+}
+
+#[tauri::command]
+fn pty_resize(terminal_id: String, cols: u16, rows: u16) -> Result<(), String> {
+    pty_term::resize(terminal_id, cols, rows)
+}
+
+#[tauri::command]
+fn pty_kill(app: AppHandle, terminal_id: String) -> Result<(), String> {
+    pty_term::kill(app, terminal_id)
+}
+
+#[tauri::command]
+fn pty_interrupt(terminal_id: String) -> Result<(), String> {
+    pty_term::send_interrupt(terminal_id)
+}
+
+/// Pretty-print a file with embedded bat (ANSI). Also available via terminal `cat`/`type`/`bat`.
+#[tauri::command]
+fn preview_file(path: String, cwd: Option<String>) -> Result<String, String> {
+    use std::path::PathBuf;
+    let file = if PathBuf::from(&path).is_absolute() {
+        PathBuf::from(&path)
+    } else if let Some(base) = cwd {
+        PathBuf::from(base).join(&path)
+    } else {
+        PathBuf::from(&path)
+    };
+    bat_view::render_files(&[file], None)
 }
 
 #[tauri::command]
@@ -357,6 +406,12 @@ pub fn run() {
             run_command,
             kill_command,
             write_terminal_stdin,
+            pty_spawn,
+            pty_write,
+            pty_resize,
+            pty_kill,
+            pty_interrupt,
+            preview_file,
             detect_ides,
             list_installed_editors,
             open_in_ide,

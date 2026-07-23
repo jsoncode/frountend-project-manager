@@ -1,8 +1,11 @@
+use crate::bat_view;
+use crate::console_decode;
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::io::{Read, Write};
+use std::path::Path;
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::thread;
 use std::time::Duration;
@@ -96,20 +99,46 @@ fn pump_pipe<R: Read>(
     mut reader: R,
 ) {
     let mut buf = [0u8; PIPE_BUF];
-    let mut pending = String::new();
+    let mut byte_pending: Vec<u8> = Vec::new();
+    let mut text_pending = String::new();
 
     loop {
         match reader.read(&mut buf) {
             Ok(0) => break,
             Ok(n) => {
-                pending.push_str(&String::from_utf8_lossy(&buf[..n]));
-                flush_pending(&app, &terminal_id, &project_path, stream, &mut pending, false);
+                byte_pending.extend_from_slice(&buf[..n]);
+                let (decoded, consumed) = console_decode::decode_available(&byte_pending, false);
+                if consumed > 0 {
+                    byte_pending.drain(..consumed);
+                }
+                if !decoded.is_empty() {
+                    text_pending.push_str(&decoded);
+                    flush_pending(
+                        &app,
+                        &terminal_id,
+                        &project_path,
+                        stream,
+                        &mut text_pending,
+                        false,
+                    );
+                }
             }
             Err(_) => break,
         }
     }
 
-    flush_pending(&app, &terminal_id, &project_path, stream, &mut pending, true);
+    if !byte_pending.is_empty() {
+        let (decoded, _) = console_decode::decode_available(&byte_pending, true);
+        text_pending.push_str(&decoded);
+    }
+    flush_pending(
+        &app,
+        &terminal_id,
+        &project_path,
+        stream,
+        &mut text_pending,
+        true,
+    );
 }
 
 fn flush_pending(
@@ -205,17 +234,57 @@ pub fn run_command(
         &format!("$ {command}"),
     );
 
+    // Simple cat/type/bat → embedded bat pretty-printer (no shell / no pager).
+    if let Some(paths) = bat_view::try_parse_view_command(&command, Path::new(&project_path)) {
+        let app_bat = app.clone();
+        let tid = terminal_id.clone();
+        let path_done = project_path.clone();
+        thread::spawn(move || {
+            match bat_view::render_files(&paths, None) {
+                Ok(output) => {
+                    for line in output.lines() {
+                        emit_chunk(&app_bat, &tid, &path_done, "stdout", line);
+                    }
+                    // Preserve trailing newline-less content if any (already covered by lines()).
+                    emit_chunk(
+                        &app_bat,
+                        &tid,
+                        &path_done,
+                        "system",
+                        "[exit 0]",
+                    );
+                }
+                Err(err) => {
+                    emit_chunk(&app_bat, &tid, &path_done, "stderr", &err);
+                    emit_chunk(
+                        &app_bat,
+                        &tid,
+                        &path_done,
+                        "system",
+                        "[exit 1]",
+                    );
+                }
+            }
+        });
+        return Ok(());
+    }
+
     // Piped stdin so interactive tools (merge conflicts, prompts) can receive keystrokes.
     #[cfg(target_os = "windows")]
     let mut child = {
+        // Force UTF-8 console code page so modern CLIs emit UTF-8; GBK fallback
+        // in console_decode still covers tools that ignore chcp.
+        let wrapped = format!("chcp 65001>nul & {command}");
         let mut cmd = Command::new("cmd");
-        cmd.args(["/S", "/C", &command])
+        cmd.args(["/S", "/C", &wrapped])
             .current_dir(&project_path)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .env("TERM", "xterm-256color")
             .env("FORCE_COLOR", "1")
+            .env("PYTHONIOENCODING", "utf-8")
+            .env("PYTHONUTF8", "1")
             .creation_flags(CREATE_NO_WINDOW);
         cmd.spawn().map_err(|e| e.to_string())?
     };

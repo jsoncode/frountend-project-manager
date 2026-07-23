@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useState } from 'react'
 import { useI18n } from '../i18n/useI18n'
-import { renderAnsi } from '../lib/ansi'
+import { focusTerminal } from '../lib/ptyHost'
 import { useProjectStore } from '../stores/projectStore'
 import { useTerminalStore } from '../stores/terminalStore'
 import { ModalShell } from './ModalShell'
+import { XtermSession } from './XtermSession'
 
 export function TerminalPanel() {
   const sessions = useTerminalStore((s) => s.sessions)
@@ -11,25 +12,17 @@ export function TerminalPanel() {
   const setActive = useTerminalStore((s) => s.setActive)
   const createSession = useTerminalStore((s) => s.createSession)
   const closeSession = useTerminalStore((s) => s.closeSession)
-  const setInput = useTerminalStore((s) => s.setInput)
   const clearSession = useTerminalStore((s) => s.clearSession)
-  const runInSession = useTerminalStore((s) => s.runInSession)
   const killSession = useTerminalStore((s) => s.killSession)
-  const writeStdin = useTerminalStore((s) => s.writeStdin)
   const selected = useProjectStore((s) => s.selected)
   const [pendingCloseId, setPendingCloseId] = useState<string | null>(null)
-  const bodyRef = useRef<HTMLDivElement>(null)
   const { t } = useI18n()
 
   const active = sessions.find((s) => s.id === activeId) ?? null
   const pendingClose = sessions.find((s) => s.id === pendingCloseId) ?? null
 
   useEffect(() => {
-    bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight })
-  }, [active?.lines, active?.input, activeId])
-
-  useEffect(() => {
-    if (activeId) bodyRef.current?.focus()
+    if (activeId) focusTerminal(activeId)
   }, [activeId])
 
   const addTerminal = () => {
@@ -39,7 +32,7 @@ export function TerminalPanel() {
 
   const requestClose = (id: string) => {
     const session = sessions.find((s) => s.id === id)
-    if (session?.running) {
+    if (session?.connected) {
       setPendingCloseId(id)
       return
     }
@@ -53,65 +46,6 @@ export function TerminalPanel() {
     await closeSession(id)
   }
 
-  const onTerminalKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (!active) return
-
-    // Let shortcuts with modifiers pass (except Ctrl+C while running → SIGINT-ish via Ctrl+C char)
-    if (e.ctrlKey || e.metaKey || e.altKey) {
-      if (active.running && e.key.toLowerCase() === 'c' && !e.shiftKey) {
-        e.preventDefault()
-        void writeStdin(active.id, '\x03')
-      }
-      return
-    }
-
-    if (active.running) {
-      e.preventDefault()
-      if (e.key === 'Enter') {
-        void writeStdin(active.id, '\r\n')
-        setInput(active.id, '')
-        return
-      }
-      if (e.key === 'Backspace') {
-        void writeStdin(active.id, '\x7f')
-        setInput(active.id, active.input.slice(0, -1))
-        return
-      }
-      if (e.key === 'Escape') {
-        void writeStdin(active.id, '\x1b')
-        return
-      }
-      if (e.key.length === 1) {
-        void writeStdin(active.id, e.key)
-        setInput(active.id, active.input + e.key)
-      }
-      return
-    }
-
-    // Idle: compose command inline in the terminal body
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      const cmd = active.input.trim()
-      if (!cmd) return
-      void runInSession(active.id, active.projectPath, cmd)
-      return
-    }
-    if (e.key === 'Backspace') {
-      e.preventDefault()
-      setInput(active.id, active.input.slice(0, -1))
-      return
-    }
-    if (e.key === 'Tab') {
-      e.preventDefault()
-      setInput(active.id, `${active.input}  `)
-      return
-    }
-    if (e.key.length === 1) {
-      e.preventDefault()
-      setInput(active.id, active.input + e.key)
-    }
-  }
-
   return (
     <div className="terminal">
       <div className="terminal-tabs">
@@ -123,7 +57,7 @@ export function TerminalPanel() {
               className={`terminal-tab ${s.id === activeId ? 'active' : ''}`}
               onClick={() => setActive(s.id)}
             >
-              <span className={s.running ? 'term-dot running' : 'term-dot'} />
+              <span className={s.connected ? 'term-dot running' : 'term-dot'} />
               {s.title}
               <span
                 className="term-close"
@@ -150,7 +84,7 @@ export function TerminalPanel() {
           {active && (
             <>
               <span className="muted">
-                {active.running ? t('term.running') : t('term.idle')}
+                {active.connected ? t('term.connected') : t('term.disconnected')}
               </span>
               <button
                 type="button"
@@ -162,8 +96,9 @@ export function TerminalPanel() {
               <button
                 type="button"
                 className="btn btn-sm danger"
-                disabled={!active.running}
+                disabled={!active.connected}
                 onClick={() => void killSession(active.id)}
+                title="Ctrl+C"
               >
                 {t('term.stop')}
               </button>
@@ -185,38 +120,16 @@ export function TerminalPanel() {
         </div>
       )}
 
-      {active && (
-        <div
-          className="terminal-body terminal-body-interactive"
-          ref={bodyRef}
-          tabIndex={0}
-          role="textbox"
-          aria-label={t('term.interactiveHint')}
-          onKeyDown={onTerminalKeyDown}
-          onClick={() => bodyRef.current?.focus()}
-        >
-          {active.lines.map((l, i) => (
-            <div key={`${active.id}-${i}`} className={`term-line ${l.stream}`}>
-              {l.stream === 'system' || l.stream === 'stdin'
-                ? l.line
-                : renderAnsi(l.line, `${active.id}-${i}`)}
-            </div>
-          ))}
-          {!active.running && (
-            <div className="term-line term-prompt-line">
-              <span className="term-prompt">$</span>
-              <span className="term-draft">{active.input}</span>
-              <span className="term-caret" />
-            </div>
-          )}
-          {active.running && (
-            <div className="term-line term-prompt-line">
-              <span className="term-draft stdin">{active.input}</span>
-              <span className="term-caret" />
-            </div>
-          )}
-        </div>
-      )}
+      <div className={`terminal-xterm-stack ${active ? '' : 'hidden'}`}>
+        {sessions.map((s) => (
+          <XtermSession
+            key={s.id}
+            sessionId={s.id}
+            cwd={s.projectPath}
+            active={s.id === activeId}
+          />
+        ))}
+      </div>
 
       {pendingClose && (
         <ModalShell

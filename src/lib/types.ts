@@ -96,9 +96,10 @@ export type TermSession = {
   title: string
   projectPath: string
   projectName: string
-  lines: TerminalLine[]
+  /** PTY shell is alive */
+  connected: boolean
+  /** Alias of connected for tab indicator compatibility */
   running: boolean
-  input: string
 }
 
 export function tagKey(workspace: string, projectFolder: string) {

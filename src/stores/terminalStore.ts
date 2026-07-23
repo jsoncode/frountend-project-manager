@@ -2,7 +2,12 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { create } from 'zustand'
 import { isTauri } from '../lib/tauri'
-import type { TermSession, TerminalLine } from '../lib/types'
+import type { TermSession } from '../lib/types'
+import {
+  clearTerminal,
+  waitPtyReady,
+  writeToTerminal,
+} from '../lib/ptyHost'
 import { useSettingsStore } from './settingsStore'
 
 let seq = 1
@@ -11,23 +16,23 @@ function newId() {
   return `term-${Date.now()}-${seq++}`
 }
 
+type PtyDataEvent = { terminalId: string; data: string }
+type PtyExitEvent = { terminalId: string; code?: number | null }
+
 type TerminalState = {
   sessions: TermSession[]
   activeId: string | null
   createSession: (projectPath: string, projectName: string) => string
   closeSession: (id: string) => Promise<void>
   setActive: (id: string) => void
-  setInput: (id: string, value: string) => void
   clearSession: (id: string) => void
-  append: (line: TerminalLine) => void
-  appendBatch: (lines: TerminalLine[]) => void
-  /** Prefer idle active tab for project; otherwise create a new tab. */
+  /** Prefer connected active tab for project; otherwise create a new tab. */
   ensureRunTarget: (projectPath: string, projectName: string) => string
   runInSession: (terminalId: string, projectPath: string, command: string) => Promise<void>
   runScript: (projectPath: string, projectName: string, pm: string, script: string) => Promise<void>
   runRaw: (projectPath: string, projectName: string, command: string) => Promise<void>
   killSession: (id: string) => Promise<void>
-  writeStdin: (id: string, data: string, echo?: string) => Promise<void>
+  markConnected: (id: string, connected: boolean) => void
   startListening: () => Promise<UnlistenFn>
 }
 
@@ -44,16 +49,8 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
       title: `${projectName} #${count}`,
       projectPath,
       projectName,
-      lines: [
-        {
-          terminalId: id,
-          projectPath,
-          stream: 'system',
-          line: `cwd: ${projectPath}`,
-        },
-      ],
+      connected: false,
       running: false,
-      input: '',
     }
     set((s) => ({
       sessions: [...s.sessions, session],
@@ -63,9 +60,12 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
   },
 
   closeSession: async (id) => {
-    const session = get().sessions.find((s) => s.id === id)
-    if (session?.running) {
-      await get().killSession(id)
+    try {
+      if (isTauri()) {
+        await invoke('pty_kill', { terminalId: id })
+      }
+    } catch {
+      /* already dead */
     }
     set((s) => {
       const sessions = s.sessions.filter((t) => t.id !== id)
@@ -77,58 +77,25 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
 
   setActive: (id) => set({ activeId: id }),
 
-  setInput: (id, value) =>
-    set((s) => ({
-      sessions: s.sessions.map((t) => (t.id === id ? { ...t, input: value } : t)),
-    })),
+  clearSession: (id) => {
+    clearTerminal(id)
+  },
 
-  clearSession: (id) =>
+  markConnected: (id, connected) =>
     set((s) => ({
       sessions: s.sessions.map((t) =>
-        t.id === id ? { ...t, lines: [] } : t,
+        t.id === id ? { ...t, connected, running: connected } : t,
       ),
     })),
-
-  append: (line) => get().appendBatch([line]),
-
-  appendBatch: (incoming) => {
-    if (incoming.length === 0) return
-    set((s) => {
-      const byId = new Map<string, TerminalLine[]>()
-      let stoppedIds = new Set<string>()
-      for (const line of incoming) {
-        const list = byId.get(line.terminalId) ?? []
-        list.push(line)
-        byId.set(line.terminalId, list)
-        if (
-          line.stream === 'system' &&
-          (line.line.startsWith('[exit') || line.line.startsWith('[stopped'))
-        ) {
-          stoppedIds.add(line.terminalId)
-        }
-      }
-      return {
-        sessions: s.sessions.map((t) => {
-          const extra = byId.get(t.id)
-          if (!extra) return t
-          return {
-            ...t,
-            lines: [...t.lines, ...extra].slice(-800),
-            running: stoppedIds.has(t.id) ? false : t.running,
-          }
-        }),
-      }
-    })
-  },
 
   ensureRunTarget: (projectPath, projectName) => {
     const { sessions, activeId, createSession } = get()
     const active = sessions.find((s) => s.id === activeId)
-    if (active && active.projectPath === projectPath && !active.running) {
+    if (active && active.projectPath === projectPath && active.connected) {
       return active.id
     }
     const idle = sessions.find(
-      (s) => s.projectPath === projectPath && !s.running,
+      (s) => s.projectPath === projectPath && s.connected,
     )
     if (idle) {
       set({ activeId: idle.id })
@@ -137,33 +104,21 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
     return createSession(projectPath, projectName)
   },
 
-  runInSession: async (terminalId, projectPath, command) => {
-    set((s) => ({
-      sessions: s.sessions.map((t) =>
-        t.id === terminalId ? { ...t, running: true, input: '' } : t,
-      ),
-    }))
+  runInSession: async (terminalId, _projectPath, command) => {
+    const cmd = command.trim()
+    if (!cmd) return
     try {
-      await invoke('run_command', { terminalId, projectPath, command })
+      await waitPtyReady(terminalId)
+      // PowerShell / cmd both accept \r as Enter in ConPTY
+      await invoke('pty_write', { terminalId, data: `${cmd}\r` })
     } catch (e) {
-      get().append({
-        terminalId,
-        projectPath,
-        stream: 'system',
-        line: `Error: ${String(e)}`,
-      })
-      set((s) => ({
-        sessions: s.sessions.map((t) =>
-          t.id === terminalId ? { ...t, running: false } : t,
-        ),
-      }))
+      writeToTerminal(terminalId, `\r\n\x1b[31mError: ${String(e)}\x1b[0m\r\n`)
     }
   },
 
   runScript: async (projectPath, projectName, pm, script) => {
     const command =
       pm === 'npm' ? `npm run ${script}` : `${pm} run ${script}`
-    // Only package.json scripts go into the command execution history.
     void useSettingsStore.getState().touchCommandHistory(projectPath, command)
     await get().runRaw(projectPath, projectName, command)
   },
@@ -175,36 +130,9 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
 
   killSession: async (id) => {
     try {
-      await invoke('kill_command', { terminalId: id })
-    } finally {
-      set((s) => ({
-        sessions: s.sessions.map((t) =>
-          t.id === id ? { ...t, running: false } : t,
-        ),
-      }))
-    }
-  },
-
-  writeStdin: async (id, data, echo) => {
-    const session = get().sessions.find((s) => s.id === id)
-    if (!session?.running) return
-    if (echo != null && echo.length > 0) {
-      get().append({
-        terminalId: id,
-        projectPath: session.projectPath,
-        stream: 'stdin',
-        line: echo,
-      })
-    }
-    try {
-      await invoke('write_terminal_stdin', { terminalId: id, data })
+      await invoke('pty_interrupt', { terminalId: id })
     } catch (e) {
-      get().append({
-        terminalId: id,
-        projectPath: session.projectPath,
-        stream: 'system',
-        line: `stdin error: ${String(e)}`,
-      })
+      writeToTerminal(id, `\r\n\x1b[31minterrupt error: ${String(e)}\x1b[0m\r\n`)
     }
   },
 
@@ -212,21 +140,22 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
     if (!isTauri()) {
       return () => undefined
     }
-    // Coalesce high-frequency pipe chunks into one React update per frame.
-    let queue: TerminalLine[] = []
-    let raf = 0
-    const flush = () => {
-      raf = 0
-      if (queue.length === 0) return
-      const batch = queue
-      queue = []
-      get().appendBatch(batch)
-    }
-    return listen<TerminalLine>('terminal://line', (event) => {
-      queue.push(event.payload)
-      if (!raf) {
-        raf = requestAnimationFrame(flush)
-      }
+    const unData = await listen<PtyDataEvent>('pty://data', (event) => {
+      writeToTerminal(event.payload.terminalId, event.payload.data)
     })
+    const unExit = await listen<PtyExitEvent>('pty://exit', (event) => {
+      const id = event.payload.terminalId
+      get().markConnected(id, false)
+      const code = event.payload.code
+      const msg =
+        code == null
+          ? '\r\n\x1b[90m[shell closed]\x1b[0m\r\n'
+          : `\r\n\x1b[90m[shell exit ${code}]\x1b[0m\r\n`
+      writeToTerminal(id, msg)
+    })
+    return () => {
+      unData()
+      unExit()
+    }
   },
 }))
