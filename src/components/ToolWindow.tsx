@@ -240,8 +240,8 @@ export function ToolWindow() {
             onDrag={(d) => {
               const { toolPanelWidth, setToolPanelWidth } =
                 useLayoutStore.getState()
-              // Handle is on the left of the panel: drag right → wider
-              setToolPanelWidth(toolPanelWidth + d)
+              // Handle is on the left edge: drag left → wider panel
+              setToolPanelWidth(toolPanelWidth - d)
             }}
             onDragEnd={persist}
           />
