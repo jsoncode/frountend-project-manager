@@ -7,7 +7,7 @@ const zh = {
   'app.selectProject': '从左侧选择项目，或先添加一个工作区。',
   'app.tauriOnly': '请通过 pnpm tauri:dev 启动桌面应用',
 
-  'top.search': '⌕ 筛选项目…',
+  'top.search': '⌕ 跨工作区搜索项目…',
   'top.settings': '设置',
   'top.ideSettings': 'IDE 设置',
   'top.openInIde': '用 {name} 打开当前项目',
@@ -24,7 +24,7 @@ const zh = {
   'ws.refresh': '刷新',
   'ws.remove': '移除',
   'ws.addTitle': '添加工作区',
-  'ws.refreshTitle': '刷新项目列表',
+  'ws.refreshTitle': '刷新全部工作区项目',
   'ws.removeTitle': '删除工作区',
   'ws.removeConfirm': '确定删除工作区「{name}」吗？此操作不会删除磁盘上的文件。',
   'ws.empty': '添加工作区文件夹以开始。',
@@ -35,9 +35,12 @@ const zh = {
   'open.needPath': '请先选择项目或工作区',
 
   'projects.title': '项目',
+  'projects.searchTitle': '搜索结果',
   'projects.scanning': '扫描中…',
+  'projects.searchScanning': '正在扫描其他工作区…',
   'projects.noMatch': '没有匹配的项目。',
   'projects.locate': '定位到当前选中项目',
+  'projects.workspaceGroup': '工作区 · {name}',
 
   'header.noGit': '非 Git',
 
@@ -229,7 +232,7 @@ const en: Record<MessageKey, string> = {
   'app.selectProject': 'Select a project from the list — or add a workspace to get started.',
   'app.tauriOnly': 'Please launch via pnpm tauri:dev',
 
-  'top.search': '⌕ filter projects…',
+  'top.search': '⌕ search across workspaces…',
   'top.settings': 'Settings',
   'top.ideSettings': 'IDE Settings',
   'top.openInIde': 'Open current project in {name}',
@@ -246,7 +249,7 @@ const en: Record<MessageKey, string> = {
   'ws.refresh': 'refresh',
   'ws.remove': 'remove',
   'ws.addTitle': 'Add workspace',
-  'ws.refreshTitle': 'Refresh projects',
+  'ws.refreshTitle': 'Refresh all workspace projects',
   'ws.removeTitle': 'Remove workspace',
   'ws.removeConfirm': 'Remove workspace "{name}"? This does not delete files on disk.',
   'ws.empty': 'Add a workspace folder to begin.',
@@ -257,9 +260,12 @@ const en: Record<MessageKey, string> = {
   'open.needPath': 'Select a project or workspace first',
 
   'projects.title': 'PROJECTS',
+  'projects.searchTitle': 'SEARCH',
   'projects.scanning': 'scanning…',
+  'projects.searchScanning': 'Scanning other workspaces…',
   'projects.noMatch': 'No projects match.',
   'projects.locate': 'Scroll selected project into view',
+  'projects.workspaceGroup': 'Workspace · {name}',
 
   'header.noGit': 'no git',
 

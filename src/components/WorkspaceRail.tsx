@@ -11,7 +11,8 @@ export function WorkspaceRail() {
   const saveWorkspaces = useSettingsStore((s) => s.saveWorkspaces)
   const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace)
   const setActiveWorkspace = useWorkspaceStore((s) => s.setActiveWorkspace)
-  const refreshProjects = useWorkspaceStore((s) => s.refreshProjects)
+  const refreshAllProjects = useWorkspaceStore((s) => s.refreshAllProjects)
+  const dropWorkspaceCache = useWorkspaceStore((s) => s.dropWorkspaceCache)
   const [pendingRemove, setPendingRemove] = useState<string | null>(null)
   const [menu, setMenu] = useState<{ path: string; x: number; y: number } | null>(
     null,
@@ -35,6 +36,7 @@ export function WorkspaceRail() {
     const path = pendingRemove
     const next = config.workspaces.filter((w) => w !== path)
     await saveWorkspaces(next)
+    dropWorkspaceCache(path)
     if (activeWorkspace === path) {
       setActiveWorkspace(next[0] ?? null)
     }
@@ -63,7 +65,7 @@ export function WorkspaceRail() {
             className="icon-btn"
             title={t('ws.refreshTitle')}
             aria-label={t('ws.refreshTitle')}
-            onClick={() => void refreshProjects()}
+            onClick={() => void refreshAllProjects()}
           >
             ↻
           </button>
