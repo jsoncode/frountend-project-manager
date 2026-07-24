@@ -173,6 +173,17 @@ const zh = {
   'tool.modeStack': '并列',
   'tool.modeSingleHint': '当前：单一展开 · 点击切换为上下并列',
   'tool.modeStackHint': '当前：上下并列 · 点击切换为单一展开',
+
+  'ai.title': 'AI 对话',
+  'ai.newChat': '+ 新对话',
+  'ai.recentMonth': '最近一个月',
+  'ai.older': '更早',
+  'ai.settings': '设置',
+  'ai.send': '发送',
+  'ai.stream': '流式',
+  'ai.think': '思考',
+  'ai.code': '编程',
+  'ai.empty': '暂无对话',
 } as const
 
 const en: Record<MessageKey, string> = {
@@ -346,6 +357,17 @@ const en: Record<MessageKey, string> = {
   'tool.modeStack': 'Stack',
   'tool.modeSingleHint': 'Single panel · click for stacked panels',
   'tool.modeStackHint': 'Stacked panels · click for single panel',
+
+  'ai.title': 'AI Chat',
+  'ai.newChat': '+ New chat',
+  'ai.recentMonth': 'Past month',
+  'ai.older': 'Older',
+  'ai.settings': 'Settings',
+  'ai.send': 'Send',
+  'ai.stream': 'Stream',
+  'ai.think': 'Think',
+  'ai.code': 'Code',
+  'ai.empty': 'No conversations yet',
 }
 
 const catalogs: Record<Locale, Record<MessageKey, string>> = {
