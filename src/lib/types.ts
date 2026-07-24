@@ -40,6 +40,8 @@ export type ProjectSummary = {
   path: string
   pkgName?: string | null
   pkgVersion?: string | null
+  /** First line of README.md (heading markers stripped). */
+  displayName?: string | null
   frameworks: string[]
   scripts: Record<string, string>
 }

@@ -94,11 +94,65 @@ export function GitToolPanel() {
     setCommitTarget(null)
     setCommitMsg('')
     const quoted = JSON.stringify(msg)
+    // Windows PowerShell 5.1 does not support bash-style `&&`.
+    // Chain with `; if ($?) { ... }` so a failed step stops the rest.
     const cmds =
       git?.current === branch || branch.startsWith('origin/')
-        ? `git add -A && git commit -m ${quoted}`
-        : `git switch ${JSON.stringify(localName(branch))} && git add -A && git commit -m ${quoted}`
+        ? `git add -A; if ($?) { git commit -m ${quoted} }`
+        : `git switch ${JSON.stringify(localName(branch))}; if ($?) { git add -A }; if ($?) { git commit -m ${quoted} }`
     runGit(cmds)
+  }
+
+  const isMenuCurrent =
+    !!menu &&
+    !!git?.current &&
+    (git.current === menu.branch.name ||
+      (!menu.branch.isRemote && git.current === localName(menu.branch.name)))
+
+  // origin/master 与本地 master 视为同一逻辑分支：不合并，可签出
+  const sameLocalAsCurrent =
+    !!menu && !!git?.current && localName(menu.branch.name) === git.current
+
+  const branches = git?.branches ?? []
+  const localBranches = branches.filter((b) => !b.isRemote)
+  const remoteBranches = branches.filter((b) => b.isRemote)
+
+  const renderBranch = (b: BranchItem) => {
+    const isCurrent = !b.isRemote && git?.current === b.name
+    return (
+      <div
+        key={b.name}
+        className={`branch-item ${isCurrent ? 'current' : ''} clickable`}
+        title={
+          isCurrent
+            ? t('git.current')
+            : `${t('git.dblclick')} · ${t('git.contextHint')}`
+        }
+        onDoubleClick={() => {
+          if (!isCurrent) setSwitchTarget(b.name)
+        }}
+        onContextMenu={(e) => onContext(e, b)}
+      >
+        <span className="branch-mark">{isCurrent ? '●' : '○'}</span>
+        <span className="branch-name">{b.name}</span>
+        {b.behind > 0 && (
+          <span
+            className="branch-badge behind"
+            title={t('git.behindHint', { n: b.behind })}
+          >
+            ↓{b.behind}
+          </span>
+        )}
+        {b.ahead > 0 && (
+          <span
+            className="branch-badge ahead"
+            title={t('git.aheadHint', { n: b.ahead })}
+          >
+            ↑{b.ahead}
+          </span>
+        )}
+      </div>
+    )
   }
 
   return (
@@ -128,53 +182,35 @@ export function GitToolPanel() {
         }
         onDelete={(value) => void deleteHistory(selected.path, 'branch', value)}
       />
-      <div className="pane-sub" style={{ marginTop: 10 }}>
-        {t('git.allBranches')}
-      </div>
       {!git && <div className="muted">{t('git.notRepo')}</div>}
-      <div className="branch-list">
-        {(git?.branches ?? []).map((b) => {
-          const isCurrent = git?.current === b.name
-          return (
-            <div
-              key={b.name}
-              className={`branch-item ${isCurrent ? 'current' : ''} clickable`}
-              title={
-                isCurrent
-                  ? t('git.current')
-                  : `${t('git.dblclick')} · ${t('git.contextHint')}`
-              }
-              onDoubleClick={() => {
-                if (!isCurrent) setSwitchTarget(b.name)
-              }}
-              onContextMenu={(e) => onContext(e, b)}
-            >
-              <span className="branch-mark">{isCurrent ? '●' : '○'}</span>
-              <span className="branch-name">{b.name}</span>
-              {b.behind > 0 && (
-                <span
-                  className="branch-badge behind"
-                  title={t('git.behindHint', { n: b.behind })}
-                >
-                  ↓{b.behind}
-                </span>
-              )}
-              {b.ahead > 0 && (
-                <span
-                  className="branch-badge ahead"
-                  title={t('git.aheadHint', { n: b.ahead })}
-                >
-                  ↑{b.ahead}
-                </span>
-              )}
-            </div>
-          )
-        })}
-      </div>
+      {git && (
+        <>
+          <div className="pane-sub" style={{ marginTop: 10 }}>
+            {t('git.localBranches')}
+          </div>
+          <div className="branch-list">
+            {localBranches.length === 0 ? (
+              <div className="muted">{t('git.branchesEmpty')}</div>
+            ) : (
+              localBranches.map(renderBranch)
+            )}
+          </div>
+          <div className="pane-sub" style={{ marginTop: 10 }}>
+            {t('git.remoteBranches')}
+          </div>
+          <div className="branch-list">
+            {remoteBranches.length === 0 ? (
+              <div className="muted">{t('git.branchesEmpty')}</div>
+            ) : (
+              remoteBranches.map(renderBranch)
+            )}
+          </div>
+        </>
+      )}
 
       {menu && (
         <ContextMenuPortal x={menu.x} y={menu.y} onClose={closeMenu}>
-          {!menu.branch.isRemote && git?.current !== menu.branch.name && (
+          {(!sameLocalAsCurrent || menu.branch.isRemote) && (
             <button
               type="button"
               role="menuitem"
@@ -196,9 +232,7 @@ export function GitToolPanel() {
               void pullBranch(target)
             }}
           >
-            {git?.current === menu.branch.name ||
-            (!menu.branch.isRemote &&
-              git?.current === localName(menu.branch.name))
+            {isMenuCurrent || (menu.branch.isRemote && sameLocalAsCurrent)
               ? t('git.ctx.pull')
               : t('git.ctx.pullOther')}
           </button>
@@ -208,9 +242,8 @@ export function GitToolPanel() {
               role="menuitem"
               onClick={() => {
                 const name = localName(menu.branch.name)
-                const isCurrent = git?.current === menu.branch.name
                 runGit(
-                  isCurrent
+                  isMenuCurrent
                     ? 'git push'
                     : `git push -u origin ${JSON.stringify(name)}:${name}`,
                 )
@@ -220,27 +253,42 @@ export function GitToolPanel() {
               {t('git.ctx.push')}
             </button>
           )}
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setMenu(null)
-              void (async () => {
-                echoTerm(`\r\n\x1b[36m$ git fetch --all --prune\x1b[0m\r\n`)
-                try {
-                  const msg = await invoke<string>('git_fetch', {
-                    path: selected.path,
-                  })
-                  echoTerm(`\x1b[32m${msg}\x1b[0m\r\n`)
-                  await refreshGit()
-                } catch (e) {
-                  echoTerm(`\x1b[31m${String(e)}\x1b[0m\r\n`)
-                }
-              })()
-            }}
-          >
-            {t('git.ctx.fetch')}
-          </button>
+          {(isMenuCurrent || (menu.branch.isRemote && sameLocalAsCurrent)) && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setMenu(null)
+                void (async () => {
+                  echoTerm(`\r\n\x1b[36m$ git fetch --all --prune\x1b[0m\r\n`)
+                  try {
+                    const msg = await invoke<string>('git_fetch', {
+                      path: selected.path,
+                    })
+                    echoTerm(`\x1b[32m${msg}\x1b[0m\r\n`)
+                    await refreshGit()
+                  } catch (e) {
+                    echoTerm(`\x1b[31m${String(e)}\x1b[0m\r\n`)
+                  }
+                })()
+              }}
+            >
+              {t('git.ctx.fetch')}
+            </button>
+          )}
+          {!sameLocalAsCurrent && git?.current && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                const ref = menu.branch.name
+                setMenu(null)
+                runGit(`git merge ${JSON.stringify(ref)}`)
+              }}
+            >
+              {t('git.ctx.mergeInto', { name: git.current })}
+            </button>
+          )}
           {!menu.branch.isRemote && (
             <button
               type="button"

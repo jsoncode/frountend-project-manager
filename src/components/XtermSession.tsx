@@ -82,6 +82,22 @@ export function XtermSession({ sessionId, cwd, active }: Props) {
 
     let disposed = false
 
+    // With a mouse selection, Ctrl+C / Cmd+C copies instead of sending interrupt (^C).
+    term.attachCustomKeyEventHandler((ev) => {
+      if (ev.type !== 'keydown') return true
+      const mod = ev.ctrlKey || ev.metaKey
+      if (!mod || ev.altKey || ev.shiftKey) return true
+      const isC = ev.code === 'KeyC' || ev.key.toLowerCase() === 'c'
+      if (!isC || !term.hasSelection()) return true
+      const text = term.getSelection()
+      if (text) {
+        void navigator.clipboard.writeText(text).catch(() => undefined)
+      }
+      ev.preventDefault()
+      ev.stopPropagation()
+      return false
+    })
+
     const onData = term.onData((data) => {
       void invoke('pty_write', { terminalId: sessionId, data }).catch(() => undefined)
     })

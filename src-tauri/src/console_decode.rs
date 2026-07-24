@@ -1,20 +1,16 @@
 //! Decode console/pipe bytes to UTF-8 text.
 //!
-//! On Chinese Windows, `cmd.exe` and many tools still emit GBK (CP936) even when
-//! the app UI is UTF-8. Prefer valid UTF-8; otherwise fall back to the system ACP.
+//! On Chinese Windows, shells and tools may emit a mix of UTF-8 (git, modern CLIs)
+//! and GBK/ACP (legacy tools). Prefer UTF-8; only fall back to the system ACP for
+//! the *invalid* trailing region — never re-decode a valid UTF-8 prefix as GBK
+//! (that produces classic mojibake like 娓呯┖…).
 
 use encoding_rs::Encoding;
 
 /// Decode a complete buffer (EOF / flush). Prefer UTF-8, else system ANSI.
 pub fn decode_bytes(bytes: &[u8]) -> String {
-    if bytes.is_empty() {
-        return String::new();
-    }
-    if let Ok(s) = std::str::from_utf8(bytes) {
-        return s.to_string();
-    }
-    let (cow, _, _) = fallback_encoding().decode(bytes);
-    cow.into_owned()
+    let (text, _) = decode_available(bytes, true);
+    text
 }
 
 /// Decode as much as possible from `buf`, leaving an incomplete trailing
@@ -28,7 +24,8 @@ pub fn decode_available(buf: &[u8], flush: bool) -> (String, usize) {
         Ok(s) => (s.to_string(), buf.len()),
         Err(e) => {
             let valid_up_to = e.valid_up_to();
-            // Incomplete UTF-8 at the end — wait for more bytes unless flushing.
+
+            // Incomplete UTF-8 at the end — emit valid prefix, wait for more bytes.
             if !flush && e.error_len().is_none() && valid_up_to < buf.len() {
                 let s = std::str::from_utf8(&buf[..valid_up_to])
                     .unwrap_or("")
@@ -36,19 +33,31 @@ pub fn decode_available(buf: &[u8], flush: bool) -> (String, usize) {
                 return (s, valid_up_to);
             }
 
-            // Mid-stream invalid UTF-8 → treat as system ANSI (e.g. GBK).
-            if flush {
-                return (decode_bytes(buf), buf.len());
+            // Keep any valid UTF-8 prefix intact (git often emits UTF-8 subjects
+            // while PowerShell banners/errors arrive as GBK in the same stream).
+            let mut out = String::new();
+            let mut offset = 0usize;
+            if valid_up_to > 0 {
+                if let Ok(s) = std::str::from_utf8(&buf[..valid_up_to]) {
+                    out.push_str(s);
+                    offset = valid_up_to;
+                }
             }
 
-            // Hold a possible trailing lead byte for DBCS (GBK/Big5/…).
-            let hold = ansi_incomplete_trail(buf);
-            let take = buf.len().saturating_sub(hold);
-            if take == 0 {
-                return (String::new(), 0);
+            let rest = &buf[offset..];
+            if rest.is_empty() {
+                return (out, offset);
             }
-            let (cow, _, _) = fallback_encoding().decode(&buf[..take]);
-            (cow.into_owned(), take)
+
+            let hold = if flush { 0 } else { ansi_incomplete_trail(rest) };
+            let take = rest.len().saturating_sub(hold);
+            if take == 0 {
+                return (out, offset);
+            }
+
+            let (cow, _, _) = fallback_encoding().decode(&rest[..take]);
+            out.push_str(&cow);
+            (out, offset + take)
         }
     }
 }
@@ -123,5 +132,16 @@ mod tests {
             s.contains('中') || s.contains('文') || !s.is_empty(),
             "decoded={s:?}"
         );
+    }
+
+    #[test]
+    fn utf8_prefix_not_garbled_when_gbk_follows() {
+        // UTF-8 "清空" + GBK "中文" — must keep 清空, not 娓呯┖…
+        let mut buf = Vec::new();
+        buf.extend_from_slice("清空".as_bytes());
+        buf.extend_from_slice(&[0xD6, 0xD0, 0xCE, 0xC4]);
+        let s = decode_bytes(&buf);
+        assert!(s.starts_with("清空"), "decoded={s:?}");
+        assert!(!s.starts_with("娓"), "decoded={s:?}");
     }
 }

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useI18n } from '../i18n/useI18n'
 import { projectGroupKey, projectGroupTint } from '../lib/projectGroup'
+import { projectMatchesQuery, projectSubtitle } from '../lib/projectSearch'
 import { useProjectStore } from '../stores/projectStore'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import { OpenWithMenu } from './OpenWithMenu'
@@ -21,14 +22,10 @@ export function ProjectList() {
     null,
   )
 
-  const q = search.trim().toLowerCase()
+  const q = search.trim()
 
   const filtered = useMemo(() => {
-    const list = projects.filter((p) => {
-      if (!q) return true
-      const hay = `${p.folderName} ${p.pkgName ?? ''}`.toLowerCase()
-      return hay.includes(q)
-    })
+    const list = projects.filter((p) => projectMatchesQuery(p, q))
     return [...list].sort((a, b) =>
       a.folderName.localeCompare(b.folderName, undefined, {
         sensitivity: 'base',
@@ -131,7 +128,7 @@ export function ProjectList() {
                 >
                   <span className="project-capsule-name">{p.folderName}</span>
                   <span className="project-capsule-meta muted">
-                    {p.pkgName ?? '—'} · v{p.pkgVersion ?? '?'}
+                    {projectSubtitle(p)}
                     {p.frameworks.length > 0 ? ` · ${p.frameworks.join(',')}` : ''}
                   </span>
                 </button>

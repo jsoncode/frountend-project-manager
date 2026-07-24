@@ -51,7 +51,7 @@ macOS 若提示「无法验证开发者」，可在「系统设置 → 隐私与
 
 ### 从源码运行
 
-需要：Node.js（LTS）、Rust（stable）。
+需要：Node.js（LTS）、[pnpm](https://pnpm.io/)、Rust（stable）。
 
 - Windows：WebView2（一般已自带）
 - macOS：Xcode Command Line Tools（`xcode-select --install`）
@@ -59,30 +59,30 @@ macOS 若提示「无法验证开发者」，可在「系统设置 → 隐私与
 ```bash
 git clone https://github.com/jsoncode/frountend-project-manager.git
 cd frountend-project-manager
-npm install
-npm run tauri:dev
+pnpm install
+pnpm tauri:dev
 ```
 
 仅调试前端 UI：
 
 ```bash
-npm run dev
+pnpm dev
 ```
 
 ### 本地打包
 
 ```bash
 # Windows 安装包 → src-tauri/target/release/bundle/nsis/
-npm run tauri:build:win
+pnpm tauri:build:win
 
 # macOS DMG → src-tauri/target/release/bundle/dmg/
-npm run tauri:build:mac
+pnpm tauri:build:mac
 
 # 仅 .app（不打 dmg）
-npm run tauri:build:mac:app
+pnpm tauri:build:mac:app
 
 # Apple Silicon + Intel 通用包（需本机已安装两个 target）
-npm run tauri:build:mac:universal
+pnpm tauri:build:mac:universal
 ```
 
 ## 发布新版本
@@ -91,7 +91,7 @@ npm run tauri:build:mac:universal
 2. 打 tag 并推送：
 
 ```bash
-npm run version:sync -- 0.2.0
+pnpm version:sync -- 0.2.0
 git tag v0.2.0
 git push origin v0.2.0
 ```
@@ -119,8 +119,8 @@ git push origin v0.2.0
 
 ## English
 
-**FPM** is a desktop app that gathers your frontend repos into one place: scan workspaces, run npm scripts in a real terminal, open projects in your IDE, and manage Git branches without juggling dozens of folders.
+**FPM** is a desktop app that gathers your frontend repos into one place: scan workspaces, run package scripts in a real terminal, open projects in your IDE, and manage Git branches without juggling dozens of folders.
 
 **Platforms:** Windows (NSIS `.exe`) and macOS (`.dmg` for Apple Silicon and Intel). Pushing a `v*` tag builds all of them via GitHub Actions.
 
-See the screenshot above. Download from [Releases](https://github.com/jsoncode/frountend-project-manager/releases), or run `npm install && npm run tauri:dev`.
+See the screenshot above. Download from [Releases](https://github.com/jsoncode/frountend-project-manager/releases), or run `pnpm install && pnpm tauri:dev`.

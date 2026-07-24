@@ -37,19 +37,32 @@ pub struct PtyExitEvent {
 fn shell_command(cwd: &Path) -> CommandBuilder {
     #[cfg(windows)]
     {
+        // Windows PowerShell 5.1 defaults to the system ANSI code page (GBK on
+        // Chinese Windows). Force UTF-8 so git commit subjects / modern CLIs
+        // round-trip correctly through ConPTY.
         let mut cmd = CommandBuilder::new("powershell.exe");
         cmd.arg("-NoLogo");
+        cmd.arg("-NoExit");
+        cmd.arg("-Command");
+        cmd.arg(
+            "chcp 65001 > $null; \
+             [Console]::InputEncoding = New-Object System.Text.UTF8Encoding $false; \
+             [Console]::OutputEncoding = [Console]::InputEncoding; \
+             $OutputEncoding = [Console]::OutputEncoding",
+        );
         cmd.cwd(cwd);
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
         cmd.env("FORCE_COLOR", "1");
         cmd.env("PYTHONUTF8", "1");
         cmd.env("PYTHONIOENCODING", "utf-8");
+        // Hint Git for Windows to emit UTF-8 on the console.
+        cmd.env("LANG", "en_US.UTF-8");
         cmd
     }
     #[cfg(not(windows))]
     {
-        let shell = std::env::var("SHELL").unwrap_or_else(|_| {
+        let shell = std::env::var("SHELL").unwrap_or_else(|| {
             #[cfg(target_os = "macos")]
             {
                 "/bin/zsh".into()

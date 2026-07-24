@@ -11,6 +11,8 @@ pub struct ProjectSummary {
     pub path: String,
     pub pkg_name: Option<String>,
     pub pkg_version: Option<String>,
+    /// First non-empty line of README.md (markdown heading markers stripped).
+    pub display_name: Option<String>,
     pub frameworks: Vec<String>,
     pub scripts: BTreeMap<String, String>,
 }
@@ -84,6 +86,43 @@ fn read_package_json(dir: &Path) -> Option<serde_json::Value> {
     let path = dir.join("package.json");
     let raw = fs::read_to_string(path).ok()?;
     serde_json::from_str(&raw).ok()
+}
+
+/// Strip markdown AT / emphasis wrappers from a README title line.
+fn strip_readme_title_line(line: &str) -> String {
+    let mut s = line.trim();
+    // AT headings: # ## ### …
+    while s.starts_with('#') {
+        s = s[1..].trim_start();
+    }
+    // Simple emphasis wrappers
+    s = s.trim_matches(|c: char| c == '*' || c == '_' || c == '`');
+    s.trim().to_string()
+}
+
+/// Read first non-empty line of README.md / readme.md as a display title.
+fn read_readme_display_name(dir: &Path) -> Option<String> {
+    const CANDIDATES: &[&str] = &["README.md", "readme.md", "Readme.md"];
+    for name in CANDIDATES {
+        let path = dir.join(name);
+        if !path.is_file() {
+            continue;
+        }
+        let raw = fs::read(&path).ok()?;
+        let text = crate::console_decode::decode_bytes(&raw);
+        let text = text.strip_prefix('\u{feff}').unwrap_or(&text);
+        for line in text.lines() {
+            let title = strip_readme_title_line(line);
+            if !title.is_empty() {
+                // Cap absurd first lines (e.g. huge badges / HTML).
+                if title.chars().count() > 80 {
+                    return None;
+                }
+                return Some(title);
+            }
+        }
+    }
+    None
 }
 
 fn detect_frameworks(pkg: &serde_json::Value) -> Vec<String> {
@@ -245,6 +284,7 @@ fn summary_from_dir(dir: PathBuf) -> Option<ProjectSummary> {
             .get("version")
             .and_then(|v| v.as_str())
             .map(|s| s.to_string()),
+        display_name: read_readme_display_name(&dir),
         frameworks: detect_frameworks(&pkg),
         scripts: extract_scripts(&pkg),
     })
