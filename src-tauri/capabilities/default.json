@@ -63,6 +63,8 @@
     "allow-ai-delete-conversation",
     "allow-ai-append-message",
     "allow-ai-open-chat-window",
-    "allow-ai-take-pending-feed"
+    "allow-ai-take-pending-feed",
+    "allow-ai-chat-start",
+    "allow-ai-chat-cancel"
   ]
 }

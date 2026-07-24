@@ -237,3 +237,13 @@ commands.allow = ["ai_open_chat_window"]
 identifier = "allow-ai-take-pending-feed"
 description = "Take pending AI feed text"
 commands.allow = ["ai_take_pending_feed"]
+
+[[permission]]
+identifier = "allow-ai-chat-start"
+description = "Start AI chat completion (stream or non-stream)"
+commands.allow = ["ai_chat_start"]
+
+[[permission]]
+identifier = "allow-ai-chat-cancel"
+description = "Cancel a running AI chat request"
+commands.allow = ["ai_chat_cancel"]

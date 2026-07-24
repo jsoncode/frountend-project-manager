@@ -109,6 +109,16 @@ fn ai_take_pending_feed() -> Result<Option<String>, String> {
 }
 
 #[tauri::command]
+fn ai_chat_start(app: AppHandle, req: ai::ChatRequest) -> Result<(), String> {
+    ai::start_chat(app, req)
+}
+
+#[tauri::command]
+fn ai_chat_cancel(request_id: String) -> Result<(), String> {
+    ai::cancel_chat(&request_id)
+}
+
+#[tauri::command]
 fn list_projects(workspace: String) -> Result<Vec<scan::ProjectSummary>, String> {
     scan::list_projects(&workspace)
 }
@@ -471,6 +481,8 @@ pub fn run() {
             ai_append_message,
             ai_open_chat_window,
             ai_take_pending_feed,
+            ai_chat_start,
+            ai_chat_cancel,
             list_projects,
             scan_project,
             git_branches,
