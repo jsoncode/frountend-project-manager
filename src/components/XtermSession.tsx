@@ -3,7 +3,8 @@ import { WebLinksAddon } from '@xterm/addon-web-links'
 import { Terminal } from '@xterm/xterm'
 import { invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-shell'
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react'
+import { useI18n } from '../i18n/useI18n'
 import {
   createReadyGate,
   fitTerminal,
@@ -15,6 +16,7 @@ import {
 } from '../lib/ptyHost'
 import { isTauri } from '../lib/tauri'
 import { useTerminalStore } from '../stores/terminalStore'
+import { ContextMenuPortal } from './ContextMenuPortal'
 import '@xterm/xterm/css/xterm.css'
 
 type Props = {
@@ -23,11 +25,23 @@ type Props = {
   active: boolean
 }
 
+type TermMenu = {
+  x: number
+  y: number
+  hasSelection: boolean
+  selection: string
+}
+
 export function XtermSession({ sessionId, cwd, active }: Props) {
   const hostRef = useRef<HTMLDivElement>(null)
+  const termRef = useRef<Terminal | null>(null)
   const activeRef = useRef(active)
   const markConnected = useTerminalStore((s) => s.markConnected)
+  const { t } = useI18n()
+  const [menu, setMenu] = useState<TermMenu | null>(null)
   activeRef.current = active
+
+  const closeMenu = useCallback(() => setMenu(null), [])
 
   useEffect(() => {
     const host = hostRef.current
@@ -77,6 +91,7 @@ export function XtermSession({ sessionId, cwd, active }: Props) {
 
     const gate = createReadyGate()
     registerPtyTerminal(sessionId, term, fit, gate)
+    termRef.current = term
     term.open(host)
     fit.fit()
 
@@ -140,6 +155,7 @@ export function XtermSession({ sessionId, cwd, active }: Props) {
       disposed = true
       onData.dispose()
       resizeObs.disconnect()
+      termRef.current = null
       unregisterPtyTerminal(sessionId)
       void invoke('pty_kill', { terminalId: sessionId }).catch(() => undefined)
       markConnected(sessionId, false)
@@ -165,13 +181,71 @@ export function XtermSession({ sessionId, cwd, active }: Props) {
     return () => window.clearTimeout(t)
   }, [active, sessionId])
 
+  const onContextMenu = (e: MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const term = termRef.current
+    const hasSelection = Boolean(term?.hasSelection())
+    const selection = hasSelection ? (term?.getSelection() ?? '') : ''
+    setMenu({
+      x: e.clientX,
+      y: e.clientY,
+      hasSelection: hasSelection && selection.length > 0,
+      selection,
+    })
+  }
+
+  const copySelection = () => {
+    if (!menu?.hasSelection || !menu.selection) return
+    void navigator.clipboard.writeText(menu.selection).catch(() => undefined)
+    setMenu(null)
+  }
+
+  const selectAll = () => {
+    termRef.current?.selectAll()
+    setMenu(null)
+  }
+
+  const feedAi = () => {
+    if (!menu?.hasSelection || !menu.selection) return
+    const feedText = menu.selection
+    setMenu(null)
+    if (!isTauri()) return
+    void invoke('ai_open_chat_window', { feedText }).catch(() => undefined)
+  }
+
   return (
     <div
       className={`xterm-session ${active ? 'active' : ''}`}
       hidden={!active}
+      onContextMenu={onContextMenu}
     >
       {/* FitAddon must measure an unpadded box; padding lives on the outer shell. */}
       <div className="xterm-fit-host" ref={hostRef} />
+      {menu && (
+        <ContextMenuPortal x={menu.x} y={menu.y} onClose={closeMenu}>
+          <button
+            type="button"
+            role="menuitem"
+            disabled={!menu.hasSelection}
+            onClick={copySelection}
+          >
+            {t('term.ctx.copy')}
+          </button>
+          <button type="button" role="menuitem" onClick={selectAll}>
+            {t('term.ctx.selectAll')}
+          </button>
+          <div className="branch-menu-sep" />
+          <button
+            type="button"
+            role="menuitem"
+            disabled={!menu.hasSelection}
+            onClick={feedAi}
+          >
+            {t('term.ctx.feedAi')}
+          </button>
+        </ContextMenuPortal>
+      )}
     </div>
   )
 }

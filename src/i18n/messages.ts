@@ -68,6 +68,9 @@ const zh = {
   'term.closeRunningDesc': '关闭「{name}」将结束该终端会话，确认继续吗？',
   'term.closeRunningConfirm': '关闭会话',
   'term.interactiveHint': '完整 PTY 终端：支持 Ctrl+C、方向键历史、Tab 补全',
+  'term.ctx.copy': '复制',
+  'term.ctx.selectAll': '全选',
+  'term.ctx.feedAi': '投喂 AI',
 
   'git.title': 'Git 分支',
   'git.hint': '双击签出 · 右键可拉取任意分支（无需先切换）· 「检查更新」同步远端',
@@ -287,6 +290,9 @@ const en: Record<MessageKey, string> = {
   'term.closeRunningDesc': 'Closing "{name}" will end this terminal session. Continue?',
   'term.closeRunningConfirm': 'Close session',
   'term.interactiveHint': 'Full PTY terminal: Ctrl+C, arrow-key history, Tab completion',
+  'term.ctx.copy': 'Copy',
+  'term.ctx.selectAll': 'Select all',
+  'term.ctx.feedAi': 'Feed to AI',
 
   'git.title': 'GIT BRANCHES',
   'git.hint': 'Double-click to checkout · Right-click pull any branch · “Check updates” syncs remotes',
