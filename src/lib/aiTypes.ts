@@ -10,6 +10,11 @@ export interface AiModel {
   active: boolean
 }
 
+export interface AiConfig {
+  models: AiModel[]
+  lastModelId: string | null
+}
+
 export interface AiConversation {
   id: string
   title: string

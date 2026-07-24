@@ -1,9 +1,19 @@
+import { useEffect } from 'react'
 import { useI18n } from '../i18n/useI18n'
+import { useAiStore } from '../stores/aiStore'
+import { useSettingsStore } from '../stores/settingsStore'
+import { AiTopBar } from './AiTopBar'
 import '../styles/tokens.css'
+import '../styles/app.css'
 import '../styles/ai.css'
 
 export default function AiApp() {
   const { t } = useI18n()
+
+  useEffect(() => {
+    void useSettingsStore.getState().load()
+    void useAiStore.getState().load()
+  }, [])
 
   return (
     <div className="ai-app">
@@ -27,14 +37,7 @@ export default function AiApp() {
       </aside>
 
       <div className="ai-main">
-        <header className="ai-topbar">
-          <select className="ai-model-select" disabled aria-label={t('ai.title')}>
-            <option>—</option>
-          </select>
-          <button type="button" className="ai-btn ai-btn-sm" disabled>
-            {t('ai.settings')}
-          </button>
-        </header>
+        <AiTopBar />
 
         <main className="ai-messages">
           <p className="ai-messages-empty">{t('ai.empty')}</p>
