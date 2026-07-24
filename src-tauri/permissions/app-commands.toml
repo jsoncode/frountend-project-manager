@@ -227,3 +227,13 @@ commands.allow = ["ai_delete_conversation"]
 identifier = "allow-ai-append-message"
 description = "Append AI conversation message"
 commands.allow = ["ai_append_message"]
+
+[[permission]]
+identifier = "allow-ai-open-chat-window"
+description = "Open or focus the AI chat window"
+commands.allow = ["ai_open_chat_window"]
+
+[[permission]]
+identifier = "allow-ai-take-pending-feed"
+description = "Take pending AI feed text"
+commands.allow = ["ai_take_pending_feed"]
