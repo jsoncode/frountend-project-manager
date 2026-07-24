@@ -46,7 +46,9 @@ export function GitToolPanel() {
   }
 
   const echoTerm = (text: string) => {
-    const id = ensureRunTarget(selected.path, selected.folderName)
+    const id = ensureRunTarget(selected.path, selected.folderName, {
+      allowBusy: true,
+    })
     writeToTerminal(id, text)
   }
 

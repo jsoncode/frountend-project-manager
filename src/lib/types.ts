@@ -100,6 +100,8 @@ export type TermSession = {
   projectName: string
   /** PTY shell is alive */
   connected: boolean
+  /** A foreground command is in progress (app-dispatched). */
+  running: boolean
 }
 
 export function sortScriptNames(names: string[]): string[] {

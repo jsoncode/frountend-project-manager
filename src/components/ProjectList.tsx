@@ -3,6 +3,7 @@ import { useI18n } from '../i18n/useI18n'
 import { projectGroupKey, projectGroupTint } from '../lib/projectGroup'
 import { projectMatchesQuery, projectSubtitle } from '../lib/projectSearch'
 import { useProjectStore } from '../stores/projectStore'
+import { useSettingsStore } from '../stores/settingsStore'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import { OpenWithMenu } from './OpenWithMenu'
 
@@ -15,6 +16,7 @@ export function ProjectList() {
   const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace)
   const selected = useProjectStore((s) => s.selected)
   const selectProject = useProjectStore((s) => s.selectProject)
+  const touchSearchHistory = useSettingsStore((s) => s.touchSearchHistory)
   const { t } = useI18n()
   const itemRefs = useRef(new Map<string, HTMLButtonElement>())
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -117,7 +119,12 @@ export function ProjectList() {
                   className={`project-capsule ${selected?.path === p.path ? 'active' : ''}`}
                   onClick={() => {
                     void selectProject(p)
-                    if (search.trim()) setSearch('')
+                    const q = search.trim()
+                    if (q) {
+                      // 有搜索词时点击项目：记下项目名，方便下次快速定位
+                      void touchSearchHistory(p.folderName)
+                      setSearch('')
+                    }
                   }}
                   onContextMenu={(e) => {
                     e.preventDefault()

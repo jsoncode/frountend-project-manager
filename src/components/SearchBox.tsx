@@ -37,10 +37,15 @@ export function SearchBox() {
     setHi(0)
   }, [picks, open])
 
-  const commit = (value: string) => {
-    const v = value.trim()
-    setSearch(v)
+  const applySearch = (value: string) => {
+    setSearch(value.trim())
     setOpen(false)
+  }
+
+  /** Pick an existing history item — refreshes recency. */
+  const pickHistory = (value: string) => {
+    const v = value.trim()
+    applySearch(v)
     if (v) void touchSearchHistory(v)
   }
 
@@ -62,8 +67,9 @@ export function SearchBox() {
     }
     if (e.key === 'Enter') {
       e.preventDefault()
-      if (open && picks[hi]) commit(picks[hi]!)
-      else commit(search)
+      // 仅回填历史项；纯搜索词不写入历史（历史在点击项目时保存）
+      if (open && picks[hi]) pickHistory(picks[hi]!)
+      else applySearch(search)
       return
     }
     if (e.key === 'Escape') {
@@ -115,7 +121,7 @@ export function SearchBox() {
                 type="button"
                 className="search-suggest-pick"
                 onMouseEnter={() => setHi(idx)}
-                onClick={() => commit(item)}
+                onClick={() => pickHistory(item)}
               >
                 {item}
               </button>
