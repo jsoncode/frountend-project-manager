@@ -51,6 +51,14 @@
     "allow-pick-image",
     "allow-import-ide-icon",
     "allow-import-ide-icon-bytes",
-    "allow-extract-ide-icon-from-exe"
+    "allow-extract-ide-icon-from-exe",
+    "allow-ai-load-config",
+    "allow-ai-save-config",
+    "allow-ai-list-conversations",
+    "allow-ai-get-messages",
+    "allow-ai-create-conversation",
+    "allow-ai-rename-conversation",
+    "allow-ai-delete-conversation",
+    "allow-ai-append-message"
   ]
 }

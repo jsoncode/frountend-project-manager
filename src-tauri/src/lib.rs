@@ -6,6 +6,7 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::{AppHandle, Manager, WindowEvent};
 use tauri_plugin_dialog::DialogExt;
 
+mod ai;
 mod bat_view;
 mod config;
 mod console_decode;
@@ -45,6 +46,56 @@ fn load_config(app: AppHandle) -> Result<AppConfig, String> {
 #[tauri::command]
 fn save_config(app: AppHandle, cfg: AppConfig) -> Result<(), String> {
     config::save(&app, &cfg)
+}
+
+#[tauri::command]
+fn ai_load_config(app: AppHandle) -> Result<ai::AiConfig, String> {
+    ai::load_config(&app)
+}
+
+#[tauri::command]
+fn ai_save_config(app: AppHandle, cfg: ai::AiConfig) -> Result<ai::AiConfig, String> {
+    ai::save_config(&app, &cfg)
+}
+
+#[tauri::command]
+fn ai_list_conversations(app: AppHandle) -> Result<Vec<ai::AiConversation>, String> {
+    ai::list_conversations(&app)
+}
+
+#[tauri::command]
+fn ai_get_messages(
+    app: AppHandle,
+    conversation_id: String,
+) -> Result<Vec<ai::AiMessage>, String> {
+    ai::get_messages(&app, &conversation_id)
+}
+
+#[tauri::command]
+fn ai_create_conversation(
+    app: AppHandle,
+    title: Option<String>,
+) -> Result<ai::AiConversation, String> {
+    ai::create_conversation(&app, title)
+}
+
+#[tauri::command]
+fn ai_rename_conversation(
+    app: AppHandle,
+    id: String,
+    title: String,
+) -> Result<ai::AiConversation, String> {
+    ai::rename_conversation(&app, &id, &title)
+}
+
+#[tauri::command]
+fn ai_delete_conversation(app: AppHandle, id: String) -> Result<(), String> {
+    ai::delete_conversation(&app, &id)
+}
+
+#[tauri::command]
+fn ai_append_message(app: AppHandle, msg: ai::AiMessage) -> Result<ai::AiMessage, String> {
+    ai::append_message(&app, msg)
 }
 
 #[tauri::command]
@@ -400,6 +451,14 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             load_config,
             save_config,
+            ai_load_config,
+            ai_save_config,
+            ai_list_conversations,
+            ai_get_messages,
+            ai_create_conversation,
+            ai_rename_conversation,
+            ai_delete_conversation,
+            ai_append_message,
             list_projects,
             scan_project,
             git_branches,

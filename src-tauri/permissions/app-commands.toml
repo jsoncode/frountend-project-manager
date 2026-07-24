@@ -187,3 +187,43 @@ commands.allow = ["import_ide_icon_bytes"]
 identifier = "allow-extract-ide-icon-from-exe"
 description = "Extract IDE icon from executable"
 commands.allow = ["extract_ide_icon_from_exe"]
+
+[[permission]]
+identifier = "allow-ai-load-config"
+description = "Load AI model config"
+commands.allow = ["ai_load_config"]
+
+[[permission]]
+identifier = "allow-ai-save-config"
+description = "Save AI model config"
+commands.allow = ["ai_save_config"]
+
+[[permission]]
+identifier = "allow-ai-list-conversations"
+description = "List AI conversations"
+commands.allow = ["ai_list_conversations"]
+
+[[permission]]
+identifier = "allow-ai-get-messages"
+description = "Get AI conversation messages"
+commands.allow = ["ai_get_messages"]
+
+[[permission]]
+identifier = "allow-ai-create-conversation"
+description = "Create AI conversation"
+commands.allow = ["ai_create_conversation"]
+
+[[permission]]
+identifier = "allow-ai-rename-conversation"
+description = "Rename AI conversation"
+commands.allow = ["ai_rename_conversation"]
+
+[[permission]]
+identifier = "allow-ai-delete-conversation"
+description = "Delete AI conversation"
+commands.allow = ["ai_delete_conversation"]
+
+[[permission]]
+identifier = "allow-ai-append-message"
+description = "Append AI conversation message"
+commands.allow = ["ai_append_message"]
