@@ -31,7 +31,6 @@
     "allow-pty-write",
     "allow-pty-resize",
     "allow-pty-kill",
-    "allow-pty-interrupt",
     "allow-preview-file",
     "allow-detect-ides",
     "allow-list-installed-editors",

@@ -89,11 +89,6 @@ description = "Kill PTY shell"
 commands.allow = ["pty_kill"]
 
 [[permission]]
-identifier = "allow-pty-interrupt"
-description = "Send Ctrl+C to PTY"
-commands.allow = ["pty_interrupt"]
-
-[[permission]]
 identifier = "allow-preview-file"
 description = "Pretty-print a file with embedded bat"
 commands.allow = ["preview_file"]

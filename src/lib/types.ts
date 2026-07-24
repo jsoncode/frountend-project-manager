@@ -98,8 +98,6 @@ export type TermSession = {
   projectName: string
   /** PTY shell is alive */
   connected: boolean
-  /** Alias of connected for tab indicator compatibility */
-  running: boolean
 }
 
 export function sortScriptNames(names: string[]): string[] {

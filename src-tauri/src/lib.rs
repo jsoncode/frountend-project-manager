@@ -138,11 +138,6 @@ fn pty_kill(app: AppHandle, terminal_id: String) -> Result<(), String> {
     pty_term::kill(app, terminal_id)
 }
 
-#[tauri::command]
-fn pty_interrupt(terminal_id: String) -> Result<(), String> {
-    pty_term::send_interrupt(terminal_id)
-}
-
 /// Pretty-print a file with embedded bat (ANSI). Also available via terminal `cat`/`type`/`bat`.
 #[tauri::command]
 fn preview_file(path: String, cwd: Option<String>) -> Result<String, String> {
@@ -421,7 +416,6 @@ pub fn run() {
             pty_write,
             pty_resize,
             pty_kill,
-            pty_interrupt,
             preview_file,
             detect_ides,
             list_installed_editors,

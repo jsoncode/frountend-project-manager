@@ -12,8 +12,6 @@ export function TerminalPanel() {
   const setActive = useTerminalStore((s) => s.setActive)
   const createSession = useTerminalStore((s) => s.createSession)
   const closeSession = useTerminalStore((s) => s.closeSession)
-  const clearSession = useTerminalStore((s) => s.clearSession)
-  const killSession = useTerminalStore((s) => s.killSession)
   const selected = useProjectStore((s) => s.selected)
   const [pendingCloseId, setPendingCloseId] = useState<string | null>(null)
   const { t } = useI18n()
@@ -82,27 +80,9 @@ export function TerminalPanel() {
         </div>
         <div className="terminal-tab-actions">
           {active && (
-            <>
-              <span className="muted">
-                {active.connected ? t('term.connected') : t('term.disconnected')}
-              </span>
-              <button
-                type="button"
-                className="btn btn-sm"
-                onClick={() => clearSession(active.id)}
-              >
-                {t('term.clear')}
-              </button>
-              <button
-                type="button"
-                className="btn btn-sm danger"
-                disabled={!active.connected}
-                onClick={() => void killSession(active.id)}
-                title="Ctrl+C"
-              >
-                {t('term.stop')}
-              </button>
-            </>
+            <span className="muted">
+              {active.connected ? t('term.connected') : t('term.disconnected')}
+            </span>
           )}
         </div>
       </div>

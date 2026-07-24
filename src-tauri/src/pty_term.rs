@@ -260,11 +260,6 @@ pub fn kill(app: AppHandle, terminal_id: String) -> Result<(), String> {
     Ok(())
 }
 
-/// Send Ctrl+C (ETX) to the shell — ConPTY turns this into a real interrupt.
-pub fn send_interrupt(terminal_id: String) -> Result<(), String> {
-    write(terminal_id, "\u{0003}".to_string())
-}
-
 /// Check whether a PTY session is still registered.
 #[allow(dead_code)]
 pub fn is_alive(terminal_id: &str) -> bool {

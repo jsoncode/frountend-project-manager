@@ -358,6 +358,16 @@ body.resizing-row * {
   background: rgba(34, 211, 238, 0.1);
 }
 
+.icon-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.icon-btn:disabled:hover {
+  border-color: var(--border);
+  background: transparent;
+}
+
 .rail-item {
   position: relative;
   display: flex;
@@ -423,9 +433,31 @@ body.resizing-row * {
 .project-scroll {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   padding: 8px 10px 12px;
   scroll-behavior: smooth;
+}
+
+.project-group {
+  --project-group-bg: transparent;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 8px 10px;
+  border-radius: 14px;
+  background: var(--project-group-bg);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.project-group-mark {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  line-height: 1;
+  padding: 0 6px 2px;
+  color: var(--text-bright);
+  opacity: 0.5;
+  user-select: none;
 }
 
 .project-capsule {
@@ -438,7 +470,7 @@ body.resizing-row * {
   padding: 10px 16px;
   border: 1px solid var(--border);
   border-radius: 999px;
-  background: rgba(8, 20, 36, 0.65);
+  background: rgba(8, 20, 36, 0.55);
   color: var(--text);
   cursor: pointer;
   text-align: left;
@@ -447,12 +479,12 @@ body.resizing-row * {
 
 .project-capsule:hover {
   border-color: var(--cyan);
-  background: rgba(34, 211, 238, 0.08);
+  background: rgba(34, 211, 238, 0.1);
 }
 
 .project-capsule.active {
   border-color: var(--cyan);
-  background: rgba(34, 211, 238, 0.16);
+  background: rgba(34, 211, 238, 0.18);
   color: var(--text-bright);
   box-shadow: var(--glow);
 }

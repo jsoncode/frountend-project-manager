@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useI18n } from '../i18n/useI18n'
+import { projectGroupKey, projectGroupTint } from '../lib/projectGroup'
 import { useProjectStore } from '../stores/projectStore'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import { OpenWithMenu } from './OpenWithMenu'
@@ -35,6 +36,20 @@ export function ProjectList() {
     )
   }, [projects, q])
 
+  const groups = useMemo(() => {
+    const result: { key: string; tint: string; items: typeof filtered }[] = []
+    for (const p of filtered) {
+      const key = projectGroupKey(p.folderName)
+      const last = result[result.length - 1]
+      if (last && last.key === key) {
+        last.items.push(p)
+      } else {
+        result.push({ key, tint: projectGroupTint(key), items: [p] })
+      }
+    }
+    return result
+  }, [filtered])
+
   // When workspace finishes loading (or selection changes), scroll active item into view.
   useEffect(() => {
     if (loading || !selected) return
@@ -48,10 +63,34 @@ export function ProjectList() {
     return () => window.clearTimeout(t)
   }, [activeWorkspace, loading, selected?.path, filtered])
 
+  const canLocate =
+    !!selected && !loading && filtered.some((p) => p.path === selected.path)
+
+  const locateSelected = () => {
+    if (!selected) return
+    const el = itemRefs.current.get(selected.path)
+    if (!el) return
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+
   return (
     <aside className="list-pane">
-      <div className="pane-title">
-        {t('projects.title')} <span className="muted">({filtered.length})</span>
+      <div className="pane-title-row">
+        <div className="pane-title">
+          {t('projects.title')} <span className="muted">({filtered.length})</span>
+        </div>
+        <div className="pane-title-actions">
+          <button
+            type="button"
+            className="icon-btn"
+            disabled={!canLocate}
+            title={t('projects.locate')}
+            aria-label={t('projects.locate')}
+            onClick={locateSelected}
+          >
+            ⌖
+          </button>
+        </div>
       </div>
       <div className="scroll project-scroll" ref={scrollRef}>
         {loading && <div className="empty">{t('projects.scanning')}</div>}
@@ -61,32 +100,43 @@ export function ProjectList() {
           </div>
         )}
         {!loading &&
-          filtered.map((p) => (
-            <button
-              key={p.path}
-              type="button"
-              ref={(node) => {
-                if (node) itemRefs.current.set(p.path, node)
-                else itemRefs.current.delete(p.path)
-              }}
-              className={`project-capsule ${selected?.path === p.path ? 'active' : ''}`}
-              onClick={() => {
-                void selectProject(p)
-                if (search.trim()) setSearch('')
-              }}
-              onContextMenu={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                void selectProject(p)
-                setMenu({ path: p.path, x: e.clientX, y: e.clientY })
-              }}
+          groups.map((g) => (
+            <div
+              key={g.key}
+              className="project-group"
+              style={{ ['--project-group-bg' as string]: g.tint }}
             >
-              <span className="project-capsule-name">{p.folderName}</span>
-              <span className="project-capsule-meta muted">
-                {p.pkgName ?? '—'} · v{p.pkgVersion ?? '?'}
-                {p.frameworks.length > 0 ? ` · ${p.frameworks.join(',')}` : ''}
-              </span>
-            </button>
+              <div className="project-group-mark" aria-hidden>
+                {g.key}
+              </div>
+              {g.items.map((p) => (
+                <button
+                  key={p.path}
+                  type="button"
+                  ref={(node) => {
+                    if (node) itemRefs.current.set(p.path, node)
+                    else itemRefs.current.delete(p.path)
+                  }}
+                  className={`project-capsule ${selected?.path === p.path ? 'active' : ''}`}
+                  onClick={() => {
+                    void selectProject(p)
+                    if (search.trim()) setSearch('')
+                  }}
+                  onContextMenu={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    void selectProject(p)
+                    setMenu({ path: p.path, x: e.clientX, y: e.clientY })
+                  }}
+                >
+                  <span className="project-capsule-name">{p.folderName}</span>
+                  <span className="project-capsule-meta muted">
+                    {p.pkgName ?? '—'} · v{p.pkgVersion ?? '?'}
+                    {p.frameworks.length > 0 ? ` · ${p.frameworks.join(',')}` : ''}
+                  </span>
+                </button>
+              ))}
+            </div>
           ))}
         {!loading && !error && filtered.length === 0 && (
           <div className="empty">{t('projects.noMatch')}</div>

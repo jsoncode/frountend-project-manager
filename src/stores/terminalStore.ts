@@ -3,11 +3,7 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { create } from 'zustand'
 import { isTauri } from '../lib/tauri'
 import type { TermSession } from '../lib/types'
-import {
-  clearTerminal,
-  waitPtyReady,
-  writeToTerminal,
-} from '../lib/ptyHost'
+import { waitPtyReady, writeToTerminal } from '../lib/ptyHost'
 import { useSettingsStore } from './settingsStore'
 
 let seq = 1
@@ -25,13 +21,11 @@ type TerminalState = {
   createSession: (projectPath: string, projectName: string) => string
   closeSession: (id: string) => Promise<void>
   setActive: (id: string) => void
-  clearSession: (id: string) => void
   /** Prefer connected active tab for project; otherwise create a new tab. */
   ensureRunTarget: (projectPath: string, projectName: string) => string
   runInSession: (terminalId: string, projectPath: string, command: string) => Promise<void>
   runScript: (projectPath: string, projectName: string, pm: string, script: string) => Promise<void>
   runRaw: (projectPath: string, projectName: string, command: string) => Promise<void>
-  killSession: (id: string) => Promise<void>
   markConnected: (id: string, connected: boolean) => void
   startListening: () => Promise<UnlistenFn>
 }
@@ -50,7 +44,6 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
       projectPath,
       projectName,
       connected: false,
-      running: false,
     }
     set((s) => ({
       sessions: [...s.sessions, session],
@@ -77,15 +70,9 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
 
   setActive: (id) => set({ activeId: id }),
 
-  clearSession: (id) => {
-    clearTerminal(id)
-  },
-
   markConnected: (id, connected) =>
     set((s) => ({
-      sessions: s.sessions.map((t) =>
-        t.id === id ? { ...t, connected, running: connected } : t,
-      ),
+      sessions: s.sessions.map((t) => (t.id === id ? { ...t, connected } : t)),
     })),
 
   ensureRunTarget: (projectPath, projectName) => {
@@ -126,14 +113,6 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
   runRaw: async (projectPath, projectName, command) => {
     const id = get().ensureRunTarget(projectPath, projectName)
     await get().runInSession(id, projectPath, command)
-  },
-
-  killSession: async (id) => {
-    try {
-      await invoke('pty_interrupt', { terminalId: id })
-    } catch (e) {
-      writeToTerminal(id, `\r\n\x1b[31minterrupt error: ${String(e)}\x1b[0m\r\n`)
-    }
   },
 
   startListening: async () => {

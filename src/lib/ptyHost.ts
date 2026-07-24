@@ -78,10 +78,6 @@ export function writeToTerminal(id: string, data: string) {
   entries.get(id)?.term.write(data)
 }
 
-export function clearTerminal(id: string) {
-  entries.get(id)?.term.clear()
-}
-
 export function focusTerminal(id: string) {
   entries.get(id)?.term.focus()
 }

@@ -37,6 +37,7 @@ const zh = {
   'projects.title': '项目',
   'projects.scanning': '扫描中…',
   'projects.noMatch': '没有匹配的项目。',
+  'projects.locate': '定位到当前选中项目',
 
   'header.noGit': '非 Git',
 
@@ -55,10 +56,6 @@ const zh = {
   'history.usedTimes': '使用 {count} 次',
 
   'term.new': '新建终端',
-  'term.clear': '清空',
-  'term.stop': '中断 (Ctrl+C)',
-  'term.running': '运行中…',
-  'term.idle': '空闲',
   'term.connected': '已连接',
   'term.disconnected': '已断开',
   'term.emptySelected': '点击 + 新建终端，或执行命令自动打开',
@@ -210,6 +207,7 @@ const en: Record<MessageKey, string> = {
   'projects.title': 'PROJECTS',
   'projects.scanning': 'scanning…',
   'projects.noMatch': 'No projects match.',
+  'projects.locate': 'Scroll selected project into view',
 
   'header.noGit': 'no git',
 
@@ -228,10 +226,6 @@ const en: Record<MessageKey, string> = {
   'history.usedTimes': 'used {count} times',
 
   'term.new': 'New terminal',
-  'term.clear': 'clear',
-  'term.stop': 'interrupt (Ctrl+C)',
-  'term.running': 'running…',
-  'term.idle': 'idle',
   'term.connected': 'connected',
   'term.disconnected': 'disconnected',
   'term.emptySelected': 'Click + to create a terminal, or run a command',
