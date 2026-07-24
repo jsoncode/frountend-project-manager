@@ -203,6 +203,22 @@ const zh = {
   'ai.type.audio': '音频',
   'ai.type.video': '视频',
   'ai.type.multimodal': '多模态',
+  'ai.stop': '停止',
+  'ai.rename': '重命名',
+  'ai.delete': '删除',
+  'ai.deleteTitle': '删除对话',
+  'ai.deleteConfirm': '确定删除对话「{title}」吗？此操作不可恢复。',
+  'ai.composerPlaceholder': '输入消息，Enter 发送，Shift+Enter 换行',
+  'ai.attachment': '终端选区',
+  'ai.removeAttachment': '移除附件',
+  'ai.reasoning': '思考过程',
+  'ai.roleUser': '你',
+  'ai.roleAssistant': '助手',
+  'ai.messagesEmpty': '开始新的对话，或从左侧选择历史',
+  'ai.generating': '正在生成…',
+  'ai.error.noModel': '请先在设置中配置并启用模型',
+  'ai.error.unsupportedModel': '当前模型类型暂不支持对话（需文本或多模态）',
+  'ai.error.tauriOnly': '请在桌面应用中使用 AI 对话',
 } as const
 
 const en: Record<MessageKey, string> = {
@@ -406,6 +422,23 @@ const en: Record<MessageKey, string> = {
   'ai.type.audio': 'Audio',
   'ai.type.video': 'Video',
   'ai.type.multimodal': 'Multimodal',
+  'ai.stop': 'Stop',
+  'ai.rename': 'Rename',
+  'ai.delete': 'Delete',
+  'ai.deleteTitle': 'Delete conversation',
+  'ai.deleteConfirm': 'Delete conversation “{title}”? This cannot be undone.',
+  'ai.composerPlaceholder': 'Message… Enter to send, Shift+Enter for newline',
+  'ai.attachment': 'Terminal selection',
+  'ai.removeAttachment': 'Remove attachment',
+  'ai.reasoning': 'Reasoning',
+  'ai.roleUser': 'You',
+  'ai.roleAssistant': 'Assistant',
+  'ai.messagesEmpty': 'Start a new chat, or pick one from the sidebar',
+  'ai.generating': 'Generating…',
+  'ai.error.noModel': 'Configure and enable a model in settings first',
+  'ai.error.unsupportedModel':
+    'This model type is not supported for chat (need text or multimodal)',
+  'ai.error.tauriOnly': 'Use AI chat inside the desktop app',
 }
 
 const catalogs: Record<Locale, Record<MessageKey, string>> = {
