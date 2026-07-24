@@ -462,6 +462,11 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
+                // AI chat window should destroy on close and cancel in-flight streams.
+                if window.label() == "ai-chat" {
+                    ai::cancel_all();
+                    return;
+                }
                 if !ALLOW_EXIT.load(Ordering::SeqCst) {
                     api.prevent_close();
                     let _ = window.hide();

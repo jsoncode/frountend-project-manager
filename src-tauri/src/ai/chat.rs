@@ -119,6 +119,15 @@ pub fn cancel_chat(request_id: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Cancel every in-flight chat request (e.g. when the AI window closes).
+pub fn cancel_all() {
+    let mut map = CANCEL_FLAGS.lock();
+    for flag in map.values() {
+        flag.store(true, Ordering::SeqCst);
+    }
+    map.clear();
+}
+
 fn build_messages_json(messages: &[ChatMessageDto]) -> Vec<Value> {
     messages
         .iter()

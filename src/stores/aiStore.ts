@@ -467,19 +467,20 @@ export const useAiStore = create<AiState>((set, get) => ({
         })
       }
 
-      if (chunk.delta || chunk.reasoningDelta) {
-        const delta = chunk.delta ?? ''
-        const reasoningDelta = chunk.reasoningDelta ?? ''
+      const thinkEnabled = get().thinkEnabled
+      const delta = chunk.delta ?? ''
+      const reasoningDelta =
+        thinkEnabled && chunk.reasoningDelta ? chunk.reasoningDelta : ''
+      if (delta || reasoningDelta) {
         set((s) => ({
           messages: s.messages.map((m) => {
             if (m.id !== streamingAssistantId) return m
             return {
               ...m,
               content: delta ? m.content + delta : m.content,
-              reasoning:
-                reasoningDelta
-                  ? `${m.reasoning ?? ''}${reasoningDelta}`
-                  : m.reasoning,
+              reasoning: reasoningDelta
+                ? `${m.reasoning ?? ''}${reasoningDelta}`
+                : m.reasoning,
             }
           }),
         }))
