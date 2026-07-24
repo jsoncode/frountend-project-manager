@@ -1120,6 +1120,11 @@ body.resizing-row * {
   cursor: not-allowed;
 }
 
+.branch-menu button:disabled:hover {
+  background: transparent;
+  color: var(--text-bright);
+}
+
 .branch-menu-sep {
   height: 1px;
   margin: 4px 8px;

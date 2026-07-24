@@ -368,6 +368,10 @@
   color: #f87171;
 }
 
+.ai-btn-danger:not(:disabled):hover {
+  background: rgba(248, 113, 113, 0.12);
+}
+
 .ai-settings-modal .ai-model-list {
   display: flex;
   flex-direction: column;
