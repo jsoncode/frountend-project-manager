@@ -291,6 +291,21 @@ async fn write_text_file(path: String, content: String) -> Result<(), String> {
         .map_err(|e| e.to_string())?
 }
 
+#[tauri::command(async)]
+async fn resolve_import(
+    project_root: String,
+    from_file: String,
+    specifier: String,
+    aliases: Vec<fs_explorer::AliasMapping>,
+) -> Option<String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        fs_explorer::resolve_import(&project_root, &from_file, &specifier, &aliases)
+    })
+    .await
+    .ok()
+    .flatten()
+}
+
 #[tauri::command]
 fn run_command(
     app: AppHandle,
@@ -656,6 +671,7 @@ pub fn run() {
             create_directory,
             read_text_file,
             write_text_file,
+            resolve_import,
             run_command,
             kill_command,
             write_terminal_stdin,

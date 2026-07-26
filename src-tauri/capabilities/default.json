@@ -32,6 +32,7 @@
     "allow-create-directory",
     "allow-read-text-file",
     "allow-write-text-file",
+    "allow-resolve-import",
     "allow-run-command",
     "allow-kill-command",
     "allow-write-terminal-stdin",

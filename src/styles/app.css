@@ -905,38 +905,63 @@ body.resizing-row * {
 
 .detail-header {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 8px;
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
   min-height: 32px;
   border-bottom: 1px solid var(--border-dim);
   background: rgba(255, 255, 255, 0.02);
   flex-shrink: 0;
+  overflow: hidden;
+}
+
+.editor-tab-list {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  min-width: 0;
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .editor-tab {
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  max-width: 100%;
-  min-width: 0;
-  height: 28px;
+  max-width: 180px;
+  min-width: 72px;
+  height: 32px;
   padding: 0 4px 0 10px;
   border-radius: 0;
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--border-dim);
+  color: var(--text);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.editor-tab:hover {
   background: rgba(255, 255, 255, 0.04);
-  border: 1px solid transparent;
-  border-bottom-color: transparent;
   color: var(--text-bright);
 }
 
+.editor-tab.active {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-bright);
+  box-shadow: inset 0 -1px 0 var(--accent);
+}
+
 .editor-tab-label {
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
   line-height: 1;
+  flex: 1;
 }
 
 .editor-tab-close {
@@ -953,12 +978,13 @@ body.resizing-row * {
   background: transparent;
   color: var(--text-dim);
   cursor: pointer;
-  opacity: 0.75;
+  opacity: 0.55;
   transition: background 0.12s var(--ease), color 0.12s var(--ease),
     opacity 0.12s var(--ease);
 }
 
 .editor-tab:hover .editor-tab-close,
+.editor-tab.active .editor-tab-close,
 .editor-tab-close:focus-visible {
   opacity: 1;
 }

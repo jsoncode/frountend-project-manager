@@ -129,6 +129,11 @@ description = "Write a UTF-8 text file from the in-app editor"
 commands.allow = ["write_text_file"]
 
 [[permission]]
+identifier = "allow-resolve-import"
+description = "Resolve an import specifier to a local file path"
+commands.allow = ["resolve_import"]
+
+[[permission]]
 identifier = "allow-reveal-in-file-manager"
 description = "Reveal path in system file manager"
 commands.allow = ["reveal_in_file_manager"]

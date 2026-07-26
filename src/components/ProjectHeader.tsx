@@ -1,60 +1,109 @@
 import { X } from 'reicon-react'
+import { useEffect } from 'react'
 import { useI18n } from '../i18n/useI18n'
-import { normalizeFsPath } from '../lib/gitDecorations'
-import { findWorkspaceForPath } from '../lib/workspacePath'
-import { useEditorStore } from '../stores/editorStore'
+import {
+  closeActiveEditorFile,
+  closeEditorTab,
+  isCloseEditorHotkey,
+} from '../lib/closeEditorFile'
+import { editorPathKey, useEditorStore } from '../stores/editorStore'
 import { useExplorerStore } from '../stores/explorerStore'
-import { useSettingsStore } from '../stores/settingsStore'
 
-/** Tab-style title above the editor — filename, dirty `*`, and close (VS Code–like). */
+/** Multi-tab title bar above the editor (VS Code–like). */
 export function ProjectHeader() {
-  const selection = useExplorerStore((s) => s.selection)
+  const tabs = useEditorStore((s) => s.tabs)
+  const activePath = useEditorStore((s) => s.activePath)
+  const docs = useEditorStore((s) => s.docs)
+  const activateTab = useEditorStore((s) => s.activateTab)
   const setSelection = useExplorerStore((s) => s.setSelection)
-  const dirtyPath = useEditorStore((s) => s.dirtyPath)
-  const setDirtyPath = useEditorStore((s) => s.setDirtyPath)
-  const workspaces = useSettingsStore((s) => s.config?.workspaces ?? [])
   const { t } = useI18n()
 
-  if (selection?.kind !== 'file') return null
+  const hasTabs = tabs.length > 0
 
-  const name = selection.path.split(/[/\\]/).pop() ?? selection.path
-  const dirty =
-    dirtyPath != null &&
-    normalizeFsPath(dirtyPath) === normalizeFsPath(selection.path)
-
-  const closeFile = () => {
-    if (dirty) {
-      const ok = window.confirm(t('editor.closeUnsavedConfirm'))
-      if (!ok) return
+  useEffect(() => {
+    if (!hasTabs) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!isCloseEditorHotkey(e)) return
+      const target = e.target
+      if (
+        target instanceof HTMLElement &&
+        target.closest('.monaco-host, .monaco-editor')
+      ) {
+        return
+      }
+      e.preventDefault()
+      e.stopPropagation()
+      closeActiveEditorFile(() =>
+        window.confirm(t('editor.closeUnsavedConfirm')),
+      )
     }
-    setDirtyPath(null)
-    const workspace =
-      findWorkspaceForPath(selection.projectPath, workspaces) || ''
-    setSelection({
-      kind: 'project',
-      path: selection.projectPath,
-      workspace,
-    })
-  }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [hasTabs, t])
+
+  if (!hasTabs) return null
+
+  const activeKey = activePath ? editorPathKey(activePath) : null
+  const closeTitle = `${t('editor.close')} (Ctrl+W)`
 
   return (
     <div className="detail-header">
-      <div className="editor-tab" title={selection.path}>
-        <span className="editor-tab-label">
-          {dirty ? `${name} *` : name}
-        </span>
-        <button
-          type="button"
-          className="editor-tab-close"
-          title={t('editor.close')}
-          aria-label={t('editor.close')}
-          onClick={(e) => {
-            e.stopPropagation()
-            closeFile()
-          }}
-        >
-          <X size={12} color="currentColor" aria-hidden />
-        </button>
+      <div className="editor-tab-list" role="tablist">
+        {tabs.map((tab) => {
+          const key = editorPathKey(tab.path)
+          const name = tab.path.split(/[/\\]/).pop() ?? tab.path
+          const doc = docs[key]
+          const dirty =
+            doc?.status === 'ready' && doc.value !== doc.baseline
+          const active = activeKey === key
+          return (
+            <div
+              key={key}
+              role="tab"
+              aria-selected={active}
+              className={`editor-tab${active ? ' active' : ''}`}
+              title={tab.path}
+              onClick={() => {
+                activateTab(tab.path)
+                setSelection({
+                  kind: 'file',
+                  path: tab.path,
+                  projectPath: tab.projectPath,
+                })
+              }}
+              onMouseDown={(e) => {
+                // Prevent middle-click autoscroll before auxclick closes the tab.
+                if (e.button === 1) e.preventDefault()
+              }}
+              onAuxClick={(e) => {
+                if (e.button !== 1) return
+                e.preventDefault()
+                e.stopPropagation()
+                closeEditorTab(tab.path, () =>
+                  window.confirm(t('editor.closeUnsavedConfirm')),
+                )
+              }}
+            >
+              <span className="editor-tab-label">
+                {dirty ? `${name} *` : name}
+              </span>
+              <button
+                type="button"
+                className="editor-tab-close"
+                title={closeTitle}
+                aria-label={closeTitle}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  closeEditorTab(tab.path, () =>
+                    window.confirm(t('editor.closeUnsavedConfirm')),
+                  )
+                }}
+              >
+                <X size={12} color="currentColor" aria-hidden />
+              </button>
+            </div>
+          )
+        })}
       </div>
     </div>
   )

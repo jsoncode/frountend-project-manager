@@ -1,133 +1,138 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useI18n } from '../i18n/useI18n'
 import { readTextFile, writeTextFile } from '../lib/editorFs'
-import { useEditorStore } from '../stores/editorStore'
+import {
+  editorPathKey,
+  useEditorStore,
+} from '../stores/editorStore'
 import { useExplorerStore } from '../stores/explorerStore'
 import { useProjectStore } from '../stores/projectStore'
 import { MonacoEditor } from './MonacoEditor'
-
-type LoadState =
-  | { status: 'idle' }
-  | { status: 'loading'; path: string }
-  | {
-      status: 'ready'
-      path: string
-      projectPath: string
-      baseline: string
-      value: string
-    }
-  | { status: 'error'; path: string; message: string }
 
 export function EditorShell() {
   const selection = useExplorerStore((s) => s.selection)
   const setSelection = useExplorerStore((s) => s.setSelection)
   const selectedProject = useProjectStore((s) => s.selected)
   const refreshGitStatus = useProjectStore((s) => s.refreshGitStatus)
-  const setDirtyPath = useEditorStore((s) => s.setDirtyPath)
+
+  const tabs = useEditorStore((s) => s.tabs)
+  const activePath = useEditorStore((s) => s.activePath)
+  const docs = useEditorStore((s) => s.docs)
+  const openTab = useEditorStore((s) => s.openTab)
+  const setDocLoading = useEditorStore((s) => s.setDocLoading)
+  const setDocReady = useEditorStore((s) => s.setDocReady)
+  const setDocError = useEditorStore((s) => s.setDocError)
+  const setDocValue = useEditorStore((s) => s.setDocValue)
+  const markDocSaved = useEditorStore((s) => s.markDocSaved)
+  const getDoc = useEditorStore((s) => s.getDoc)
+
   const { t } = useI18n()
-  const [load, setLoad] = useState<LoadState>({ status: 'idle' })
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
-  const dirtyRef = useRef(false)
-  const loadRef = useRef(load)
-  loadRef.current = load
+  const loadingRef = useRef(new Set<string>())
 
-  const filePath = selection?.kind === 'file' ? selection.path : null
-  const projectPath =
-    selection?.kind === 'file' ? selection.projectPath : ''
+  const activeTab =
+    activePath == null
+      ? null
+      : tabs.find((t) => editorPathKey(t.path) === editorPathKey(activePath)) ??
+        null
+  const activeDoc = activePath ? docs[editorPathKey(activePath)] : undefined
 
-  const dirty =
-    load.status === 'ready' && load.value !== load.baseline
-  dirtyRef.current = dirty
-
-  // Use explorer selection path so the header asterisk always matches.
+  // Explorer / selection → open (or focus) a tab without closing others.
   useEffect(() => {
-    if (filePath && load.status === 'ready' && dirty) {
-      setDirtyPath(filePath)
-    } else {
-      setDirtyPath(null)
+    if (selection?.kind !== 'file') return
+    openTab(selection.path, selection.projectPath)
+  }, [selection, openTab])
+
+  // Load document content when a tab becomes active and has no ready/error doc.
+  useEffect(() => {
+    if (!activeTab) return
+    const key = editorPathKey(activeTab.path)
+    const existing = getDoc(activeTab.path)
+    if (existing && (existing.status === 'ready' || existing.status === 'error')) {
+      return
     }
-  }, [filePath, load, dirty, setDirtyPath])
-
-  useEffect(() => {
-    return () => setDirtyPath(null)
-  }, [setDirtyPath])
-
-  const openFile = useCallback(async (path: string, projPath: string) => {
+    if (loadingRef.current.has(key)) return
+    loadingRef.current.add(key)
+    setDocLoading(activeTab.path)
     setSaveError(null)
-    setLoad({ status: 'loading', path })
-    try {
-      const result = await readTextFile(path)
-      // Monaco uses LF; normalize so dirty checks / cursor stay consistent.
-      const content = result.content.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
-      setLoad({
-        status: 'ready',
-        path,
-        projectPath: projPath,
-        baseline: content,
-        value: content,
+
+    let cancelled = false
+    void readTextFile(activeTab.path)
+      .then((result) => {
+        if (cancelled) return
+        const content = result.content
+          .replace(/\r\n/g, '\n')
+          .replace(/\r/g, '\n')
+        setDocReady(activeTab.path, content)
       })
-    } catch (e) {
-      setLoad({
-        status: 'error',
-        path,
-        message: e instanceof Error ? e.message : String(e),
+      .catch((e) => {
+        if (cancelled) return
+        setDocError(
+          activeTab.path,
+          e instanceof Error ? e.message : String(e),
+        )
       })
-    }
-  }, [])
+      .finally(() => {
+        loadingRef.current.delete(key)
+      })
 
-  useEffect(() => {
-    if (!filePath) {
-      setLoad({ status: 'idle' })
-      setSaveError(null)
-      return
+    return () => {
+      cancelled = true
     }
-
-    const current = loadRef.current
-    if (
-      (current.status === 'ready' || current.status === 'loading') &&
-      current.path === filePath
-    ) {
-      return
-    }
-
-    if (dirtyRef.current && current.status === 'ready') {
-      const ok = window.confirm(t('editor.unsavedConfirm'))
-      if (!ok) {
-        setSelection({
-          kind: 'file',
-          path: current.path,
-          projectPath: current.projectPath,
-        })
-        return
-      }
-    }
-
-    void openFile(filePath, projectPath)
-  }, [filePath, projectPath, openFile, setSelection, t])
+  }, [activeTab, getDoc, setDocLoading, setDocReady, setDocError])
 
   const save = useCallback(async () => {
-    if (load.status !== 'ready' || saving) return
+    if (!activeTab || !activeDoc || activeDoc.status !== 'ready' || saving) {
+      return
+    }
     setSaving(true)
     setSaveError(null)
     try {
-      await writeTextFile(load.path, load.value)
-      setLoad({
-        status: 'ready',
-        path: load.path,
-        projectPath: load.projectPath,
-        baseline: load.value,
-        value: load.value,
-      })
+      await writeTextFile(activeTab.path, activeDoc.value)
+      markDocSaved(activeTab.path)
       void refreshGitStatus()
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : String(e))
     } finally {
       setSaving(false)
     }
-  }, [load, saving, refreshGitStatus])
+  }, [activeTab, activeDoc, saving, markDocSaved, refreshGitStatus])
 
-  if (!filePath) {
+  const openImportTarget = useCallback(
+    (absPath: string) => {
+      if (!activeTab) return
+      // Open in a new tab (or focus existing) — never close the current one.
+      openTab(absPath, activeTab.projectPath)
+      setSelection({
+        kind: 'file',
+        path: absPath,
+        projectPath: activeTab.projectPath,
+      })
+    },
+    [activeTab, openTab, setSelection],
+  )
+
+  const retryLoad = useCallback(() => {
+    if (!activeTab) return
+    loadingRef.current.delete(editorPathKey(activeTab.path))
+    setDocLoading(activeTab.path)
+    void readTextFile(activeTab.path)
+      .then((result) => {
+        const content = result.content
+          .replace(/\r\n/g, '\n')
+          .replace(/\r/g, '\n')
+        setDocReady(activeTab.path, content)
+      })
+      .catch((e) => {
+        setDocError(
+          activeTab.path,
+          e instanceof Error ? e.message : String(e),
+        )
+      })
+  }, [activeTab, setDocLoading, setDocReady, setDocError])
+
+  if (!activeTab) {
     let hint = t('editor.shellEmpty')
     if (selection?.kind === 'dir') {
       const name = selection.path.split(/[/\\]/).pop() ?? selection.path
@@ -144,7 +149,7 @@ export function EditorShell() {
     )
   }
 
-  if (load.status === 'loading' || load.status === 'idle') {
+  if (!activeDoc || activeDoc.status === 'loading') {
     return (
       <div className="editor-shell">
         <div className="editor-shell-body">
@@ -156,20 +161,20 @@ export function EditorShell() {
     )
   }
 
-  if (load.status === 'error') {
+  if (activeDoc.status === 'error') {
     return (
       <div className="editor-shell">
         <div className="editor-shell-body">
           <div className="editor-shell-placeholder">
             <div className="editor-error">{t('editor.openFailed')}</div>
             <div className="muted" style={{ marginTop: 8 }}>
-              {load.message}
+              {activeDoc.error}
             </div>
             <button
               type="button"
               className="btn btn-sm"
               style={{ marginTop: 12 }}
-              onClick={() => void openFile(filePath, projectPath)}
+              onClick={retryLoad}
             >
               {t('editor.retry')}
             </button>
@@ -186,14 +191,12 @@ export function EditorShell() {
       ) : null}
       <div className="editor-monaco-wrap">
         <MonacoEditor
-          path={load.path}
-          value={load.value}
-          onChange={(value) =>
-            setLoad((prev) =>
-              prev.status === 'ready' ? { ...prev, value } : prev,
-            )
-          }
+          path={activeTab.path}
+          projectPath={activeTab.projectPath}
+          value={activeDoc.value}
+          onChange={(value) => setDocValue(activeTab.path, value)}
           onSave={() => void save()}
+          onOpenFile={openImportTarget}
         />
       </div>
     </div>
