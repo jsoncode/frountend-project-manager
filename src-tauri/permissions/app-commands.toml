@@ -229,6 +229,16 @@ description = "Append AI conversation message"
 commands.allow = ["ai_append_message"]
 
 [[permission]]
+identifier = "allow-ai-update-message"
+description = "Update AI conversation message content"
+commands.allow = ["ai_update_message"]
+
+[[permission]]
+identifier = "allow-ai-delete-message"
+description = "Delete AI conversation message"
+commands.allow = ["ai_delete_message"]
+
+[[permission]]
 identifier = "allow-ai-open-chat-window"
 description = "Open or focus the AI chat window"
 commands.allow = ["ai_open_chat_window"]
@@ -247,3 +257,33 @@ commands.allow = ["ai_chat_start"]
 identifier = "allow-ai-chat-cancel"
 description = "Cancel a running AI chat request"
 commands.allow = ["ai_chat_cancel"]
+
+[[permission]]
+identifier = "allow-ai-generate-title"
+description = "Generate a short conversation title via AI"
+commands.allow = ["ai_generate_title"]
+
+[[permission]]
+identifier = "allow-load-layout"
+description = "Load UI layout from SQLite"
+commands.allow = ["load_layout"]
+
+[[permission]]
+identifier = "allow-save-layout"
+description = "Save UI layout to SQLite"
+commands.allow = ["save_layout"]
+
+[[permission]]
+identifier = "allow-load-project-cache"
+description = "Load project scan cache from SQLite"
+commands.allow = ["load_project_cache"]
+
+[[permission]]
+identifier = "allow-save-project-cache"
+description = "Save project scan cache to SQLite"
+commands.allow = ["save_project_cache"]
+
+[[permission]]
+identifier = "allow-drop-project-cache"
+description = "Drop project scan cache entry from SQLite"
+commands.allow = ["drop_project_cache"]

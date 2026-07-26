@@ -1,6 +1,17 @@
+import {
+  BranchDown,
+  ChevronRight,
+  FolderOpen,
+  InfoCircle,
+  Key,
+  Layers,
+  Settings,
+  TerminalSquare,
+} from 'reicon-react'
 import { invoke } from '@tauri-apps/api/core'
-import { useState, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { useI18n } from '../i18n/useI18n'
+import { showErrorLog } from '../stores/errorLogStore'
 import {
   TOOL_ORDER,
   useLayoutStore,
@@ -24,6 +35,13 @@ const TOOL_LABEL: Record<
   meta: 'tool.meta',
 }
 
+const TOOL_ICON: Partial<Record<SideTool, typeof TerminalSquare>> = {
+  cmd: TerminalSquare,
+  git: BranchDown,
+  env: Key,
+  meta: InfoCircle,
+}
+
 export function ToolWindow() {
   const selected = useProjectStore((s) => s.selected)
   const details = useProjectStore((s) => s.details)
@@ -42,7 +60,6 @@ export function ToolWindow() {
   const closeSideTool = useLayoutStore((s) => s.closeSideTool)
   const setToolLayoutMode = useLayoutStore((s) => s.setToolLayoutMode)
   const persist = useLayoutStore((s) => s.persist)
-  const [ideError, setIdeError] = useState<string | null>(null)
   const { t } = useI18n()
 
   const ides = (config?.ides ?? []).filter((i) => i.enabled)
@@ -50,21 +67,19 @@ export function ToolWindow() {
 
   const openIde = async (ideId: string) => {
     if (!selected) return
-    setIdeError(null)
     try {
       await invoke('open_in_ide', { ideId, projectPath: selected.path })
     } catch (e) {
-      setIdeError(String(e))
+      showErrorLog(e)
     }
   }
 
   const revealSelected = async () => {
     if (!selected) return
-    setIdeError(null)
     try {
       await invoke('reveal_in_file_manager', { path: selected.path })
     } catch (e) {
-      setIdeError(String(e))
+      showErrorLog(e)
     }
   }
 
@@ -186,7 +201,7 @@ export function ToolWindow() {
               onClick={() => void revealSelected()}
             >
               <span className="ide-open-folder" aria-hidden>
-                ⌂
+                <FolderOpen size={18} color="currentColor" />
               </span>
               <span className="ide-open-name">{t('open.inFileManager')}</span>
             </button>
@@ -211,17 +226,13 @@ export function ToolWindow() {
               <div className="muted">{t('top.noIde')}</div>
             )}
           </div>
-          {ideError && (
-            <div className="status-banner dirty" style={{ marginTop: 10 }}>
-              {ideError}
-            </div>
-          )}
           <button
             type="button"
-            className="btn btn-sm"
+            className="btn btn-sm btn-with-icon"
             style={{ marginTop: 12 }}
             onClick={() => setIdeModalOpen(true)}
           >
+            <Settings className="ui-icon" size={14} color="currentColor" aria-hidden />
             {t('settings.openIde')}
           </button>
         </>
@@ -262,7 +273,7 @@ export function ToolWindow() {
                       persist()
                     }}
                   >
-                    ›
+                    <ChevronRight className="ui-icon" size={16} color="currentColor" aria-hidden />
                   </button>
                 </div>
                 <div className="tool-panel-body">{renderBody(id)}</div>
@@ -286,23 +297,33 @@ export function ToolWindow() {
             persist()
           }}
         >
-          {toolLayoutMode === 'stack' ? t('tool.modeStack') : t('tool.modeSingle')}
+          <Layers className="ui-icon" size={16} color="currentColor" aria-hidden />
         </button>
-        {TOOL_ORDER.map((id) => (
-          <button
-            key={id}
-            type="button"
-            className={`tool-strip-btn ${openTools.includes(id) ? 'active' : ''}`}
-            title={t(TOOL_LABEL[id])}
-            aria-pressed={openTools.includes(id)}
-            onClick={() => {
-              toggleSideTool(id)
-              persist()
-            }}
-          >
-            <span className="tool-strip-label">{t(TOOL_LABEL[id])}</span>
-          </button>
-        ))}
+        {TOOL_ORDER.map((id) => {
+          const Icon = TOOL_ICON[id]
+          return (
+            <button
+              key={id}
+              type="button"
+              className={`tool-strip-btn ${openTools.includes(id) ? 'active' : ''}`}
+              title={t(TOOL_LABEL[id])}
+              aria-label={t(TOOL_LABEL[id])}
+              aria-pressed={openTools.includes(id)}
+              onClick={() => {
+                toggleSideTool(id)
+                persist()
+              }}
+            >
+              {id === 'ide' ? (
+                <span className="tool-strip-label">IDE</span>
+              ) : Icon ? (
+                <span className="tool-strip-icon">
+                  <Icon size={18} color="currentColor" aria-hidden />
+                </span>
+              ) : null}
+            </button>
+          )
+        })}
       </nav>
     </div>
   )

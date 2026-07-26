@@ -1,7 +1,18 @@
+import {
+  Add,
+  CodeScan,
+  Document,
+  FolderOpen,
+  Refresh,
+  Trash,
+  Upload,
+  X,
+} from 'reicon-react'
 import { invoke } from '@tauri-apps/api/core'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useI18n } from '../i18n/useI18n'
 import type { IdeConfig, InstalledEditor } from '../lib/types'
+import { showErrorLog } from '../stores/errorLogStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { IdeIcon } from './IdeIcon'
 import { ModalShell } from './ModalShell'
@@ -29,6 +40,7 @@ export function IdeSettingsModal() {
   const [pickerOpen, setPickerOpen] = useState(false)
   const [editors, setEditors] = useState<InstalledEditor[]>([])
   const [pickerLoading, setPickerLoading] = useState(false)
+  const [scanning, setScanning] = useState(false)
   const [pickerQuery, setPickerQuery] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
   const [uploadTarget, setUploadTarget] = useState<string | null>(null)
@@ -84,6 +96,40 @@ export function IdeSettingsModal() {
       return await invoke<string>('extract_ide_icon_from_exe', { executable: exe })
     } catch {
       return null
+    }
+  }
+
+  const scanAndAddInstalled = async () => {
+    if (scanning) return
+    setScanning(true)
+    try {
+      const found = await invoke<InstalledEditor[]>('list_installed_editors')
+      const available = found.filter((e) => e.available)
+      const next = [...ides]
+      const known = new Set(
+        next.map((i) => i.executable.trim().toLowerCase()),
+      )
+      for (const ed of available) {
+        const key = ed.executable.trim().toLowerCase()
+        if (known.has(key)) continue
+        known.add(key)
+        const iconPath = await extractIcon(ed.executable)
+        next.push(
+          newIde({
+            name: ed.name,
+            executable: ed.executable,
+            argsTemplate: '{path}',
+            enabled: true,
+            builtin: false,
+            iconPath,
+          }),
+        )
+      }
+      setDraft(next)
+    } catch (e) {
+      showErrorLog(e)
+    } finally {
+      setScanning(false)
     }
   }
 
@@ -188,37 +234,41 @@ export function IdeSettingsModal() {
                   <div className="ide-icon-actions">
                     <button
                       type="button"
-                      className="btn btn-sm"
+                      className="btn btn-sm btn-with-icon"
                       onClick={() => void browseIcon(ide.id)}
                     >
+                      <FolderOpen className="ui-icon" size={12} color="currentColor" aria-hidden />
                       {t('ide.iconBrowse')}
                     </button>
                     <button
                       type="button"
-                      className="btn btn-sm"
+                      className="btn btn-sm btn-with-icon"
                       onClick={() => {
                         setUploadTarget(ide.id)
                         fileRef.current?.click()
                       }}
                     >
+                      <Upload className="ui-icon" size={12} color="currentColor" aria-hidden />
                       {t('ide.iconUpload')}
                     </button>
                   {ide.iconPath && (
                     <button
                       type="button"
-                      className="btn btn-sm"
+                      className="btn btn-sm btn-with-icon"
                       onClick={() => update(ide.id, { iconPath: null })}
                     >
+                      <X className="ui-icon" size={12} color="currentColor" aria-hidden />
                       {t('ide.iconClear')}
                     </button>
                   )}
                   <button
                     type="button"
-                    className="btn btn-sm"
+                    className="btn btn-sm btn-with-icon"
                     title={t('ide.iconFromExeHint')}
                     disabled={!ide.executable.trim()}
                     onClick={() => void extractIconForIde(ide.id, ide.executable)}
                   >
+                    <CodeScan className="ui-icon" size={12} color="currentColor" aria-hidden />
                     {t('ide.iconFromExe')}
                   </button>
                 </div>
@@ -243,9 +293,10 @@ export function IdeSettingsModal() {
                   </label>
                   <button
                     type="button"
-                    className="btn btn-sm danger"
+                    className="btn btn-sm danger btn-with-icon"
                     onClick={() => setPendingDelete(ide)}
                   >
+                    <Trash className="ui-icon" size={12} color="currentColor" aria-hidden />
                     {t('ide.del')}
                   </button>
                 </div>
@@ -283,10 +334,12 @@ export function IdeSettingsModal() {
                   />
                   <button
                     type="button"
-                    className="btn btn-sm"
+                    className="btn btn-sm btn-with-icon"
+                    title={t('ide.iconBrowse')}
+                    aria-label={t('ide.iconBrowse')}
                     onClick={() => void browseExe(ide.id)}
                   >
-                    …
+                    <FolderOpen className="ui-icon" size={14} color="currentColor" aria-hidden />
                   </button>
                 </div>
               </label>
@@ -305,48 +358,40 @@ export function IdeSettingsModal() {
         <div className="modal-actions">
           <button
             type="button"
-            className="btn"
+            className="btn btn-with-icon"
+            disabled={scanning}
             onClick={() => {
               setPickerQuery('')
               setPickerOpen(true)
             }}
           >
+            <Add className="ui-icon" size={14} color="currentColor" aria-hidden />
             {t('ide.add')}
           </button>
           <button
             type="button"
-            className="btn"
-            onClick={async () => {
-              const found = await invoke<InstalledEditor[]>('list_installed_editors')
-              const available = found.filter((e) => e.available)
-              const next = [...ides]
-              for (const ed of available) {
-                if (alreadyAdded(ed.executable)) continue
-                const iconPath = await extractIcon(ed.executable)
-                next.push(
-                  newIde({
-                    name: ed.name,
-                    executable: ed.executable,
-                    argsTemplate: '{path}',
-                    enabled: true,
-                    builtin: false,
-                    iconPath,
-                  }),
-                )
-              }
-              setDraft(next)
-            }}
+            className="btn btn-with-icon"
+            disabled={scanning}
+            onClick={() => void scanAndAddInstalled()}
           >
-            {t('ide.redetect')}
+            <Refresh
+              className={`ui-icon${scanning ? ' is-spinning' : ''}`}
+              size={14}
+              color="currentColor"
+              aria-hidden
+            />
+            {scanning ? t('ide.scanning') : t('ide.redetect')}
           </button>
-          <button type="button" className="btn" onClick={close}>
+          <button type="button" className="btn" onClick={close} disabled={scanning}>
             {t('ide.cancel')}
           </button>
           <button
             type="button"
-            className="btn primary"
+            className="btn primary btn-with-icon"
+            disabled={scanning}
             onClick={() => void save()}
           >
+            <Document className="ui-icon" size={14} color="currentColor" aria-hidden />
             {t('ide.save')}
           </button>
         </div>
@@ -478,10 +523,12 @@ function IdePickerModal({
           })}
       </div>
       <div className="modal-actions">
-        <button type="button" className="btn" onClick={onManual}>
+        <button type="button" className="btn btn-with-icon" onClick={onManual}>
+          <FolderOpen className="ui-icon" size={14} color="currentColor" aria-hidden />
           {t('ide.pickManual')}
         </button>
-        <button type="button" className="btn" onClick={onBlank}>
+        <button type="button" className="btn btn-with-icon" onClick={onBlank}>
+          <Add className="ui-icon" size={14} color="currentColor" aria-hidden />
           {t('ide.pickBlank')}
         </button>
         <button type="button" className="btn" onClick={onClose}>

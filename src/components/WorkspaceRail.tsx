@@ -1,3 +1,4 @@
+import { Add, Folder2, Refresh, Trash } from 'reicon-react'
 import { invoke } from '@tauri-apps/api/core'
 import { useState } from 'react'
 import { useI18n } from '../i18n/useI18n'
@@ -58,7 +59,7 @@ export function WorkspaceRail() {
             aria-label={t('ws.addTitle')}
             onClick={() => void addWorkspace()}
           >
-            +
+            <Add className="ui-icon" size={18} color="currentColor" aria-hidden />
           </button>
           <button
             type="button"
@@ -67,7 +68,7 @@ export function WorkspaceRail() {
             aria-label={t('ws.refreshTitle')}
             onClick={() => void refreshAllProjects()}
           >
-            ↻
+            <Refresh className="ui-icon" size={18} color="currentColor" aria-hidden />
           </button>
         </div>
       </div>
@@ -84,6 +85,9 @@ export function WorkspaceRail() {
             }}
             title={ws}
           >
+            <span className="rail-item-folder" aria-hidden>
+              <Folder2 size={22} color="currentColor" weight="Filled" />
+            </span>
             <div className="rail-item-body">
               <div className="rail-item-name">{shortName(ws)}</div>
               <div className="muted path-ellipsis">{ws}</div>
@@ -98,7 +102,7 @@ export function WorkspaceRail() {
                 setPendingRemove(ws)
               }}
             >
-              ×
+              <Trash className="ui-icon" size={12} color="currentColor" aria-hidden />
             </button>
           </div>
         ))}
@@ -127,9 +131,10 @@ export function WorkspaceRail() {
             </button>
             <button
               type="button"
-              className="btn danger"
+              className="btn danger btn-with-icon"
               onClick={() => void confirmRemove()}
             >
+              <Trash className="ui-icon" size={14} color="currentColor" aria-hidden />
               {t('ws.remove')}
             </button>
           </div>

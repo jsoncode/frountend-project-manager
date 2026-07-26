@@ -1,17 +1,14 @@
+import { AddCircle, CheckSquare, CloseSquare, Pen, Trash } from 'reicon-react'
 import { useState } from 'react'
 import { ModalShell } from '../components/ModalShell'
 import { useI18n } from '../i18n/useI18n'
 import type { MessageKey } from '../i18n/messages'
 import type { AiModel, AiModelType } from '../lib/aiTypes'
 import { useAiStore } from '../stores/aiStore'
-
-const MODEL_TYPES: AiModelType[] = [
-  'text',
-  'image',
-  'audio',
-  'video',
-  'multimodal',
-]
+import {
+  AiModelEditorModal,
+  blankAiModel,
+} from './AiModelEditorModal'
 
 const TYPE_LABEL_KEYS: Record<AiModelType, MessageKey> = {
   text: 'ai.type.text',
@@ -21,177 +18,219 @@ const TYPE_LABEL_KEYS: Record<AiModelType, MessageKey> = {
   multimodal: 'ai.type.multimodal',
 }
 
-function blankModel(): AiModel {
-  return {
-    id: '',
-    remark: '',
-    baseUrl: '',
-    modelName: '',
-    token: '',
-    type: 'text',
-    active: true,
-  }
-}
-
 type Props = {
   onClose: () => void
 }
+
+type EditorState =
+  | { mode: 'add' }
+  | { mode: 'edit'; model: AiModel }
+  | null
 
 export function AiModelSettingsModal({ onClose }: Props) {
   const { t } = useI18n()
   const config = useAiStore((s) => s.config)
   const saveConfig = useAiStore((s) => s.saveConfig)
-  const [draft, setDraft] = useState<AiModel[]>(() =>
-    config.models.map((m) => ({ ...m })),
-  )
-  const [saving, setSaving] = useState(false)
+  const [editor, setEditor] = useState<EditorState>(null)
+  const [pendingDelete, setPendingDelete] = useState<AiModel | null>(null)
+  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const update = (index: number, patch: Partial<AiModel>) => {
-    setDraft((prev) =>
-      prev.map((m, i) => (i === index ? { ...m, ...patch } : m)),
-    )
-  }
-
-  const addModel = () => {
-    setDraft((prev) => [...prev, blankModel()])
-  }
-
-  const removeModel = (index: number) => {
-    setDraft((prev) => prev.filter((_, i) => i !== index))
-  }
-
-  const save = async () => {
-    setSaving(true)
+  const persistModels = async (models: AiModel[]) => {
+    setBusy(true)
     setError(null)
     try {
-      const models = draft.map((m) => ({
-        ...m,
-        id: m.id || crypto.randomUUID(),
-        remark: m.remark.trim(),
-        baseUrl: m.baseUrl.trim(),
-        modelName: m.modelName.trim(),
-      }))
       await saveConfig({
+        ...config,
         models,
-        lastModelId: config.lastModelId,
       })
-      onClose()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
+      throw e
     } finally {
-      setSaving(false)
+      setBusy(false)
     }
   }
 
+  const saveFromEditor = async (model: AiModel) => {
+    const exists = config.models.some((m) => m.id === model.id)
+    const models = exists
+      ? config.models.map((m) => (m.id === model.id ? model : m))
+      : [...config.models, model]
+    await persistModels(models)
+  }
+
+  const removeModel = async (model: AiModel) => {
+    await persistModels(config.models.filter((m) => m.id !== model.id))
+    setPendingDelete(null)
+  }
+
+  const toggleActive = async (model: AiModel) => {
+    await persistModels(
+      config.models.map((m) =>
+        m.id === model.id ? { ...m, active: !m.active } : m,
+      ),
+    )
+  }
+
   return (
-    <ModalShell
-      title={t('ai.settingsTitle')}
-      onClose={onClose}
-      wide
-      className="ai-settings-modal"
-    >
-      <p className="muted">{t('ai.settingsHint')}</p>
-      {draft.length === 0 ? (
-        <p className="ai-settings-empty">{t('ai.noModels')}</p>
-      ) : (
-        <div className="ai-model-list">
-          {draft.map((model, index) => (
-            <div
-              key={model.id || `new-${index}`}
-              className="ai-model-card"
-            >
-              <div className="ai-model-card-top">
-                <label className="ai-field" style={{ flex: 1 }}>
-                  <span className="muted">{t('ai.modelRemark')}</span>
-                  <input
-                    value={model.remark}
-                    onChange={(e) => update(index, { remark: e.target.value })}
-                  />
-                </label>
-                <div className="ai-model-card-actions">
-                  <label className="ai-enable">
-                    <input
-                      type="checkbox"
-                      checked={model.active}
-                      onChange={(e) =>
-                        update(index, { active: e.target.checked })
-                      }
-                    />
-                    {t('ai.modelActive')}
-                  </label>
-                  <button
-                    type="button"
-                    className="ai-btn ai-btn-sm ai-btn-danger"
-                    onClick={() => removeModel(index)}
-                  >
-                    {t('ai.deleteModel')}
-                  </button>
-                </div>
-              </div>
-              <label className="ai-field">
-                <span className="muted">{t('ai.modelBaseUrl')}</span>
-                <input
-                  value={model.baseUrl}
-                  placeholder="https://api.openai.com/v1"
-                  onChange={(e) => update(index, { baseUrl: e.target.value })}
-                />
-              </label>
-              <label className="ai-field">
-                <span className="muted">{t('ai.modelName')}</span>
-                <input
-                  value={model.modelName}
-                  onChange={(e) =>
-                    update(index, { modelName: e.target.value })
-                  }
-                />
-              </label>
-              <label className="ai-field">
-                <span className="muted">{t('ai.modelToken')}</span>
-                <input
-                  type="password"
-                  autoComplete="off"
-                  value={model.token}
-                  onChange={(e) => update(index, { token: e.target.value })}
-                />
-              </label>
-              <label className="ai-field">
-                <span className="muted">{t('ai.modelType')}</span>
-                <select
-                  className="ai-field-select"
-                  value={model.type}
-                  onChange={(e) =>
-                    update(index, { type: e.target.value as AiModelType })
-                  }
-                >
-                  {MODEL_TYPES.map((type) => (
-                    <option key={type} value={type}>
-                      {t(TYPE_LABEL_KEYS[type])}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-          ))}
+    <>
+      <ModalShell
+        title={t('ai.settingsTitle')}
+        onClose={onClose}
+        elevated
+        className="ai-settings-modal"
+      >
+        <div className="ai-settings-toolbar">
+          <p className="muted" style={{ margin: 0, flex: 1 }}>
+            {t('ai.settingsHint')}
+          </p>
+          <button
+            type="button"
+            className="ai-btn ai-btn-sm ai-icon-btn"
+            disabled={busy}
+            title={t('ai.addModel')}
+            aria-label={t('ai.addModel')}
+            onClick={() => setEditor({ mode: 'add' })}
+          >
+            <AddCircle className="ui-icon" size={20} color="currentColor" aria-hidden />
+          </button>
         </div>
-      )}
-      {error ? <p className="ai-settings-error">{error}</p> : null}
-      <div className="modal-actions">
-        <button type="button" className="ai-btn" onClick={addModel}>
-          {t('ai.addModel')}
-        </button>
-        <button
-          type="button"
-          className="ai-btn ai-btn-primary"
-          disabled={saving}
-          onClick={() => void save()}
+
+        {config.models.length === 0 ? (
+          <p className="ai-settings-empty">{t('ai.noModels')}</p>
+        ) : (
+          <ul className="ai-model-list">
+            {config.models.map((model) => {
+              const title = model.remark.trim() || model.modelName || '—'
+              return (
+                <li key={model.id} className="ai-model-row">
+                  <div className="ai-model-row-main">
+                    <span className="ai-model-row-title" title={title}>
+                      {title}
+                    </span>
+                    <span className="ai-model-row-meta muted">
+                      <span className="ai-model-type-pill">
+                        {t(TYPE_LABEL_KEYS[model.type])}
+                      </span>
+                      {model.modelName.trim() ? (
+                        <span>{model.modelName.trim()}</span>
+                      ) : null}
+                      {!model.active ? (
+                        <span>{t('ai.modelInactive')}</span>
+                      ) : null}
+                    </span>
+                  </div>
+                  <div className="ai-model-row-actions">
+                    <button
+                      type="button"
+                      className={`ai-btn ai-btn-sm ai-icon-btn${model.active ? ' is-active' : ''}`}
+                      disabled={busy}
+                      title={
+                        model.active ? t('ai.modelActive') : t('ai.modelInactive')
+                      }
+                      aria-label={
+                        model.active ? t('ai.modelActive') : t('ai.modelInactive')
+                      }
+                      aria-pressed={model.active}
+                      onClick={() => void toggleActive(model)}
+                    >
+                      {model.active ? (
+                        <CheckSquare
+                          className="ui-icon"
+                          size={18}
+                          color="currentColor"
+                          aria-hidden
+                        />
+                      ) : (
+                        <CloseSquare
+                          className="ui-icon"
+                          size={18}
+                          color="currentColor"
+                          aria-hidden
+                        />
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      className="ai-btn ai-btn-sm ai-icon-btn"
+                      disabled={busy}
+                      title={t('ai.editModel')}
+                      aria-label={t('ai.editModel')}
+                      onClick={() => setEditor({ mode: 'edit', model })}
+                    >
+                      <Pen className="ui-icon" size={18} color="currentColor" aria-hidden />
+                    </button>
+                    <button
+                      type="button"
+                      className="ai-btn ai-btn-sm ai-btn-danger ai-icon-btn"
+                      disabled={busy}
+                      title={t('ai.deleteModel')}
+                      aria-label={t('ai.deleteModel')}
+                      onClick={() => setPendingDelete(model)}
+                    >
+                      <Trash className="ui-icon" size={18} color="currentColor" aria-hidden />
+                    </button>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+
+        {error ? <p className="ai-settings-error">{error}</p> : null}
+        <div className="modal-actions">
+          <button type="button" className="ai-btn" onClick={onClose}>
+            {t('settings.close')}
+          </button>
+        </div>
+      </ModalShell>
+
+      {editor ? (
+        <AiModelEditorModal
+          key={editor.mode === 'edit' ? editor.model.id : 'new'}
+          initial={
+            editor.mode === 'edit' ? { ...editor.model } : blankAiModel()
+          }
+          onClose={() => setEditor(null)}
+          onSave={saveFromEditor}
+        />
+      ) : null}
+
+      {pendingDelete ? (
+        <ModalShell
+          title={t('ai.deleteModelTitle')}
+          onClose={() => setPendingDelete(null)}
+          nested
         >
-          {t('ai.save')}
-        </button>
-        <button type="button" className="ai-btn" onClick={onClose}>
-          {t('settings.close')}
-        </button>
-      </div>
-    </ModalShell>
+          <p className="muted">
+            {t('ai.deleteModelConfirm', {
+              title:
+                pendingDelete.remark.trim() ||
+                pendingDelete.modelName ||
+                '—',
+            })}
+          </p>
+          <div className="modal-actions">
+            <button
+              type="button"
+              className="ai-btn"
+              onClick={() => setPendingDelete(null)}
+            >
+              {t('branch.cancel')}
+            </button>
+            <button
+              type="button"
+              className="ai-btn ai-btn-danger btn-with-icon"
+              disabled={busy}
+              onClick={() => void removeModel(pendingDelete)}
+            >
+              <Trash className="ui-icon" size={14} color="currentColor" aria-hidden />
+              {t('ai.deleteModel')}
+            </button>
+          </div>
+        </ModalShell>
+      ) : null}
+    </>
   )
 }

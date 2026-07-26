@@ -102,3 +102,19 @@ export function getTerminalSize(id: string): { cols: number; rows: number } | nu
   if (!term) return null
   return { cols: term.cols, rows: term.rows }
 }
+
+/** Read plain text from the active buffer (tail). */
+export function getTerminalPlainText(id: string, maxLines = 120): string {
+  const term = entries.get(id)?.term
+  if (!term) return ''
+  const buf = term.buffer.active
+  const last = buf.baseY + Math.max(buf.cursorY, 0)
+  const start = Math.max(0, last - maxLines + 1)
+  const lines: string[] = []
+  for (let y = start; y <= last; y++) {
+    const line = buf.getLine(y)
+    if (!line) continue
+    lines.push(line.translateToString(true))
+  }
+  return lines.join('\n').replace(/\s+$/g, '')
+}

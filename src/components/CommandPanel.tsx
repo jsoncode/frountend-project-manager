@@ -1,3 +1,4 @@
+import { Play } from 'reicon-react'
 import { useI18n } from '../i18n/useI18n'
 import { sortScriptNames } from '../lib/types'
 import { HistoryChips } from './HistoryChips'
@@ -34,12 +35,13 @@ export function CommandPanel() {
           <button
             key={name}
             type="button"
-            className="script-tag"
+            className="script-tag btn-with-icon"
             title={details.summary.scripts[name]}
             onClick={() =>
               void runScript(selected.path, selected.folderName, pm, name)
             }
           >
+            <Play className="ui-icon" size={11} color="currentColor" aria-hidden />
             {name}
           </button>
         ))}

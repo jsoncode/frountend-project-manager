@@ -9,6 +9,8 @@
     "core:tray:default",
     "core:webview:allow-create-webview-window",
     "core:window:allow-create",
+    "core:window:allow-close",
+    "core:window:allow-destroy",
     "core:window:allow-hide",
     "core:window:allow-show",
     "core:window:allow-set-focus",
@@ -62,9 +64,17 @@
     "allow-ai-rename-conversation",
     "allow-ai-delete-conversation",
     "allow-ai-append-message",
+    "allow-ai-update-message",
+    "allow-ai-delete-message",
     "allow-ai-open-chat-window",
     "allow-ai-take-pending-feed",
     "allow-ai-chat-start",
-    "allow-ai-chat-cancel"
+    "allow-ai-chat-cancel",
+    "allow-ai-generate-title",
+    "allow-load-layout",
+    "allow-save-layout",
+    "allow-load-project-cache",
+    "allow-save-project-cache",
+    "allow-drop-project-cache"
   ]
 }

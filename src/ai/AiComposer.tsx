@@ -1,3 +1,4 @@
+import { Paperclip, Send, Stop, X } from 'reicon-react'
 import { useState, type KeyboardEvent } from 'react'
 import { useI18n } from '../i18n/useI18n'
 import { useAiStore } from '../stores/aiStore'
@@ -47,6 +48,7 @@ export function AiComposer() {
     <footer className="ai-composer">
       {pendingAttachment ? (
         <div className="ai-attachment-chip">
+          <Paperclip className="ui-icon" size={13} color="currentColor" aria-hidden />
           <span className="ai-attachment-label">{t('ai.attachment')}</span>
           <span className="ai-attachment-preview" title={pendingAttachment.text}>
             {pendingAttachment.text.slice(0, 80)}
@@ -57,8 +59,9 @@ export function AiComposer() {
             className="ai-btn ai-btn-sm"
             onClick={() => clearAttachment()}
             title={t('ai.removeAttachment')}
+            aria-label={t('ai.removeAttachment')}
           >
-            ×
+            <X className="ui-icon" size={12} color="currentColor" aria-hidden />
           </button>
         </div>
       ) : null}
@@ -110,18 +113,20 @@ export function AiComposer() {
         {generating ? (
           <button
             type="button"
-            className="ai-btn ai-btn-danger"
+            className="ai-btn ai-btn-danger btn-with-icon"
             onClick={() => void stopGeneration()}
           >
+            <Stop className="ui-icon" size={14} color="currentColor" aria-hidden />
             {t('ai.stop')}
           </button>
         ) : (
           <button
             type="button"
-            className="ai-btn ai-btn-primary"
+            className="ai-btn ai-btn-primary btn-with-icon"
             disabled={!canSend}
             onClick={onSend}
           >
+            <Send className="ui-icon" size={14} color="currentColor" aria-hidden />
             {t('ai.send')}
           </button>
         )}

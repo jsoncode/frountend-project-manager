@@ -3,15 +3,14 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
-use std::thread;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Manager};
 
-use crate::ide::{default_ides, IdeConfig};
+use crate::ide::{default_ides, scrub_ides, IdeConfig};
 
 const HISTORY_LIMIT: usize = 40;
 
-/// Serialize config IO so setup + frontend first-launch cannot race-corrupt the file.
+/// Serialize config IO so setup + frontend first-launch cannot race.
 static CONFIG_IO: Mutex<()> = Mutex::new(());
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -74,104 +73,112 @@ fn now_ms() -> i64 {
         .unwrap_or(0)
 }
 
-fn config_path(app: &AppHandle) -> Result<PathBuf, String> {
-    let dir = app
-        .path()
-        .app_config_dir()
-        .map_err(|e| e.to_string())?;
-    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    Ok(dir.join("config.json"))
+/// Previous bundle id was `com.fpm.app` (ended with `.app`, warned on macOS).
+/// Reinstall / identifier change must not wipe user data — copy from legacy dirs.
+const LEGACY_CONFIG_DIR_NAMES: &[&str] = &["com.fpm.app"];
+
+const MIGRATE_FILES: &[&str] = &["config.json", "ai-config.json", "ai-chats.json", "fpm.db"];
+
+fn copy_dir_recursive(src: &PathBuf, dst: &PathBuf) -> Result<(), String> {
+    fs::create_dir_all(dst).map_err(|e| e.to_string())?;
+    for entry in fs::read_dir(src).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let ty = entry.file_type().map_err(|e| e.to_string())?;
+        let from = entry.path();
+        let to = dst.join(entry.file_name());
+        if ty.is_dir() {
+            copy_dir_recursive(&from, &to)?;
+        } else if ty.is_file() && !to.exists() {
+            let _ = fs::copy(&from, &to);
+        }
+    }
+    Ok(())
+}
+
+/// Best-effort: if the new config dir is missing files (or only has an empty
+/// fresh default), restore them from legacy identifier folders.
+pub fn migrate_legacy_app_data(app: &AppHandle) {
+    let Ok(new_dir) = app.path().app_config_dir() else {
+        return;
+    };
+    let _ = fs::create_dir_all(&new_dir);
+    let Some(parent) = new_dir.parent() else {
+        return;
+    };
+
+    let new_cfg = new_dir.join("config.json");
+    let new_db = new_dir.join("fpm.db");
+    let new_is_emptyish = match fs::read_to_string(&new_cfg) {
+        Ok(raw) => {
+            raw.trim().is_empty()
+                || serde_json::from_str::<AppConfig>(&raw)
+                    .map(|c| c.workspaces.is_empty() && c.search_history.is_empty())
+                    .unwrap_or(true)
+        }
+        Err(_) => !new_db.is_file(),
+    };
+
+    for legacy_name in LEGACY_CONFIG_DIR_NAMES {
+        let legacy_dir = parent.join(legacy_name);
+        if !legacy_dir.is_dir() {
+            continue;
+        }
+        for name in MIGRATE_FILES {
+            let dest = new_dir.join(name);
+            let src = legacy_dir.join(name);
+            if !src.is_file() {
+                continue;
+            }
+            let should_copy = if *name == "config.json" {
+                !dest.exists() || new_is_emptyish
+            } else {
+                !dest.exists()
+            };
+            if should_copy {
+                let _ = fs::copy(&src, &dest);
+            }
+        }
+        let legacy_icons = legacy_dir.join("ide-icons");
+        let new_icons = new_dir.join("ide-icons");
+        if legacy_icons.is_dir() {
+            let _ = copy_dir_recursive(&legacy_icons, &new_icons);
+        }
+    }
 }
 
 fn fresh_default() -> AppConfig {
     let mut cfg = AppConfig::default();
-    // Light defaults only — heavy PATH/disk detect runs via detect_ides on demand.
+    // IDEs start empty — scan or add manually (no placeholder CLI stubs).
     cfg.ides = default_ides();
     cfg
 }
 
-fn write_atomic(path: &PathBuf, raw: &str) -> Result<(), String> {
-    let tmp = path.with_extension("json.tmp");
-    // Retry briefly — antivirus / installer can lock AppData on first launch.
-    let mut last_err = String::new();
-    for attempt in 0..6 {
-        match fs::write(&tmp, raw) {
-            Ok(()) => {
-                let _ = fs::remove_file(path);
-                match fs::rename(&tmp, path) {
-                    Ok(()) => return Ok(()),
-                    Err(e) => {
-                        // Fallback: direct write if rename is blocked.
-                        match fs::write(path, raw) {
-                            Ok(()) => {
-                                let _ = fs::remove_file(&tmp);
-                                return Ok(());
-                            }
-                            Err(e2) => last_err = format!("rename: {e}; write: {e2}"),
-                        }
-                    }
-                }
+pub fn load_or_default(_app: &AppHandle) -> Result<AppConfig, String> {
+    let _guard = CONFIG_IO
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+
+    match crate::db::kv_get_json::<AppConfig>("app_config")? {
+        Some(mut cfg) => {
+            if scrub_ides(&mut cfg.ides) {
+                let _ = crate::db::kv_set_json("app_config", &cfg);
             }
-            Err(e) => last_err = e.to_string(),
+            Ok(cfg)
         }
-        thread::sleep(Duration::from_millis(40 * (attempt + 1)));
-    }
-    Err(format!("Failed to write config: {last_err}"))
-}
-
-pub fn load_or_default(app: &AppHandle) -> Result<AppConfig, String> {
-    let _guard = CONFIG_IO
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-
-    let path = config_path(app)?;
-    if !path.exists() {
-        let cfg = fresh_default();
-        write_atomic(&path, &serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())?)?;
-        return Ok(cfg);
-    }
-
-    let raw = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-    if raw.trim().is_empty() {
-        let cfg = fresh_default();
-        write_atomic(&path, &serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())?)?;
-        return Ok(cfg);
-    }
-
-    let mut cfg: AppConfig = match serde_json::from_str(&raw) {
-        Ok(c) => c,
-        Err(_) => {
-            // Corrupt leftover after uninstall/reinstall — backup and recreate.
-            let bak = path.with_extension("json.bak");
-            let _ = fs::remove_file(&bak);
-            let _ = fs::rename(&path, &bak);
+        None => {
             let cfg = fresh_default();
-            write_atomic(
-                &path,
-                &serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())?,
-            )?;
-            return Ok(cfg);
+            crate::db::kv_set_json("app_config", &cfg)?;
+            Ok(cfg)
         }
-    };
-    if cfg.ides.is_empty() {
-        cfg.ides = default_ides();
-        let _ = write_atomic(
-            &path,
-            &serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())?,
-        );
     }
-    Ok(cfg)
 }
 
-pub fn save(app: &AppHandle, cfg: &AppConfig) -> Result<(), String> {
+pub fn save(_app: &AppHandle, cfg: &AppConfig) -> Result<(), String> {
     let _guard = CONFIG_IO
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let path = config_path(app)?;
-    let raw = serde_json::to_string_pretty(cfg).map_err(|e| e.to_string())?;
-    write_atomic(&path, &raw)
+    crate::db::kv_set_json("app_config", cfg)
 }
-
 pub fn tag_key(workspace: &str, project_folder: &str) -> String {
     format!("{workspace}::{project_folder}")
 }

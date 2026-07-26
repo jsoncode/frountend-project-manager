@@ -10,6 +10,7 @@ mod ai;
 mod bat_view;
 mod config;
 mod console_decode;
+mod db;
 mod env_files;
 mod git;
 mod ide;
@@ -99,7 +100,70 @@ fn ai_append_message(app: AppHandle, msg: ai::AiMessage) -> Result<ai::AiMessage
 }
 
 #[tauri::command]
-fn ai_open_chat_window(app: AppHandle, feed_text: Option<String>) -> Result<(), String> {
+fn ai_update_message(
+    app: AppHandle,
+    id: String,
+    content: String,
+) -> Result<ai::AiMessage, String> {
+    ai::update_message_content(&app, &id, &content)
+}
+
+#[tauri::command]
+fn ai_delete_message(app: AppHandle, id: String) -> Result<Vec<String>, String> {
+    ai::delete_message(&app, &id)
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LayoutSnapshot {
+    rail_width: f64,
+    list_width: f64,
+    tool_panel_width: f64,
+    terminal_height: f64,
+    tool_layout_mode: String,
+    open_tools: Vec<String>,
+}
+
+#[tauri::command]
+fn load_layout() -> Result<Option<LayoutSnapshot>, String> {
+    db::kv_get_json("layout")
+}
+
+#[tauri::command]
+fn save_layout(layout: LayoutSnapshot) -> Result<(), String> {
+    db::kv_set_json("layout", &layout)
+}
+
+#[tauri::command]
+fn load_project_cache() -> Result<std::collections::HashMap<String, serde_json::Value>, String> {
+    let rows = db::project_cache_all()?;
+    let mut out = std::collections::HashMap::new();
+    for (ws, payload) in rows {
+        if let Ok(v) = serde_json::from_str(&payload) {
+            out.insert(ws, v);
+        }
+    }
+    Ok(out)
+}
+
+#[tauri::command]
+fn save_project_cache(workspace: String, projects: serde_json::Value) -> Result<(), String> {
+    let raw = serde_json::to_string(&projects).map_err(|e| e.to_string())?;
+    db::project_cache_set(&workspace, &raw)
+}
+
+#[tauri::command]
+fn drop_project_cache(workspace: String) -> Result<(), String> {
+    db::project_cache_drop(&workspace)
+}
+
+#[tauri::command(async)]
+async fn ai_open_chat_window(app: AppHandle, feed_text: Option<String>) -> Result<(), String> {
+    // CRITICAL (Windows): creating a WebviewWindow inside a sync command deadlocks
+    // WebView2 → blank white window that cannot be closed. Must be async.
+    // See https://github.com/tauri-apps/tauri/issues/13963
+    // Reuse the existing window when possible so the last conversation stays loaded;
+    // always re-center on open.
     ai::open_or_focus_ai_chat(&app, feed_text)
 }
 
@@ -118,49 +182,76 @@ fn ai_chat_cancel(request_id: String) -> Result<(), String> {
     ai::cancel_chat(&request_id)
 }
 
-#[tauri::command]
-fn list_projects(workspace: String) -> Result<Vec<scan::ProjectSummary>, String> {
-    scan::list_projects(&workspace)
+#[tauri::command(async)]
+async fn ai_generate_title(
+    app: AppHandle,
+    model_id: String,
+    user_message: String,
+) -> Result<String, String> {
+    ai::generate_title(app, model_id, user_message).await
 }
 
-#[tauri::command]
-fn scan_project(path: String) -> Result<scan::ProjectDetails, String> {
-    scan::scan_project(&path)
+#[tauri::command(async)]
+async fn list_projects(workspace: String) -> Result<Vec<scan::ProjectSummary>, String> {
+    tauri::async_runtime::spawn_blocking(move || scan::list_projects(&workspace))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
-#[tauri::command]
-fn git_branches(path: String) -> Result<Option<git::GitInfo>, String> {
-    git::git_branches(&path)
+#[tauri::command(async)]
+async fn scan_project(path: String) -> Result<scan::ProjectDetails, String> {
+    tauri::async_runtime::spawn_blocking(move || scan::scan_project(&path))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
-#[tauri::command]
-fn git_status(path: String) -> Result<git::GitStatus, String> {
-    git::git_status(&path)
+#[tauri::command(async)]
+async fn git_branches(path: String) -> Result<Option<git::GitInfo>, String> {
+    tauri::async_runtime::spawn_blocking(move || git::git_branches(&path))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
-#[tauri::command]
-fn git_checkout(path: String, branch: String) -> Result<String, String> {
-    git::git_checkout(&path, &branch)
+#[tauri::command(async)]
+async fn git_status(path: String) -> Result<git::GitStatus, String> {
+    tauri::async_runtime::spawn_blocking(move || git::git_status(&path))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
-#[tauri::command]
-fn git_fetch(path: String) -> Result<String, String> {
-    git::git_fetch(&path)
+#[tauri::command(async)]
+async fn git_checkout(path: String, branch: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || git::git_checkout(&path, &branch))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
-#[tauri::command]
-fn git_pull_branch(path: String, branch: String) -> Result<String, String> {
-    git::git_pull_branch(&path, &branch)
+#[tauri::command(async)]
+async fn git_fetch(path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || git::git_fetch(&path))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
-#[tauri::command]
-fn list_env_files(path: String) -> Result<Vec<env_files::EnvFileInfo>, String> {
-    env_files::list_env_files(&path)
+#[tauri::command(async)]
+async fn git_pull_branch(path: String, branch: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || git::git_pull_branch(&path, &branch))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
-#[tauri::command]
-fn read_env_file(path: String) -> Result<Vec<env_files::EnvEntry>, String> {
-    env_files::read_env_file(&path)
+#[tauri::command(async)]
+async fn list_env_files(path: String) -> Result<Vec<env_files::EnvFileInfo>, String> {
+    tauri::async_runtime::spawn_blocking(move || env_files::list_env_files(&path))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command(async)]
+async fn read_env_file(path: String) -> Result<Vec<env_files::EnvEntry>, String> {
+    tauri::async_runtime::spawn_blocking(move || env_files::read_env_file(&path))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -223,14 +314,18 @@ fn preview_file(path: String, cwd: Option<String>) -> Result<String, String> {
     bat_view::render_files(&[file], None)
 }
 
-#[tauri::command]
-fn detect_ides() -> Vec<IdeConfig> {
-    ide::detect_ides()
+#[tauri::command(async)]
+async fn detect_ides() -> Vec<IdeConfig> {
+    tauri::async_runtime::spawn_blocking(ide::detect_ides)
+        .await
+        .unwrap_or_default()
 }
 
-#[tauri::command]
-fn list_installed_editors() -> Vec<InstalledEditor> {
-    ide::list_installed_editors()
+#[tauri::command(async)]
+async fn list_installed_editors() -> Vec<InstalledEditor> {
+    tauri::async_runtime::spawn_blocking(ide::list_installed_editors)
+        .await
+        .unwrap_or_default()
 }
 
 #[tauri::command]
@@ -252,6 +347,8 @@ fn reveal_in_file_manager(path: String) -> Result<(), String> {
 #[tauri::command]
 fn save_ides(app: AppHandle, ides: Vec<IdeConfig>) -> Result<AppConfig, String> {
     let mut cfg = config::load_or_default(&app)?;
+    let mut ides = ides;
+    ide::scrub_ides(&mut ides);
     cfg.ides = ides;
     config::save(&app, &cfg)?;
     Ok(cfg)
@@ -399,6 +496,12 @@ pub fn run() {
                 )?;
             }
 
+            // SQLite first — migrates legacy JSON / identifier dirs into fpm.db.
+            if let Err(e) = db::init(app.handle()) {
+                log::error!("sqlite init failed: {e}");
+                return Err(Box::new(std::io::Error::other(e)));
+            }
+
             // Single config load — must stay fast (no IDE disk scans).
             let locale = config::load_or_default(app.handle())
                 .map(|c| c.locale)
@@ -462,14 +565,21 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
-                // AI chat window should destroy on close and cancel in-flight streams.
-                if window.label() == "ai-chat" {
-                    ai::cancel_all();
-                    return;
-                }
-                if !ALLOW_EXIT.load(Ordering::SeqCst) {
-                    api.prevent_close();
-                    let _ = window.hide();
+                match window.label() {
+                    "ai-chat" => {
+                        // Cancel streams, then force-destroy. Using destroy() avoids
+                        // stuck CloseRequested loops after a prior WebView2 deadlock.
+                        ai::cancel_all();
+                        api.prevent_close();
+                        let _ = window.destroy();
+                    }
+                    "main" => {
+                        if !ALLOW_EXIT.load(Ordering::SeqCst) {
+                            api.prevent_close();
+                            let _ = window.hide();
+                        }
+                    }
+                    _ => {}
                 }
             }
         })
@@ -484,10 +594,18 @@ pub fn run() {
             ai_rename_conversation,
             ai_delete_conversation,
             ai_append_message,
+            ai_update_message,
+            ai_delete_message,
+            load_layout,
+            save_layout,
+            load_project_cache,
+            save_project_cache,
+            drop_project_cache,
             ai_open_chat_window,
             ai_take_pending_feed,
             ai_chat_start,
             ai_chat_cancel,
+            ai_generate_title,
             list_projects,
             scan_project,
             git_branches,

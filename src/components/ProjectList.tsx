@@ -1,12 +1,13 @@
+import { Crosshairs } from 'reicon-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useI18n } from '../i18n/useI18n'
 import { projectGroupKey, projectGroupTint } from '../lib/projectGroup'
 import { projectMatchesQuery, projectSubtitle } from '../lib/projectSearch'
+import type { ProjectSummary } from '../lib/types'
 import {
   findWorkspaceForPath,
   shortWorkspaceName,
 } from '../lib/workspacePath'
-import type { ProjectSummary } from '../lib/types'
 import { useProjectStore } from '../stores/projectStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useWorkspaceStore } from '../stores/workspaceStore'
@@ -162,7 +163,7 @@ export function ProjectList() {
             aria-label={t('projects.locate')}
             onClick={locateSelected}
           >
-            ⌖
+            <Crosshairs className="ui-icon" size={18} color="currentColor" aria-hidden />
           </button>
         </div>
       </div>
@@ -215,7 +216,9 @@ export function ProjectList() {
                       </>
                     )}
                     {projectSubtitle(p)}
-                    {p.frameworks.length > 0 ? ` · ${p.frameworks.join(',')}` : ''}
+                    {p.frameworks.length > 0
+                      ? ` · ${p.frameworks.join(',')}`
+                      : ''}
                   </span>
                 </button>
               ))}

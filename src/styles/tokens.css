@@ -12,7 +12,12 @@
   --text-bright: #e0f7fa;
   --danger: #fb7185;
   --ok: #34d399;
-  --font: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', Consolas, ui-monospace, monospace;
+  --font: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', Consolas, ui-monospace,
+    'Microsoft YaHei UI', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB',
+    'Noto Sans SC', sans-serif;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
   --glow: 0 0 18px rgba(34, 211, 238, 0.18);
 }
 
@@ -32,7 +37,9 @@ body,
 }
 
 button,
-input {
+input,
+select,
+textarea {
   font-family: inherit;
 }
 

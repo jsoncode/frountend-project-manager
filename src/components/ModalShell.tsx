@@ -1,3 +1,4 @@
+import { X } from 'reicon-react'
 import type { ReactNode } from 'react'
 import { useI18n } from '../i18n/useI18n'
 
@@ -7,14 +8,27 @@ type Props = {
   children: ReactNode
   className?: string
   wide?: boolean
+  /** Stack above another open modal (e.g. settings → AI models). */
+  elevated?: boolean
+  /** Stack above an already elevated modal (e.g. model list → editor). */
+  nested?: boolean
 }
 
 /** Backdrop does not dismiss — close via the header × button (or footer actions). */
-export function ModalShell({ title, onClose, children, className = '', wide }: Props) {
+export function ModalShell({
+  title,
+  onClose,
+  children,
+  className = '',
+  wide,
+  elevated,
+  nested,
+}: Props) {
   const { t } = useI18n()
+  const stackClass = nested ? ' nested' : elevated ? ' elevated' : ''
 
   return (
-    <div className="modal-backdrop">
+    <div className={`modal-backdrop${stackClass}`}>
       <div className={`modal ${wide ? 'modal-wide' : ''} ${className}`.trim()}>
         <div className="modal-header">
           <h3>{title}</h3>
@@ -25,7 +39,7 @@ export function ModalShell({ title, onClose, children, className = '', wide }: P
             aria-label={t('settings.close')}
             onClick={onClose}
           >
-            ×
+            <X className="ui-icon" size={16} color="currentColor" aria-hidden />
           </button>
         </div>
         {children}

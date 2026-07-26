@@ -312,6 +312,88 @@ async fn run_stream(
     Ok(())
 }
 
+fn sanitize_title(raw: &str) -> String {
+    let one_line = raw
+        .lines()
+        .map(|l| l.trim())
+        .find(|l| !l.is_empty())
+        .unwrap_or("")
+        .trim_matches(|c: char| c == '"' || c == '\'' || c == '「' || c == '」' || c == '《' || c == '》')
+        .trim();
+    let cleaned = one_line.replace(['\n', '\r'], " ");
+    let trimmed = cleaned.trim();
+    if trimmed.is_empty() {
+        return "新对话".into();
+    }
+    // Truncate by Unicode scalars roughly to a short sidebar title.
+    let chars: Vec<char> = trimmed.chars().collect();
+    if chars.len() > 28 {
+        format!("{}…", chars[..28].iter().collect::<String>())
+    } else {
+        trimmed.to_string()
+    }
+}
+
+/// One-shot title generation for a new conversation (does not stream / emit chat events).
+pub async fn generate_title(
+    app: AppHandle,
+    model_id: String,
+    user_message: String,
+) -> Result<String, String> {
+    let model = resolve_model(&app, &model_id)?;
+    let seed = user_message.trim();
+    if seed.is_empty() {
+        return Ok("新对话".into());
+    }
+    let url = chat_completions_url(&model.base_url);
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(45))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let messages = vec![
+        ChatMessageDto {
+            role: "system".into(),
+            content: "你是对话标题助手。根据用户第一条消息，生成一个简短中文标题。要求：不超过 20 个字；不要引号；不要标点收尾；不要解释；只输出标题本身。".into(),
+        },
+        ChatMessageDto {
+            role: "user".into(),
+            content: seed.chars().take(800).collect::<String>(),
+        },
+    ];
+
+    let body = serde_json::json!({
+        "model": model.model_name,
+        "messages": build_messages_json(&messages),
+        "stream": false,
+        "temperature": 0.3,
+        "max_tokens": 48,
+    });
+
+    let resp = client
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", model.token))
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let status = resp.status();
+    let text = resp.text().await.map_err(|e| e.to_string())?;
+    if !status.is_success() {
+        return Err(format!("HTTP {status}: {text}"));
+    }
+
+    let json: Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+    let content = json
+        .pointer("/choices/0/message/content")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    Ok(sanitize_title(&content))
+}
+
 /// Validate model, spawn the HTTP request, and return immediately.
 pub fn start_chat(app: AppHandle, req: ChatRequest) -> Result<(), String> {
     let model = resolve_model(&app, &req.model_id)?;

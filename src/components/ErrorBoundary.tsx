@@ -1,3 +1,4 @@
+import { Atom, Refresh } from 'reicon-react'
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 
 type Props = { children: ReactNode }
@@ -21,16 +22,18 @@ export class ErrorBoundary extends Component<Props, State> {
     return (
       <div className="app-shell" style={{ padding: 24 }}>
         <div className="brand" style={{ marginBottom: 12 }}>
-          ◈ FPM
+          <Atom className="ui-icon" size={18} color="currentColor" aria-hidden />
+          FPM
         </div>
         <p style={{ color: 'var(--text-bright)', marginBottom: 12 }}>
           界面遇到问题，点击恢复即可继续使用。
         </p>
         <button
           type="button"
-          className="btn"
+          className="btn btn-with-icon"
           onClick={() => this.setState({ error: null })}
         >
+          <Refresh className="ui-icon" size={14} color="currentColor" aria-hidden />
           恢复界面
         </button>
       </div>

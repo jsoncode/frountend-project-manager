@@ -13,6 +13,7 @@ export interface AiModel {
 export interface AiConfig {
   models: AiModel[]
   lastModelId: string | null
+  lastConversationId: string | null
 }
 
 export interface AiConversation {
@@ -29,6 +30,14 @@ export interface AiAttachment {
   createdAt: number
 }
 
+export interface AiMessageStats {
+  outputTokens: number
+  tokensPerSec: number
+  durationMs: number
+  timeToFirstTokenMs?: number
+  debug?: string
+}
+
 export interface AiMessage {
   id: string
   conversationId: string
@@ -37,4 +46,5 @@ export interface AiMessage {
   reasoning?: string
   attachments?: AiAttachment[]
   createdAt: number
+  stats?: AiMessageStats
 }

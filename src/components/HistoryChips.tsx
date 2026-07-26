@@ -1,3 +1,4 @@
+import { Star, Trash } from 'reicon-react'
 import type { HistoryItem } from '../lib/types'
 import { useI18n } from '../i18n/useI18n'
 
@@ -92,7 +93,13 @@ function HistoryChip({
         title={item.pinned ? t('history.unpin') : t('history.pin')}
         onClick={() => onTogglePin(item.value, !item.pinned)}
       >
-        {item.pinned ? '★' : '☆'}
+        <Star
+          className="ui-icon"
+          size={12}
+          color="currentColor"
+          weight={item.pinned ? 'Filled' : 'Outline'}
+          aria-hidden
+        />
       </button>
       <button
         type="button"
@@ -100,7 +107,7 @@ function HistoryChip({
         title={t('history.delete')}
         onClick={() => onDelete(item.value)}
       >
-        ×
+        <Trash className="ui-icon" size={12} color="currentColor" aria-hidden />
       </button>
     </span>
   )

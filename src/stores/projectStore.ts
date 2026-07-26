@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import { create } from 'zustand'
+import { create } from '../lib/createStore'
 import type {
   EnvEntry,
   EnvFileInfo,

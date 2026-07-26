@@ -1,17 +1,20 @@
 import { useEffect } from 'react'
 import { DetailPane } from './components/DetailPane'
+import { ErrorLogModal } from './components/ErrorLogModal'
 import { IdeSettingsModal } from './components/IdeSettingsModal'
 import { ProjectList } from './components/ProjectList'
 import { ResizeHandle } from './components/ResizeHandle'
 import { SettingsModal } from './components/SettingsModal'
 import { TopBar } from './components/TopBar'
 import { WorkspaceRail } from './components/WorkspaceRail'
+import { AiSettingsModal } from './components/AiSettingsModal'
 import { useLayoutStore } from './stores/layoutStore'
 import { useSettingsStore } from './stores/settingsStore'
 import { useTerminalStore } from './stores/terminalStore'
 import { useWorkspaceStore } from './stores/workspaceStore'
 import './styles/tokens.css'
 import './styles/app.css'
+import './styles/ai.css'
 
 export default function App() {
   const load = useSettingsStore((s) => s.load)
@@ -24,7 +27,11 @@ export default function App() {
   const persist = useLayoutStore((s) => s.persist)
 
   useEffect(() => {
-    void load()
+    void (async () => {
+      await useLayoutStore.getState().hydrate()
+      await useWorkspaceStore.getState().hydrateCache()
+      await load()
+    })()
   }, [load])
 
   useEffect(() => {
@@ -75,6 +82,8 @@ export default function App() {
       </div>
       <SettingsModal />
       <IdeSettingsModal />
+      <AiSettingsModal />
+      <ErrorLogModal />
     </div>
   )
 }

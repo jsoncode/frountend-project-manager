@@ -114,6 +114,10 @@ export function XtermSession({ sessionId, cwd, active }: Props) {
     })
 
     const onData = term.onData((data) => {
+      // Enter / Ctrl+C etc. means the shell was used — confirm before close.
+      if (data.includes('\r') || data.includes('\n') || data === '\u0003') {
+        useTerminalStore.getState().markDirty(sessionId)
+      }
       void invoke('pty_write', { terminalId: sessionId, data }).catch(() => undefined)
     })
 

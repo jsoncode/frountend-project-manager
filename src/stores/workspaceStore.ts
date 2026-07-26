@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import { create } from 'zustand'
+import { create } from '../lib/createStore'
 import type { ProjectSummary } from '../lib/types'
 import { useSettingsStore } from './settingsStore'
 
@@ -7,15 +7,18 @@ type WorkspaceState = {
   activeWorkspace: string | null
   /** Projects for the active workspace (browse mode). */
   projects: ProjectSummary[]
-  /** Cached scans keyed by workspace path. */
+  /** Cached scans keyed by workspace path (SQLite-backed). */
   projectCache: Record<string, ProjectSummary[]>
   loading: boolean
   /** True while filling missing workspace caches for cross-ws search. */
   searchScanning: boolean
   error: string | null
   search: string
+  hydrated: boolean
   setSearch: (q: string) => void
   setActiveWorkspace: (path: string | null) => void
+  /** Load project cache from SQLite (call once on boot). */
+  hydrateCache: () => Promise<void>
   /** Rescan active workspace (and update cache). */
   refreshProjects: () => Promise<void>
   /** Rescan every configured workspace into the cache. */
@@ -30,6 +33,10 @@ async function scanWorkspace(workspace: string): Promise<ProjectSummary[]> {
   return invoke<ProjectSummary[]>('list_projects', { workspace })
 }
 
+function persistCache(workspace: string, projects: ProjectSummary[]) {
+  void invoke('save_project_cache', { workspace, projects }).catch(() => {})
+}
+
 /** Deduplicate concurrent cross-workspace cache fills. */
 let ensureCacheInflight: Promise<void> | null = null
 
@@ -41,6 +48,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   searchScanning: false,
   error: null,
   search: '',
+  hydrated: false,
   setSearch: (q) => {
     set({ search: q })
     if (q.trim()) {
@@ -61,6 +69,25 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     })
     void get().refreshProjects()
   },
+  hydrateCache: async () => {
+    try {
+      const remote = await invoke<Record<string, ProjectSummary[]>>(
+        'load_project_cache',
+      )
+      set((s) => {
+        const projectCache = { ...remote }
+        const active = s.activeWorkspace
+        return {
+          projectCache,
+          projects:
+            active && projectCache[active] ? projectCache[active]! : s.projects,
+          hydrated: true,
+        }
+      })
+    } catch {
+      set({ hydrated: true })
+    }
+  },
   refreshProjects: async () => {
     const ws = get().activeWorkspace
     if (!ws) return
@@ -74,6 +101,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         loading: false,
         error: null,
       }))
+      persistCache(ws, projects)
     } catch (e) {
       set({ loading: false, error: String(e), projects: [] })
     }
@@ -100,6 +128,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         loading: false,
         error: null,
       })
+      for (const [ws, list] of entries) {
+        persistCache(ws, list)
+      }
     } catch (e) {
       set({ loading: false, error: String(e) })
     }
@@ -141,6 +172,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
                     : s.projects,
               }
             })
+            for (const [ws, list] of entries) {
+              persistCache(ws, list)
+            }
           }
         } finally {
           set({ searchScanning: false })
@@ -156,5 +190,6 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       delete projectCache[path]
       return { projectCache }
     })
+    void invoke('drop_project_cache', { workspace: path }).catch(() => {})
   },
 }))

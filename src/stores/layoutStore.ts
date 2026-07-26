@@ -1,22 +1,22 @@
-import { create } from 'zustand'
-
-const STORAGE_KEY = 'fpm.layout.v4'
+import { invoke } from '@tauri-apps/api/core'
+import { create } from '../lib/createStore'
 
 export type SideTool = 'ide' | 'cmd' | 'git' | 'env' | 'meta'
 export type ToolLayoutMode = 'single' | 'stack'
 
 export const TOOL_ORDER: SideTool[] = ['ide', 'cmd', 'git', 'env', 'meta']
 
-type LayoutState = {
+type LayoutPersist = {
   railWidth: number
   listWidth: number
-  /** Expanded tool panel column width in px */
   toolPanelWidth: number
   terminalHeight: number
-  /** single = accordion (one panel); stack = multiple panels stacked */
   toolLayoutMode: ToolLayoutMode
-  /** Open tool panels (order follows TOOL_ORDER when rendering) */
   openTools: SideTool[]
+}
+
+type LayoutState = LayoutPersist & {
+  hydrated: boolean
   setRailWidth: (n: number) => void
   setListWidth: (n: number) => void
   setToolPanelWidth: (n: number) => void
@@ -24,6 +24,7 @@ type LayoutState = {
   setToolLayoutMode: (mode: ToolLayoutMode) => void
   toggleSideTool: (tool: SideTool) => void
   closeSideTool: (tool: SideTool) => void
+  hydrate: () => Promise<void>
   persist: () => void
 }
 
@@ -52,9 +53,9 @@ function parseOpenTools(v: unknown, mode: ToolLayoutMode): SideTool[] {
   return ['cmd']
 }
 
-function load(): Partial<LayoutState> {
+function fromLocalStorage(): LayoutPersist | null {
   try {
-    const rawV4 = localStorage.getItem(STORAGE_KEY)
+    const rawV4 = localStorage.getItem('fpm.layout.v4')
     if (rawV4) {
       const o = JSON.parse(rawV4) as Record<string, unknown>
       const mode = parseMode(o.toolLayoutMode)
@@ -67,8 +68,6 @@ function load(): Partial<LayoutState> {
         openTools: parseOpenTools(o.openTools, mode),
       }
     }
-
-    // Migrate v3
     const rawV3 = localStorage.getItem('fpm.layout.v3')
     if (rawV3) {
       const o = JSON.parse(rawV3) as {
@@ -78,7 +77,11 @@ function load(): Partial<LayoutState> {
         terminalHeight?: number
         sideTool?: unknown
       }
-      const side = isSideTool(o.sideTool) ? o.sideTool : o.sideTool === null ? null : 'cmd'
+      const side = isSideTool(o.sideTool)
+        ? o.sideTool
+        : o.sideTool === null
+          ? null
+          : 'cmd'
       return {
         railWidth: num(o.railWidth, 240),
         listWidth: num(o.listWidth, 280),
@@ -88,34 +91,68 @@ function load(): Partial<LayoutState> {
         openTools: side ? [side] : [],
       }
     }
-    return {}
   } catch {
-    return {}
+    /* ignore */
+  }
+  return null
+}
+
+function snapshot(s: LayoutPersist) {
+  return {
+    railWidth: s.railWidth,
+    listWidth: s.listWidth,
+    toolPanelWidth: s.toolPanelWidth,
+    terminalHeight: s.terminalHeight,
+    toolLayoutMode: s.toolLayoutMode,
+    openTools: s.openTools,
   }
 }
 
-const saved = load()
+let persistTimer: ReturnType<typeof setTimeout> | null = null
+
+function schedulePersist() {
+  if (persistTimer) clearTimeout(persistTimer)
+  persistTimer = setTimeout(() => {
+    persistTimer = null
+    useLayoutStore.getState().persist()
+  }, 200)
+}
 
 export const useLayoutStore = create<LayoutState>((set, get) => ({
-  railWidth: num(saved.railWidth, 240),
-  listWidth: num(saved.listWidth, 280),
-  toolPanelWidth: num(saved.toolPanelWidth, 300),
-  terminalHeight: num(saved.terminalHeight, 220),
-  toolLayoutMode: saved.toolLayoutMode ?? 'single',
-  openTools: saved.openTools ?? ['cmd'],
-  setRailWidth: (n) => set({ railWidth: clamp(n, 180, 420) }),
-  setListWidth: (n) => set({ listWidth: clamp(n, 200, 480) }),
-  setToolPanelWidth: (n) => set({ toolPanelWidth: clamp(n, 220, 560) }),
-  setTerminalHeight: (n) => set({ terminalHeight: clamp(n, 120, 520) }),
-  setToolLayoutMode: (mode) =>
+  railWidth: 240,
+  listWidth: 280,
+  toolPanelWidth: 300,
+  terminalHeight: 220,
+  toolLayoutMode: 'single',
+  openTools: ['cmd'],
+  hydrated: false,
+  setRailWidth: (n) => {
+    set({ railWidth: clamp(n, 180, 420) })
+    schedulePersist()
+  },
+  setListWidth: (n) => {
+    set({ listWidth: clamp(n, 200, 480) })
+    schedulePersist()
+  },
+  setToolPanelWidth: (n) => {
+    set({ toolPanelWidth: clamp(n, 220, 560) })
+    schedulePersist()
+  },
+  setTerminalHeight: (n) => {
+    set({ terminalHeight: clamp(n, 120, 520) })
+    schedulePersist()
+  },
+  setToolLayoutMode: (mode) => {
     set((s) => ({
       toolLayoutMode: mode,
       openTools:
         mode === 'single'
           ? s.openTools.slice(0, 1)
           : TOOL_ORDER.filter((id) => s.openTools.includes(id)),
-    })),
-  toggleSideTool: (tool) =>
+    }))
+    schedulePersist()
+  },
+  toggleSideTool: (tool) => {
     set((s) => {
       const open = s.openTools.includes(tool)
       if (s.toolLayoutMode === 'single') {
@@ -129,28 +166,48 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
           (id) => id === tool || s.openTools.includes(id),
         ),
       }
-    }),
-  closeSideTool: (tool) =>
-    set((s) => ({ openTools: s.openTools.filter((id) => id !== tool) })),
+    })
+    schedulePersist()
+  },
+  closeSideTool: (tool) => {
+    set((s) => ({ openTools: s.openTools.filter((id) => id !== tool) }))
+    schedulePersist()
+  },
+  hydrate: async () => {
+    try {
+      const remote = await invoke<LayoutPersist | null>('load_layout')
+      if (remote) {
+        const mode = parseMode(remote.toolLayoutMode)
+        set({
+          railWidth: num(remote.railWidth, 240),
+          listWidth: num(remote.listWidth, 280),
+          toolPanelWidth: num(remote.toolPanelWidth, 300),
+          terminalHeight: num(remote.terminalHeight, 220),
+          toolLayoutMode: mode,
+          openTools: parseOpenTools(remote.openTools, mode),
+          hydrated: true,
+        })
+        return
+      }
+      const legacy = fromLocalStorage()
+      if (legacy) {
+        set({ ...legacy, hydrated: true })
+        get().persist()
+        try {
+          localStorage.removeItem('fpm.layout.v4')
+          localStorage.removeItem('fpm.layout.v3')
+        } catch {
+          /* ignore */
+        }
+        return
+      }
+    } catch {
+      /* fall through to defaults */
+    }
+    set({ hydrated: true })
+  },
   persist: () => {
-    const {
-      railWidth,
-      listWidth,
-      toolPanelWidth,
-      terminalHeight,
-      toolLayoutMode,
-      openTools,
-    } = get()
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        railWidth,
-        listWidth,
-        toolPanelWidth,
-        terminalHeight,
-        toolLayoutMode,
-        openTools,
-      }),
-    )
+    const s = get()
+    void invoke('save_layout', { layout: snapshot(s) }).catch(() => {})
   },
 }))

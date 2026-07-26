@@ -67,9 +67,7 @@ const BUILTIN_PROBES: &[IdeProbe] = &[
         cli: &["code"],
         win_paths: &[
             r"%LOCALAPPDATA%\Programs\Microsoft VS Code\Code.exe",
-            r"%LOCALAPPDATA%\Programs\Microsoft VS Code\bin\code.cmd",
             r"%PROGRAMFILES%\Microsoft VS Code\Code.exe",
-            r"%PROGRAMFILES%\Microsoft VS Code\bin\code.cmd",
         ],
         mac_paths: &[
             "/Applications/Visual Studio Code.app",
@@ -86,7 +84,6 @@ const BUILTIN_PROBES: &[IdeProbe] = &[
         win_paths: &[
             r"%LOCALAPPDATA%\Programs\cursor\Cursor.exe",
             r"%LOCALAPPDATA%\Programs\Cursor\Cursor.exe",
-            r"%LOCALAPPDATA%\Programs\cursor\resources\app\bin\cursor.cmd",
         ],
         mac_paths: &["/Applications/Cursor.app", "$HOME/Applications/Cursor.app"],
         toolbox_dirs: &[],
@@ -125,7 +122,6 @@ const BUILTIN_PROBES: &[IdeProbe] = &[
         win_paths: &[
             r"%LOCALAPPDATA%\Programs\Trae\Trae.exe",
             r"%LOCALAPPDATA%\Programs\trae\Trae.exe",
-            r"%LOCALAPPDATA%\Programs\Trae\bin\trae.cmd",
         ],
         mac_paths: &["/Applications/Trae.app", "$HOME/Applications/Trae.app"],
         toolbox_dirs: &[],
@@ -262,21 +258,36 @@ const BUILTIN_PROBES: &[IdeProbe] = &[
     },
 ];
 
-/// Fast defaults for first launch — short CLI names (PATH may resolve later).
+/// Fast defaults for first launch — start empty; user scans or adds IDEs.
 pub fn default_ides() -> Vec<IdeConfig> {
-    BUILTIN_PROBES
-        .iter()
-        .take(4)
-        .map(|p| IdeConfig {
-            id: p.id.into(),
-            name: p.name.into(),
-            executable: p.cli.first().copied().unwrap_or(p.id).into(),
-            args_template: "{path}".into(),
-            enabled: true,
-            builtin: true,
-            icon_path: None,
-        })
-        .collect()
+    Vec::new()
+}
+
+/// On Windows, only real `.exe` paths are accepted (drop `.cmd` / `.bat` / bare CLI names).
+fn is_accepted_executable(path: &str) -> bool {
+    let path = path.trim();
+    if path.is_empty() {
+        return false;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        PathBuf::from(path)
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.eq_ignore_ascii_case("exe"))
+            .unwrap_or(false)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        true
+    }
+}
+
+/// Drop Windows non-`.exe` entries (legacy placeholders like `code` / `cursor.cmd`).
+pub fn scrub_ides(ides: &mut Vec<IdeConfig>) -> bool {
+    let before = ides.len();
+    ides.retain(|ide| is_accepted_executable(&ide.executable));
+    ides.len() != before
 }
 
 fn env_var_ci(name: &str) -> Option<String> {
@@ -321,6 +332,9 @@ fn is_launchable_path(p: &PathBuf) -> bool {
 
 fn first_existing_path(candidates: &[String]) -> Option<String> {
     for c in candidates {
+        if !is_accepted_executable(c) {
+            continue;
+        }
         let p = PathBuf::from(c);
         if is_launchable_path(&p) {
             return Some(p.to_string_lossy().to_string());
@@ -342,16 +356,11 @@ fn which_cmd(name: &str) -> Option<String> {
         if !output.status.success() {
             return None;
         }
-        let line = String::from_utf8_lossy(&output.stdout)
+        // Prefer a real .exe; ignore .cmd/.bat shims from PATH.
+        String::from_utf8_lossy(&output.stdout)
             .lines()
-            .next()?
-            .trim()
-            .to_string();
-        if line.is_empty() {
-            None
-        } else {
-            Some(line)
-        }
+            .map(|l| l.trim().to_string())
+            .find(|line| !line.is_empty() && is_accepted_executable(line))
     }
     #[cfg(not(target_os = "windows"))]
     {
@@ -538,7 +547,7 @@ fn extra_keywords_from_env() -> Vec<String> {
 
 fn push_unique(out: &mut Vec<InstalledEditor>, name: &str, executable: String) {
     let exe = executable.trim().to_string();
-    if exe.is_empty() {
+    if exe.is_empty() || !is_accepted_executable(&exe) {
         return;
     }
     if out
@@ -554,6 +563,9 @@ fn push_unique(out: &mut Vec<InstalledEditor>, name: &str, executable: String) {
     } else {
         exe
     };
+    if !is_accepted_executable(&resolved) {
+        return;
+    }
     let available = is_launchable_path(&PathBuf::from(&resolved));
     out.push(InstalledEditor {
         name: name.trim().to_string(),
@@ -737,7 +749,7 @@ Get-ItemProperty $keys |
     rows.into_iter()
         .filter_map(|r| {
             let exe = r.executable.trim().to_string();
-            if exe.is_empty() {
+            if exe.is_empty() || !is_accepted_executable(&exe) {
                 return None;
             }
             Some(InstalledEditor {
@@ -821,6 +833,9 @@ pub fn detect_ides() -> Vec<IdeConfig> {
     let mut configs = Vec::new();
     for probe in BUILTIN_PROBES {
         if let Some(exe) = resolve_probe(probe) {
+            if !is_accepted_executable(&exe) {
+                continue;
+            }
             configs.push(IdeConfig {
                 id: probe.id.into(),
                 name: probe.name.into(),
@@ -834,6 +849,9 @@ pub fn detect_ides() -> Vec<IdeConfig> {
     }
     for (name, cli, paths, _) in probes_from_env_extra() {
         if let Some(exe) = first_existing_path(&paths).or_else(|| which_cmd(&cli)) {
+            if !is_accepted_executable(&exe) {
+                continue;
+            }
             let id = name
                 .to_ascii_lowercase()
                 .chars()
@@ -849,9 +867,6 @@ pub fn detect_ides() -> Vec<IdeConfig> {
                 icon_path: None,
             });
         }
-    }
-    if configs.is_empty() {
-        return default_ides();
     }
     configs
 }

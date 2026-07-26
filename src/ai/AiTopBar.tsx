@@ -1,3 +1,4 @@
+import { Settings } from 'reicon-react'
 import { useState } from 'react'
 import { useI18n } from '../i18n/useI18n'
 import { useAiStore } from '../stores/aiStore'
@@ -36,10 +37,12 @@ export function AiTopBar() {
         </select>
         <button
           type="button"
-          className="ai-btn ai-btn-sm"
+          className="ai-btn ai-btn-sm ai-topbar-settings"
+          title={t('ai.settings')}
+          aria-label={t('ai.settings')}
           onClick={() => setSettingsOpen(true)}
         >
-          {t('ai.settings')}
+          <Settings className="ui-icon" size={20} color="currentColor" aria-hidden />
         </button>
       </header>
       {settingsOpen ? (

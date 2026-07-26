@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import { create } from 'zustand'
+import { create } from '../lib/createStore'
 import { isTauri } from '../lib/tauri'
 import type { AppConfig, IdeConfig } from '../lib/types'
 
@@ -67,6 +67,7 @@ type SettingsState = {
   loading: boolean
   error: string | null
   ideModalOpen: boolean
+  aiSettingsOpen: boolean
   settingsOpen: boolean
   load: () => Promise<void>
   saveWorkspaces: (workspaces: string[]) => Promise<void>
@@ -88,6 +89,7 @@ type SettingsState = {
   ) => Promise<void>
   setLocale: (locale: 'zh' | 'en') => Promise<void>
   setIdeModalOpen: (open: boolean) => void
+  setAiSettingsOpen: (open: boolean) => void
   setSettingsOpen: (open: boolean) => void
   applyConfig: (cfg: AppConfig) => void
 }
@@ -98,9 +100,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   loading: false,
   error: null,
   ideModalOpen: false,
+  aiSettingsOpen: false,
   settingsOpen: false,
   applyConfig: (cfg) => set({ config: cfg }),
   setIdeModalOpen: (open) => set({ ideModalOpen: open }),
+  setAiSettingsOpen: (open) => set({ aiSettingsOpen: open }),
   setSettingsOpen: (open) => set({ settingsOpen: open }),
   load: async () => {
     set({ loading: true, error: null })

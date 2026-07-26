@@ -102,6 +102,8 @@ export type TermSession = {
   connected: boolean
   /** A foreground command is in progress (app-dispatched). */
   running: boolean
+  /** User or app has run at least one command in this tab. */
+  dirty: boolean
 }
 
 export function sortScriptNames(names: string[]): string[] {

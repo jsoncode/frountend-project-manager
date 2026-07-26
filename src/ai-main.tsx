@@ -1,9 +1,12 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import App from './App'
+import AiApp from './ai/AiApp'
 import { ErrorBoundary } from './components/ErrorBoundary'
 
-/** Main FPM window entry — never mounts AiApp. */
+/**
+ * Dedicated AI window entry — always mounts AiApp.
+ * Do not share main.tsx shell detection (hash / query / label races).
+ */
 const rootEl = document.getElementById('root')
 if (!rootEl) {
   throw new Error('Missing #root')
@@ -12,7 +15,7 @@ if (!rootEl) {
 createRoot(rootEl).render(
   <StrictMode>
     <ErrorBoundary>
-      <App />
+      <AiApp />
     </ErrorBoundary>
   </StrictMode>,
 )

@@ -1,3 +1,4 @@
+import { ArrowRight, CheckCircle } from 'reicon-react'
 import { invoke } from '@tauri-apps/api/core'
 import { useEffect, useState } from 'react'
 import { useI18n } from '../i18n/useI18n'
@@ -71,7 +72,9 @@ export function BranchSwitchModal({ branch, onClose }: Props) {
       <p className="branch-switch-path">
         <span className="muted">{t('branch.from')}</span>{' '}
         <strong>{status?.current ?? '—'}</strong>{' '}
-        <span className="muted">→</span>{' '}
+        <span className="muted inline-icon" aria-hidden>
+          <ArrowRight size={14} color="currentColor" />
+        </span>{' '}
         <strong className="cyan-text">{branch}</strong>
       </p>
 
@@ -115,10 +118,11 @@ export function BranchSwitchModal({ branch, onClose }: Props) {
         </button>
         <button
           type="button"
-          className="btn primary"
+          className="btn primary btn-with-icon"
           disabled={loading || switching || !selected}
           onClick={() => void confirm()}
         >
+          <CheckCircle className="ui-icon" size={14} color="currentColor" aria-hidden />
           {switching ? t('branch.switching') : t('branch.confirm')}
         </button>
       </div>

@@ -1,9 +1,15 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
-import { create } from 'zustand'
+import { create } from '../lib/createStore'
 import { isTauri } from '../lib/tauri'
 import type { TermSession } from '../lib/types'
-import { waitPtyReady, writeToTerminal } from '../lib/ptyHost'
+import { getTerminalPlainText, waitPtyReady, writeToTerminal } from '../lib/ptyHost'
+import {
+  detectIssueKind,
+  trimLogTail,
+  type TermIssueAlert,
+  type TermIssueKind,
+} from '../lib/termIssue'
 import { useSettingsStore } from './settingsStore'
 
 let seq = 1
@@ -36,9 +42,43 @@ type EnsureOpts = {
   allowBusy?: boolean
 }
 
+/** Debounced buffer snapshot after an issue keyword appears. */
+const issueCaptureTimers = new Map<string, number>()
+const pendingIssueKind = new Map<string, TermIssueKind>()
+
+function scheduleIssueCapture(
+  terminalId: string,
+  kind: TermIssueKind,
+  setAlert: (id: string, alert: TermIssueAlert) => void,
+) {
+  const prev = pendingIssueKind.get(terminalId)
+  // Prefer error over warning if both fire in the same burst.
+  if (!(prev === 'error' && kind === 'warning')) {
+    pendingIssueKind.set(terminalId, kind)
+  }
+  const existing = issueCaptureTimers.get(terminalId)
+  if (existing) window.clearTimeout(existing)
+  const timer = window.setTimeout(() => {
+    issueCaptureTimers.delete(terminalId)
+    const finalKind = pendingIssueKind.get(terminalId) ?? kind
+    pendingIssueKind.delete(terminalId)
+    const raw = getTerminalPlainText(terminalId, 120)
+    const snippet = trimLogTail(raw)
+    if (!snippet.trim()) return
+    setAlert(terminalId, {
+      kind: finalKind,
+      snippet,
+      detectedAt: Date.now(),
+    })
+  }, 450)
+  issueCaptureTimers.set(terminalId, timer)
+}
+
 type TerminalState = {
   sessions: TermSession[]
   activeId: string | null
+  /** Per-session auto-detected log issues for the AI analyze FAB. */
+  issueAlerts: Record<string, TermIssueAlert | undefined>
   createSession: (projectPath: string, projectName: string) => string
   closeSession: (id: string) => Promise<void>
   setActive: (id: string) => void
@@ -57,12 +97,16 @@ type TerminalState = {
   runRaw: (projectPath: string, projectName: string, command: string) => Promise<void>
   markConnected: (id: string, connected: boolean) => void
   markRunning: (id: string, running: boolean) => void
+  markDirty: (id: string) => void
+  setIssueAlert: (id: string, alert: TermIssueAlert) => void
+  clearIssueAlert: (id: string) => void
   startListening: () => Promise<UnlistenFn>
 }
 
 export const useTerminalStore = create<TerminalState>((set, get) => ({
   sessions: [],
   activeId: null,
+  issueAlerts: {},
 
   createSession: (projectPath, projectName) => {
     const id = newId()
@@ -76,6 +120,7 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
       projectName,
       connected: false,
       running: false,
+      dirty: false,
     }
     set((s) => ({
       sessions: [...s.sessions, session],
@@ -85,6 +130,10 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
   },
 
   closeSession: async (id) => {
+    const t = issueCaptureTimers.get(id)
+    if (t) window.clearTimeout(t)
+    issueCaptureTimers.delete(id)
+    pendingIssueKind.delete(id)
     try {
       if (isTauri()) {
         await invoke('pty_kill', { terminalId: id })
@@ -96,7 +145,9 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
       const sessions = s.sessions.filter((t) => t.id !== id)
       const activeId =
         s.activeId === id ? (sessions[sessions.length - 1]?.id ?? null) : s.activeId
-      return { sessions, activeId }
+      const issueAlerts = { ...s.issueAlerts }
+      delete issueAlerts[id]
+      return { sessions, activeId, issueAlerts }
     })
   },
 
@@ -112,9 +163,41 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
     })),
 
   markRunning: (id, running) =>
+    set((s) => {
+      // New command → clear previous analyze chip for this tab.
+      if (running) {
+        const issueAlerts = { ...s.issueAlerts }
+        delete issueAlerts[id]
+        return {
+          sessions: s.sessions.map((t) =>
+            t.id === id ? { ...t, running, dirty: true } : t,
+          ),
+          issueAlerts,
+        }
+      }
+      return {
+        sessions: s.sessions.map((t) => (t.id === id ? { ...t, running } : t)),
+      }
+    }),
+
+  markDirty: (id) =>
     set((s) => ({
-      sessions: s.sessions.map((t) => (t.id === id ? { ...t, running } : t)),
+      sessions: s.sessions.map((t) =>
+        t.id === id && !t.dirty ? { ...t, dirty: true } : t,
+      ),
     })),
+
+  setIssueAlert: (id, alert) =>
+    set((s) => ({
+      issueAlerts: { ...s.issueAlerts, [id]: alert },
+    })),
+
+  clearIssueAlert: (id) =>
+    set((s) => {
+      const issueAlerts = { ...s.issueAlerts }
+      delete issueAlerts[id]
+      return { issueAlerts }
+    }),
 
   ensureRunTarget: (projectPath, projectName, opts) => {
     const allowBusy = opts?.allowBusy === true
@@ -183,10 +266,17 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
     }
     const unData = await listen<PtyDataEvent>('pty://data', (event) => {
       const id = event.payload.terminalId
-      writeToTerminal(id, event.payload.data)
+      const data = event.payload.data
+      writeToTerminal(id, data)
       const session = get().sessions.find((t) => t.id === id)
-      if (session?.running && looksLikeShellPrompt(event.payload.data)) {
+      if (session?.running && looksLikeShellPrompt(data)) {
         get().markRunning(id, false)
+      }
+      const kind = detectIssueKind(data)
+      if (kind) {
+        scheduleIssueCapture(id, kind, (tid, alert) =>
+          get().setIssueAlert(tid, alert),
+        )
       }
     })
     const unExit = await listen<PtyExitEvent>('pty://exit', (event) => {
@@ -202,6 +292,9 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
     return () => {
       unData()
       unExit()
+      for (const t of issueCaptureTimers.values()) window.clearTimeout(t)
+      issueCaptureTimers.clear()
+      pendingIssueKind.clear()
     }
   },
 }))

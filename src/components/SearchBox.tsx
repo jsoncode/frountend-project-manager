@@ -1,3 +1,4 @@
+import { Search, Trash, X } from 'reicon-react'
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { useI18n } from '../i18n/useI18n'
 import type { HistoryItem } from '../lib/types'
@@ -84,6 +85,12 @@ export function SearchBox() {
 
   return (
     <div className="search-wrap" ref={wrapRef}>
+      <Search
+        className="search-leading-icon"
+        size={14}
+        color="currentColor"
+        aria-hidden
+      />
       <input
         className="search"
         value={search}
@@ -104,7 +111,7 @@ export function SearchBox() {
           aria-label={t('top.searchClear')}
           onClick={clear}
         >
-          ×
+          <X className="ui-icon" size={14} color="currentColor" aria-hidden />
         </button>
       )}
       {open && picks.length > 0 && (
@@ -134,7 +141,7 @@ export function SearchBox() {
                   void deleteHistory('', 'search', item)
                 }}
               >
-                ×
+                <Trash className="ui-icon" size={12} color="currentColor" aria-hidden />
               </button>
             </div>
           ))}

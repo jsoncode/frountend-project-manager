@@ -1,3 +1,10 @@
+import {
+  ArrowDown,
+  ArrowUp,
+  BranchDown,
+  CheckCircle,
+  Refresh,
+} from 'reicon-react'
 import { invoke } from '@tauri-apps/api/core'
 import { useCallback, useState, type MouseEvent } from 'react'
 import { useI18n } from '../i18n/useI18n'
@@ -53,6 +60,7 @@ export function GitToolPanel() {
   }
 
   const checkUpdates = async () => {
+    if (checking) return
     setChecking(true)
     try {
       await refreshGit({ fetch: true })
@@ -135,14 +143,21 @@ export function GitToolPanel() {
         }}
         onContextMenu={(e) => onContext(e, b)}
       >
-        <span className="branch-mark">{isCurrent ? '●' : '○'}</span>
+        <span className="branch-mark" aria-hidden>
+          <BranchDown
+            size={12}
+            color="currentColor"
+            weight={isCurrent ? 'Filled' : 'Outline'}
+          />
+        </span>
         <span className="branch-name">{b.name}</span>
         {b.behind > 0 && (
           <span
             className="branch-badge behind"
             title={t('git.behindHint', { n: b.behind })}
           >
-            ↓{b.behind}
+            <ArrowDown className="inline-icon" size={10} color="currentColor" aria-hidden />
+            {b.behind}
           </span>
         )}
         {b.ahead > 0 && (
@@ -150,7 +165,8 @@ export function GitToolPanel() {
             className="branch-badge ahead"
             title={t('git.aheadHint', { n: b.ahead })}
           >
-            ↑{b.ahead}
+            <ArrowUp className="inline-icon" size={10} color="currentColor" aria-hidden />
+            {b.ahead}
           </span>
         )}
       </div>
@@ -162,10 +178,16 @@ export function GitToolPanel() {
       <div className="git-toolbar">
         <button
           type="button"
-          className="btn btn-sm primary"
+          className="btn btn-sm primary btn-with-icon"
           disabled={checking || pulling}
           onClick={() => void checkUpdates()}
         >
+          <Refresh
+            className={`ui-icon${checking ? ' is-spinning' : ''}`}
+            size={14}
+            color="currentColor"
+            aria-hidden
+          />
           {checking ? t('git.checking') : t('git.checkUpdates')}
         </button>
       </div>
@@ -343,10 +365,11 @@ export function GitToolPanel() {
             </button>
             <button
               type="button"
-              className="btn primary"
+              className="btn primary btn-with-icon"
               disabled={!commitMsg.trim()}
               onClick={doCommit}
             >
+              <CheckCircle className="ui-icon" size={14} color="currentColor" aria-hidden />
               {t('git.ctx.commit')}
             </button>
           </div>
