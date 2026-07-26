@@ -1,30 +1,34 @@
+import { EditorShell } from './EditorShell'
 import { ProjectHeader } from './ProjectHeader'
+import { ResizeHandle } from './ResizeHandle'
 import { TerminalPanel } from './TerminalPanel'
 import { ToolWindow } from './ToolWindow'
-import { useI18n } from '../i18n/useI18n'
+import { useLayoutStore } from '../stores/layoutStore'
 import { useProjectStore } from '../stores/projectStore'
 
 export function DetailPane() {
   const selected = useProjectStore((s) => s.selected)
-  const { t } = useI18n()
-
-  if (!selected) {
-    return (
-      <section className="detail-pane">
-        <div className="detail-body detail-body-empty">
-          <div className="empty">{t('app.selectProject')}</div>
-          <ToolWindow />
-        </div>
-      </section>
-    )
-  }
+  const terminalHeight = useLayoutStore((s) => s.terminalHeight)
+  const persist = useLayoutStore((s) => s.persist)
 
   return (
     <section className="detail-pane">
-      <ProjectHeader />
-      <div className="detail-body">
+      <div className={`detail-body${selected ? '' : ' detail-body-empty'}`}>
         <div className="main-col">
-          <TerminalPanel />
+          <div className="editor-slot">
+            <ProjectHeader />
+            <EditorShell />
+          </div>
+          <ResizeHandle
+            orientation="horizontal"
+            onDrag={(d) => {
+              const { terminalHeight, setTerminalHeight } =
+                useLayoutStore.getState()
+              setTerminalHeight(terminalHeight - d)
+            }}
+            onDragEnd={persist}
+          />
+          <TerminalPanel height={terminalHeight} />
         </div>
         <ToolWindow />
       </div>

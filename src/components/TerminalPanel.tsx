@@ -28,7 +28,7 @@ function findProjectByPath(
   return null
 }
 
-export function TerminalPanel() {
+export function TerminalPanel({ height }: { height: number }) {
   const sessions = useTerminalStore((s) => s.sessions)
   const activeId = useTerminalStore((s) => s.activeId)
   const issueAlerts = useTerminalStore((s) => s.issueAlerts)
@@ -63,7 +63,7 @@ export function TerminalPanel() {
     if (workspace && workspace !== activeWorkspace) {
       setActiveWorkspace(workspace)
     }
-    // Clear search so the project is visible in browse mode.
+    // Clear search so the project is visible in the tree.
     if (useWorkspaceStore.getState().search.trim()) {
       setSearch('')
     }
@@ -122,52 +122,48 @@ export function TerminalPanel() {
   }
 
   return (
-    <div className="terminal">
+    <div className="terminal" style={{ height }}>
       <div className="terminal-tabs">
-        <div className="terminal-tab-list">
-          {sessions.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              className={`terminal-tab ${s.id === activeId ? 'active' : ''}`}
-              onClick={() => activateTab(s.id)}
-            >
-              <span className={s.connected ? 'term-dot running' : 'term-dot'} />
-              {s.title}
-              {issueAlerts[s.id] ? (
-                <span
-                  className={`term-issue-dot ${issueAlerts[s.id]!.kind}`}
-                  title={t('term.aiAnalyzeHint')}
-                />
-              ) : null}
-              <span
-                className="term-close"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  requestClose(s.id)
-                }}
-              >
-                <X className="ui-icon" size={12} color="currentColor" aria-hidden />
-              </span>
-            </button>
-          ))}
+        {sessions.map((s) => (
           <button
+            key={s.id}
             type="button"
-            className="terminal-tab add"
-            disabled={!selected}
-            onClick={addTerminal}
-            title={t('term.new')}
+            className={`terminal-tab ${s.id === activeId ? 'active' : ''}`}
+            onClick={() => activateTab(s.id)}
           >
-            <Add className="ui-icon" size={14} color="currentColor" aria-hidden />
-          </button>
-        </div>
-        <div className="terminal-tab-actions">
-          {active && (
-            <span className="muted">
-              {active.connected ? t('term.connected') : t('term.disconnected')}
+            <span className={s.connected ? 'term-dot running' : 'term-dot'} />
+            {s.title}
+            {issueAlerts[s.id] ? (
+              <span
+                className={`term-issue-dot ${issueAlerts[s.id]!.kind}`}
+                title={t('term.aiAnalyzeHint')}
+              />
+            ) : null}
+            <span
+              className="term-close"
+              onClick={(e) => {
+                e.stopPropagation()
+                requestClose(s.id)
+              }}
+            >
+              <X className="ui-icon" size={12} color="currentColor" aria-hidden />
             </span>
-          )}
-        </div>
+          </button>
+        ))}
+        <button
+          type="button"
+          className="terminal-tab add"
+          disabled={!selected}
+          onClick={addTerminal}
+          title={t('term.new')}
+        >
+          <Add className="ui-icon" size={14} color="currentColor" aria-hidden />
+        </button>
+        {active ? (
+          <span className="terminal-status muted">
+            {active.connected ? t('term.connected') : t('term.disconnected')}
+          </span>
+        ) : null}
       </div>
 
       {!active && (
@@ -200,19 +196,13 @@ export function TerminalPanel() {
         role="status"
         aria-live="polite"
       >
-        <div className="term-ai-bar-text">
-          <span className="term-ai-bar-title btn-with-icon">
-            <ChatRoundDots className="ui-icon" size={14} color="currentColor" aria-hidden />
-            {t('term.aiChat')}
-          </span>
-          <span className="term-ai-bar-hint muted">
-            {activeIssue
-              ? activeIssue.kind === 'error'
-                ? t('term.aiAnalyzeErrorHint')
-                : t('term.aiAnalyzeWarnHint')
-              : t('term.aiAnalyzeIdleHint')}
-          </span>
-        </div>
+        <span className="term-ai-bar-hint muted">
+          {activeIssue
+            ? activeIssue.kind === 'error'
+              ? t('term.aiAnalyzeErrorHint')
+              : t('term.aiAnalyzeWarnHint')
+            : t('term.aiAnalyzeIdleHint')}
+        </span>
         <button type="button" className="btn btn-sm primary btn-with-icon" onClick={openAi}>
           <ChatRoundDots className="ui-icon" size={14} color="currentColor" aria-hidden />
           {t('term.aiChat')}

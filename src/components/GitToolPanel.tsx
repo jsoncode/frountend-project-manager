@@ -46,7 +46,9 @@ export function GitToolPanel() {
 
   const closeMenu = useCallback(() => setMenu(null), [])
 
-  if (!selected) return null
+  if (!selected) {
+    return <div className="muted">{t('tool.needProject')}</div>
+  }
 
   const runGit = (command: string) => {
     void runRaw(selected.path, selected.folderName, command)

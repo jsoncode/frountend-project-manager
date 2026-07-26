@@ -4,7 +4,6 @@ import {
   FolderOpen,
   InfoCircle,
   Key,
-  Layers,
   Settings,
   TerminalSquare,
 } from 'reicon-react'
@@ -26,18 +25,18 @@ import { ResizeHandle } from './ResizeHandle'
 
 const TOOL_LABEL: Record<
   SideTool,
-  'tool.cmd' | 'tool.git' | 'tool.env' | 'tool.meta' | 'tool.ide'
+  'tool.git' | 'tool.cmd' | 'tool.env' | 'tool.meta' | 'tool.ide'
 > = {
+  git: 'tool.git',
   ide: 'tool.ide',
   cmd: 'tool.cmd',
-  git: 'tool.git',
   env: 'tool.env',
   meta: 'tool.meta',
 }
 
 const TOOL_ICON: Partial<Record<SideTool, typeof TerminalSquare>> = {
-  cmd: TerminalSquare,
   git: BranchDown,
+  cmd: TerminalSquare,
   env: Key,
   meta: InfoCircle,
 }
@@ -54,11 +53,9 @@ export function ToolWindow() {
   const config = useSettingsStore((s) => s.config)
   const setIdeModalOpen = useSettingsStore((s) => s.setIdeModalOpen)
   const openTools = useLayoutStore((s) => s.openTools)
-  const toolLayoutMode = useLayoutStore((s) => s.toolLayoutMode)
   const toolPanelWidth = useLayoutStore((s) => s.toolPanelWidth)
   const toggleSideTool = useLayoutStore((s) => s.toggleSideTool)
   const closeSideTool = useLayoutStore((s) => s.closeSideTool)
-  const setToolLayoutMode = useLayoutStore((s) => s.setToolLayoutMode)
   const persist = useLayoutStore((s) => s.persist)
   const { t } = useI18n()
 
@@ -89,7 +86,7 @@ export function ToolWindow() {
     }
 
     if (id === 'cmd') return <CommandPanel />
-    if (id === 'git' && selected) return <GitToolPanel />
+    if (id === 'git') return <GitToolPanel />
 
     if (id === 'env' && selected) {
       return (
@@ -141,34 +138,21 @@ export function ToolWindow() {
     if (id === 'meta' && selected) {
       return (
         <>
-          <div className="pane-sub">{t('meta.lang')}</div>
-          <div className="script-tags">
-            {(details?.languages ?? []).map((l) => (
-              <span key={l} className="script-tag static">
-                {l}
-              </span>
-            ))}
-            {(details?.languages.length ?? 0) === 0 && (
-              <span className="muted">—</span>
-            )}
-          </div>
           {details?.summary.pkgName && (
             <>
-              <div className="pane-sub" style={{ marginTop: 10 }}>
-                {t('meta.package')}
-              </div>
+              <div className="pane-sub">{t('meta.package')}</div>
               <div className="muted">
                 {details.summary.pkgName}
-                {details.summary.pkgVersion
-                  ? ` · v${details.summary.pkgVersion}`
-                  : ''}
                 {details.packageManager ? ` · ${details.packageManager}` : ''}
               </div>
             </>
           )}
           {(details?.summary.frameworks.length ?? 0) > 0 && (
             <>
-              <div className="pane-sub" style={{ marginTop: 10 }}>
+              <div
+                className="pane-sub"
+                style={{ marginTop: details?.summary.pkgName ? 10 : 0 }}
+              >
                 {t('meta.frameworks')}
               </div>
               <div className="script-tags">
@@ -180,6 +164,10 @@ export function ToolWindow() {
               </div>
             </>
           )}
+          {!details?.summary.pkgName &&
+            (details?.summary.frameworks.length ?? 0) === 0 && (
+              <span className="muted">—</span>
+            )}
         </>
       )
     }
@@ -243,7 +231,7 @@ export function ToolWindow() {
   }
 
   return (
-    <div className={`tool-window mode-${toolLayoutMode}`}>
+    <div className="tool-window mode-single">
       {panelsOpen && (
         <>
           <ResizeHandle
@@ -257,10 +245,10 @@ export function ToolWindow() {
             onDragEnd={persist}
           />
           <div
-            className={`tool-panels-col ${toolLayoutMode === 'stack' ? 'stack' : 'single'}`}
+            className="tool-panels-col single"
             style={{ width: toolPanelWidth }}
           >
-            {openTools.map((id) => (
+            {openTools.slice(0, 1).map((id) => (
               <aside key={id} className="tool-panel">
                 <div className="tool-panel-head">
                   <h2>{t(TOOL_LABEL[id])}</h2>
@@ -284,21 +272,6 @@ export function ToolWindow() {
       )}
 
       <nav className="tool-strip" aria-label={t('tool.strip')}>
-        <button
-          type="button"
-          className={`tool-strip-mode ${toolLayoutMode === 'stack' ? 'active' : ''}`}
-          title={
-            toolLayoutMode === 'stack'
-              ? t('tool.modeStackHint')
-              : t('tool.modeSingleHint')
-          }
-          onClick={() => {
-            setToolLayoutMode(toolLayoutMode === 'stack' ? 'single' : 'stack')
-            persist()
-          }}
-        >
-          <Layers className="ui-icon" size={16} color="currentColor" aria-hidden />
-        </button>
         {TOOL_ORDER.map((id) => {
           const Icon = TOOL_ICON[id]
           return (

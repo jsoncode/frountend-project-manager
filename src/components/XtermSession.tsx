@@ -220,12 +220,11 @@ export function XtermSession({ sessionId, cwd, active }: Props) {
 
   return (
     <div
+      ref={hostRef}
       className={`xterm-session ${active ? 'active' : ''}`}
       hidden={!active}
       onContextMenu={onContextMenu}
     >
-      {/* FitAddon must measure an unpadded box; padding lives on the outer shell. */}
-      <div className="xterm-fit-host" ref={hostRef} />
       {menu && (
         <ContextMenuPortal x={menu.x} y={menu.y} onClose={closeMenu}>
           <button

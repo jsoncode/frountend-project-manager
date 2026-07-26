@@ -4,7 +4,7 @@ export type MessageKey = keyof typeof zh
 
 const zh = {
   'app.noWorkspace': '未选择工作区',
-  'app.selectProject': '从左侧选择项目，或先添加一个工作区。',
+  'app.selectProject': '从左侧资源管理器选择项目或文件。',
   'app.tauriOnly': '请通过 pnpm tauri:dev 启动桌面应用',
   'error.logTitle': '错误日志',
 
@@ -30,7 +30,20 @@ const zh = {
   'ws.refreshTitle': '刷新全部工作区项目',
   'ws.removeTitle': '删除工作区',
   'ws.removeConfirm': '确定删除工作区「{name}」吗？此操作不会删除磁盘上的文件。',
-  'ws.empty': '添加工作区文件夹以开始。',
+  'ws.empty': '通过「文件 → 添加工作区」开始。',
+
+  'menu.bar': '主菜单',
+  'menu.file': '文件',
+  'menu.addWorkspace': '添加工作区',
+  'menu.newWorkspace': '新建工作区',
+  'menu.newWorkspaceHint': '输入文件夹名称，下一步选择创建位置。',
+  'menu.newWorkspacePlaceholder': '工作区名称',
+  'menu.newWorkspaceNext': '选择位置并创建',
+
+  'window.minimize': '最小化',
+  'window.maximize': '最大化',
+  'window.restore': '还原',
+  'window.close': '关闭',
 
   'open.withIde': '用 {name} 打开',
   'open.inFileManager': '在文件管理器中打开',
@@ -45,7 +58,33 @@ const zh = {
   'projects.locate': '定位到当前选中项目',
   'projects.workspaceGroup': '工作区 · {name}',
 
-  'header.noGit': '非 Git',
+  'explorer.title': '资源管理器',
+  'explorer.loading': '加载中…',
+  'explorer.emptyDir': '空文件夹',
+  'explorer.noProjects': '此工作区下没有前端项目',
+  'explorer.copyPath': '复制路径',
+
+  'sidebar.nav': '侧边栏视图',
+  'sidebar.project': '项目',
+  'sidebar.search': '搜索',
+  'sidebar.git': '分支',
+  'sidebar.searchHint': '输入关键词，跨工作区搜索项目',
+
+  'search.scanning': '正在扫描其他工作区…',
+  'search.empty': '没有匹配的项目',
+
+  'editor.shellEmpty': '选择文件后将在此打开编辑器',
+  'editor.shellSelected': '已选中「{name}」',
+  'editor.shellFolder': '已选中文件夹「{name}」',
+  'editor.loading': '正在打开文件…',
+  'editor.openFailed': '无法打开文件',
+  'editor.retry': '重试',
+  'editor.save': '保存',
+  'editor.saving': '保存中…',
+  'editor.unsaved': '未保存',
+  'editor.unsavedConfirm': '当前文件有未保存的更改，切换后将丢失。确定继续？',
+  'editor.close': '关闭编辑器',
+  'editor.closeUnsavedConfirm': '当前文件有未保存的更改，关闭后将丢失。确定关闭？',
 
   'cmd.title': '项目命令',
   'cmd.selectProject': '请选择一个项目',
@@ -118,7 +157,6 @@ const zh = {
   'env.reveal': '显示值',
 
   'meta.title': '元信息',
-  'meta.lang': '语言 / 样式',
   'meta.package': '包信息',
   'meta.frameworks': '框架',
   'meta.more': '更多',
@@ -262,7 +300,7 @@ const zh = {
 
 const en: Record<MessageKey, string> = {
   'app.noWorkspace': 'No workspace',
-  'app.selectProject': 'Select a project from the list — or add a workspace to get started.',
+  'app.selectProject': 'Select a project or file in the explorer.',
   'app.tauriOnly': 'Please launch via pnpm tauri:dev',
   'error.logTitle': 'Error log',
 
@@ -288,7 +326,20 @@ const en: Record<MessageKey, string> = {
   'ws.refreshTitle': 'Refresh all workspace projects',
   'ws.removeTitle': 'Remove workspace',
   'ws.removeConfirm': 'Remove workspace "{name}"? This does not delete files on disk.',
-  'ws.empty': 'Add a workspace folder to begin.',
+  'ws.empty': 'Use File → Add workspace to begin.',
+
+  'menu.bar': 'Main menu',
+  'menu.file': 'File',
+  'menu.addWorkspace': 'Add workspace',
+  'menu.newWorkspace': 'New workspace',
+  'menu.newWorkspaceHint': 'Enter a folder name, then choose where to create it.',
+  'menu.newWorkspacePlaceholder': 'Workspace name',
+  'menu.newWorkspaceNext': 'Choose location & create',
+
+  'window.minimize': 'Minimize',
+  'window.maximize': 'Maximize',
+  'window.restore': 'Restore',
+  'window.close': 'Close',
 
   'open.withIde': 'Open with {name}',
   'open.inFileManager': 'Reveal in file manager',
@@ -303,7 +354,35 @@ const en: Record<MessageKey, string> = {
   'projects.locate': 'Scroll selected project into view',
   'projects.workspaceGroup': 'Workspace · {name}',
 
-  'header.noGit': 'no git',
+  'explorer.title': 'EXPLORER',
+  'explorer.loading': 'Loading…',
+  'explorer.emptyDir': 'Empty folder',
+  'explorer.noProjects': 'No frontend projects in this workspace',
+  'explorer.copyPath': 'Copy path',
+
+  'sidebar.nav': 'Sidebar views',
+  'sidebar.project': 'Project',
+  'sidebar.search': 'Search',
+  'sidebar.git': 'Branches',
+  'sidebar.searchHint': 'Type to search projects across workspaces',
+
+  'search.scanning': 'Scanning other workspaces…',
+  'search.empty': 'No projects match.',
+
+  'editor.shellEmpty': 'Select a file to open the editor',
+  'editor.shellSelected': 'Selected "{name}"',
+  'editor.shellFolder': 'Selected folder "{name}"',
+  'editor.loading': 'Opening file…',
+  'editor.openFailed': 'Could not open file',
+  'editor.retry': 'Retry',
+  'editor.save': 'Save',
+  'editor.saving': 'Saving…',
+  'editor.unsaved': 'Unsaved',
+  'editor.unsavedConfirm':
+    'The current file has unsaved changes that will be lost. Continue?',
+  'editor.close': 'Close editor',
+  'editor.closeUnsavedConfirm':
+    'The current file has unsaved changes that will be lost. Close anyway?',
 
   'cmd.title': 'PROJECT COMMANDS',
   'cmd.selectProject': 'Select a project',
@@ -376,7 +455,6 @@ const en: Record<MessageKey, string> = {
   'env.reveal': 'reveal values',
 
   'meta.title': 'META',
-  'meta.lang': 'LANG / STYLE',
   'meta.package': 'Package',
   'meta.frameworks': 'Frameworks',
   'meta.more': 'MORE',

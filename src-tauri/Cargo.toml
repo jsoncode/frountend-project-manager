@@ -22,7 +22,6 @@ tauri-plugin-log = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-shell = "2"
 uuid = { version = "1", features = ["v4"] }
-walkdir = "2"
 once_cell = "1"
 parking_lot = "0.12"
 kill_tree = "0.2"

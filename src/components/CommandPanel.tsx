@@ -1,6 +1,5 @@
 import { Play } from 'reicon-react'
 import { useI18n } from '../i18n/useI18n'
-import { sortScriptNames } from '../lib/types'
 import { HistoryChips } from './HistoryChips'
 import { useProjectStore } from '../stores/projectStore'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -21,7 +20,8 @@ export function CommandPanel() {
     return <div className="muted">{t('cmd.selectProject')}</div>
   }
 
-  const scripts = sortScriptNames(Object.keys(details.summary.scripts))
+  // Keep package.json scripts key order (do not re-sort).
+  const scripts = Object.keys(details.summary.scripts)
   const pm = details.packageManager
   const history = config?.commandHistory?.[selected.path] ?? []
 
@@ -30,19 +30,19 @@ export function CommandPanel() {
       <div className="pane-sub">
         {t('cmd.title')} · {pm}
       </div>
-      <div className="script-tags">
+      <div className="script-list">
         {scripts.map((name) => (
           <button
             key={name}
             type="button"
-            className="script-tag btn-with-icon"
+            className="script-list-item btn-with-icon"
             title={details.summary.scripts[name]}
             onClick={() =>
               void runScript(selected.path, selected.folderName, pm, name)
             }
           >
             <Play className="ui-icon" size={11} color="currentColor" aria-hidden />
-            {name}
+            <span className="script-list-name">{name}</span>
           </button>
         ))}
         {scripts.length === 0 && (

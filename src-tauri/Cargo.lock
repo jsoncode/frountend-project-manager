@@ -1139,7 +1139,6 @@ dependencies = [
  "tauri-plugin-log",
  "tauri-plugin-shell",
  "uuid",
- "walkdir",
  "windows 0.61.3",
 ]
 

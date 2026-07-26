@@ -1,13 +1,13 @@
 import { useEffect } from 'react'
+import { AiSettingsModal } from './components/AiSettingsModal'
 import { DetailPane } from './components/DetailPane'
 import { ErrorLogModal } from './components/ErrorLogModal'
+import { NewWorkspaceModal } from './components/NewWorkspaceModal'
+import { Sidebar } from './components/Sidebar'
 import { IdeSettingsModal } from './components/IdeSettingsModal'
-import { ProjectList } from './components/ProjectList'
 import { ResizeHandle } from './components/ResizeHandle'
 import { SettingsModal } from './components/SettingsModal'
 import { TopBar } from './components/TopBar'
-import { WorkspaceRail } from './components/WorkspaceRail'
-import { AiSettingsModal } from './components/AiSettingsModal'
 import { useLayoutStore } from './stores/layoutStore'
 import { useSettingsStore } from './stores/settingsStore'
 import { useTerminalStore } from './stores/terminalStore'
@@ -22,8 +22,7 @@ export default function App() {
   const setActiveWorkspace = useWorkspaceStore((s) => s.setActiveWorkspace)
   const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace)
   const startListening = useTerminalStore((s) => s.startListening)
-  const railWidth = useLayoutStore((s) => s.railWidth)
-  const listWidth = useLayoutStore((s) => s.listWidth)
+  const explorerWidth = useLayoutStore((s) => s.explorerWidth)
   const persist = useLayoutStore((s) => s.persist)
 
   useEffect(() => {
@@ -57,24 +56,15 @@ export default function App() {
       <div
         className="main"
         style={{
-          gridTemplateColumns: `${railWidth}px 5px ${listWidth}px 5px minmax(0, 1fr)`,
+          gridTemplateColumns: `${explorerWidth}px 4px minmax(0, 1fr)`,
         }}
       >
-        <WorkspaceRail />
+        <Sidebar />
         <ResizeHandle
           orientation="vertical"
           onDrag={(d) => {
-            const { railWidth, setRailWidth } = useLayoutStore.getState()
-            setRailWidth(railWidth + d)
-          }}
-          onDragEnd={persist}
-        />
-        <ProjectList />
-        <ResizeHandle
-          orientation="vertical"
-          onDrag={(d) => {
-            const { listWidth, setListWidth } = useLayoutStore.getState()
-            setListWidth(listWidth + d)
+            const { explorerWidth, setExplorerWidth } = useLayoutStore.getState()
+            setExplorerWidth(explorerWidth + d)
           }}
           onDragEnd={persist}
         />
@@ -84,6 +74,7 @@ export default function App() {
       <IdeSettingsModal />
       <AiSettingsModal />
       <ErrorLogModal />
+      <NewWorkspaceModal />
     </div>
   )
 }

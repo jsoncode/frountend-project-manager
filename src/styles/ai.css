@@ -12,7 +12,7 @@
   flex-direction: column;
   min-height: 0;
   border-right: 1px solid var(--border-dim);
-  background: var(--panel-strong);
+  background: rgba(8, 12, 20, 0.82);
 }
 
 .ai-sidebar-header {
@@ -82,13 +82,13 @@
   gap: 4px;
   padding: 4px 4px 4px 8px;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   min-width: 0;
 }
 
 .ai-sidebar-item.active {
-  border-color: var(--border);
-  background: rgba(34, 211, 238, 0.06);
+  border-color: transparent;
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .ai-sidebar-item-btn {
@@ -175,7 +175,7 @@
   gap: 12px;
   padding: 10px 14px;
   border-bottom: 1px solid var(--border-dim);
-  background: var(--panel);
+  background: rgba(8, 12, 20, 0.82);
 }
 
 .ai-topbar-settings {
@@ -193,13 +193,14 @@
   min-width: 180px;
   max-width: 320px;
   flex: 1;
-  padding: 6px 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg-1);
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border-dim);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
   color: var(--text-bright);
   font-family: inherit;
-  font-size: 13px;
+  font-size: 12.5px;
 }
 
 .ai-messages {
@@ -433,7 +434,7 @@
 
 .ai-composer {
   border-top: 1px solid var(--border-dim);
-  background: var(--panel-strong);
+  background: rgba(10, 16, 28, 0.9);
   padding: 10px 14px 12px;
   display: flex;
   flex-direction: column;
@@ -471,8 +472,9 @@
   min-height: 56px;
   resize: none;
   padding: 8px 10px;
-  border: 1px solid var(--border);
-  background: var(--bg-1);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.035);
   color: var(--text-bright);
   font-family: inherit;
   font-size: 13px;

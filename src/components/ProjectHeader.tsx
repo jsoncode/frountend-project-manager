@@ -1,71 +1,61 @@
-import { ArrowDown, ArrowUp, BranchDown } from 'reicon-react'
+import { X } from 'reicon-react'
 import { useI18n } from '../i18n/useI18n'
-import { FRAMEWORK_META } from '../lib/frameworks'
-import { useProjectStore } from '../stores/projectStore'
+import { normalizeFsPath } from '../lib/gitDecorations'
+import { findWorkspaceForPath } from '../lib/workspacePath'
+import { useEditorStore } from '../stores/editorStore'
+import { useExplorerStore } from '../stores/explorerStore'
+import { useSettingsStore } from '../stores/settingsStore'
 
+/** Tab-style title above the editor — filename, dirty `*`, and close (VS Code–like). */
 export function ProjectHeader() {
-  const selected = useProjectStore((s) => s.selected)
-  const details = useProjectStore((s) => s.details)
-  const git = useProjectStore((s) => s.git)
+  const selection = useExplorerStore((s) => s.selection)
+  const setSelection = useExplorerStore((s) => s.setSelection)
+  const dirtyPath = useEditorStore((s) => s.dirtyPath)
+  const setDirtyPath = useEditorStore((s) => s.setDirtyPath)
+  const workspaces = useSettingsStore((s) => s.config?.workspaces ?? [])
   const { t } = useI18n()
 
-  if (!selected) return null
+  if (selection?.kind !== 'file') return null
 
-  const frameworks = details?.summary.frameworks ?? selected.frameworks
-  const languages = details?.languages ?? []
+  const name = selection.path.split(/[/\\]/).pop() ?? selection.path
+  const dirty =
+    dirtyPath != null &&
+    normalizeFsPath(dirtyPath) === normalizeFsPath(selection.path)
+
+  const closeFile = () => {
+    if (dirty) {
+      const ok = window.confirm(t('editor.closeUnsavedConfirm'))
+      if (!ok) return
+    }
+    setDirtyPath(null)
+    const workspace =
+      findWorkspaceForPath(selection.projectPath, workspaces) || ''
+    setSelection({
+      kind: 'project',
+      path: selection.projectPath,
+      workspace,
+    })
+  }
 
   return (
     <div className="detail-header">
-      <h1>{selected.folderName}</h1>
-      {selected.pkgName && <span className="badge">{selected.pkgName}</span>}
-      {selected.pkgVersion && <span className="badge">v{selected.pkgVersion}</span>}
-      {frameworks.map((fw) => {
-        const meta = FRAMEWORK_META[fw]
-        return (
-          <span
-            key={fw}
-            className="badge"
-            style={{ borderColor: meta?.color ?? undefined, color: meta?.color }}
-          >
-            {meta?.label ?? fw}
-          </span>
-        )
-      })}
-      {languages.map((lang) => (
-        <span key={lang} className="badge">
-          {lang}
+      <div className="editor-tab" title={selection.path}>
+        <span className="editor-tab-label">
+          {dirty ? `${name} *` : name}
         </span>
-      ))}
-      <span className="badge btn-with-icon" style={{ marginLeft: 'auto', color: 'var(--cyan)' }}>
-        {git?.current ? (
-          <>
-            <BranchDown className="ui-icon" size={12} color="currentColor" aria-hidden />
-            {git.current}
-            {(() => {
-              const cur = (git.branches ?? []).find((b) => b.name === git.current)
-              if (!cur) return null
-              return (
-                <>
-                  {cur.behind > 0 && (
-                    <span className="branch-badge behind" style={{ marginLeft: 6 }}>
-                      <ArrowDown className="inline-icon" size={10} color="currentColor" aria-hidden />
-                      {cur.behind}
-                    </span>
-                  )}
-                  {cur.ahead > 0 && (
-                    <span className="branch-badge ahead" style={{ marginLeft: 4 }}>
-                      <ArrowUp className="inline-icon" size={10} color="currentColor" aria-hidden />
-                      {cur.ahead}
-                    </span>
-                  )}
-                </>
-              )
-            })()}
-          </>
-        ) : (
-          t('header.noGit')
-        )}
-      </span>
+        <button
+          type="button"
+          className="editor-tab-close"
+          title={t('editor.close')}
+          aria-label={t('editor.close')}
+          onClick={(e) => {
+            e.stopPropagation()
+            closeFile()
+          }}
+        >
+          <X size={12} color="currentColor" aria-hidden />
+        </button>
+      </div>
     </div>
   )
 }

@@ -8,7 +8,7 @@ import { useWorkspaceStore } from '../stores/workspaceStore'
 /** Stable empty ref — never put `?? []` inside a Zustand selector (causes React #185). */
 const EMPTY_HISTORY: HistoryItem[] = []
 
-export function SearchBox() {
+export function SearchBox({ autofocus = false }: { autofocus?: boolean }) {
   const search = useWorkspaceStore((s) => s.search)
   const setSearch = useWorkspaceStore((s) => s.setSearch)
   const history = useSettingsStore((s) => s.config?.searchHistory ?? EMPTY_HISTORY)
@@ -17,7 +17,14 @@ export function SearchBox() {
   const [open, setOpen] = useState(false)
   const [hi, setHi] = useState(0)
   const wrapRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
   const { t } = useI18n()
+
+  useEffect(() => {
+    if (!autofocus) return
+    const tmr = window.setTimeout(() => inputRef.current?.focus(), 40)
+    return () => window.clearTimeout(tmr)
+  }, [autofocus])
 
   const picks = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -43,7 +50,6 @@ export function SearchBox() {
     setOpen(false)
   }
 
-  /** Pick an existing history item — refreshes recency. */
   const pickHistory = (value: string) => {
     const v = value.trim()
     applySearch(v)
@@ -68,7 +74,6 @@ export function SearchBox() {
     }
     if (e.key === 'Enter') {
       e.preventDefault()
-      // 仅回填历史项；纯搜索词不写入历史（历史在点击项目时保存）
       if (open && picks[hi]) pickHistory(picks[hi]!)
       else applySearch(search)
       return
@@ -87,11 +92,12 @@ export function SearchBox() {
     <div className="search-wrap" ref={wrapRef}>
       <Search
         className="search-leading-icon"
-        size={14}
+        size={12}
         color="currentColor"
         aria-hidden
       />
       <input
+        ref={inputRef}
         className="search"
         value={search}
         onChange={(e) => {

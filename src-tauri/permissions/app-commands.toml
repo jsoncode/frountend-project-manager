@@ -109,6 +109,26 @@ description = "Open project in IDE"
 commands.allow = ["open_in_ide"]
 
 [[permission]]
+identifier = "allow-list-directory-entries"
+description = "List directory children for the explorer tree"
+commands.allow = ["list_directory_entries"]
+
+[[permission]]
+identifier = "allow-create-directory"
+description = "Create a directory on disk"
+commands.allow = ["create_directory"]
+
+[[permission]]
+identifier = "allow-read-text-file"
+description = "Read a UTF-8 text file for the in-app editor"
+commands.allow = ["read_text_file"]
+
+[[permission]]
+identifier = "allow-write-text-file"
+description = "Write a UTF-8 text file from the in-app editor"
+commands.allow = ["write_text_file"]
+
+[[permission]]
 identifier = "allow-reveal-in-file-manager"
 description = "Reveal path in system file manager"
 commands.allow = ["reveal_in_file_manager"]

@@ -12,6 +12,7 @@ mod config;
 mod console_decode;
 mod db;
 mod env_files;
+mod fs_explorer;
 mod git;
 mod ide;
 mod process;
@@ -116,8 +117,14 @@ fn ai_delete_message(app: AppHandle, id: String) -> Result<Vec<String>, String> 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct LayoutSnapshot {
-    rail_width: f64,
-    list_width: f64,
+    /// Single explorer column width (replaces rail + list).
+    #[serde(default)]
+    explorer_width: Option<f64>,
+    /// Legacy dual-pane widths — used only to migrate old layouts.
+    #[serde(default)]
+    rail_width: Option<f64>,
+    #[serde(default)]
+    list_width: Option<f64>,
     tool_panel_width: f64,
     terminal_height: f64,
     tool_layout_mode: String,
@@ -250,6 +257,36 @@ async fn list_env_files(path: String) -> Result<Vec<env_files::EnvFileInfo>, Str
 #[tauri::command(async)]
 async fn read_env_file(path: String) -> Result<Vec<env_files::EnvEntry>, String> {
     tauri::async_runtime::spawn_blocking(move || env_files::read_env_file(&path))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command(async)]
+async fn list_directory_entries(
+    path: String,
+) -> Result<Vec<fs_explorer::DirEntryInfo>, String> {
+    tauri::async_runtime::spawn_blocking(move || fs_explorer::list_directory_entries(&path))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command(async)]
+async fn create_directory(path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || fs_explorer::create_directory(&path))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command(async)]
+async fn read_text_file(path: String) -> Result<fs_explorer::TextFileResult, String> {
+    tauri::async_runtime::spawn_blocking(move || fs_explorer::read_text_file(&path))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command(async)]
+async fn write_text_file(path: String, content: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || fs_explorer::write_text_file(&path, content))
         .await
         .map_err(|e| e.to_string())?
 }
@@ -615,6 +652,10 @@ pub fn run() {
             git_pull_branch,
             list_env_files,
             read_env_file,
+            list_directory_entries,
+            create_directory,
+            read_text_file,
+            write_text_file,
             run_command,
             kill_command,
             write_terminal_stdin,

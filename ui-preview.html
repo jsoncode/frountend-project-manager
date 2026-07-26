@@ -1,0 +1,1139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FPM UI Preview — Frost Glass</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg-deep: #06090f;
+      --bg-mid: #0b1220;
+      --bg-glow-a: rgba(34, 197, 180, 0.22);
+      --bg-glow-b: rgba(56, 120, 255, 0.14);
+      --glass: rgba(14, 22, 36, 0.52);
+      --glass-strong: rgba(10, 16, 28, 0.72);
+      --glass-soft: rgba(255, 255, 255, 0.04);
+      --hairline: rgba(255, 255, 255, 0.08);
+      --hairline-strong: rgba(255, 255, 255, 0.14);
+      --text: #9aa8bc;
+      --text-bright: #eef3fb;
+      --text-dim: #6b7a90;
+      --accent: #2dd4bf;
+      --accent-soft: rgba(45, 212, 191, 0.16);
+      --accent-glow: rgba(45, 212, 191, 0.35);
+      --ok: #34d399;
+      --warn: #fbbf24;
+      --danger: #fb7185;
+      --radius-xs: 6px;
+      --radius-sm: 10px;
+      --radius-md: 14px;
+      --radius-lg: 18px;
+      --ease: cubic-bezier(0.32, 0.72, 0, 1);
+      --blur: 28px;
+      --blur-heavy: 40px;
+      --font: "IBM Plex Sans", "Microsoft YaHei UI", "PingFang SC", sans-serif;
+      --mono: "IBM Plex Mono", "Cascadia Code", Consolas, monospace;
+      --shadow-float: 0 18px 50px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.04);
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      font-family: var(--font);
+      color: var(--text);
+      background: var(--bg-deep);
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+    button, input { font: inherit; color: inherit; }
+    button {
+      border: 0;
+      background: none;
+      cursor: pointer;
+      padding: 0;
+    }
+
+    /* Ambient stage */
+    .stage {
+      position: relative;
+      height: 100%;
+      padding: 18px;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+    }
+    .stage::before,
+    .stage::after {
+      content: "";
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(80px);
+      pointer-events: none;
+      z-index: 0;
+    }
+    .stage::before {
+      width: 48vw;
+      height: 48vw;
+      top: -12%;
+      left: -8%;
+      background: var(--bg-glow-a);
+      animation: drift 14s var(--ease) infinite alternate;
+    }
+    .stage::after {
+      width: 42vw;
+      height: 42vw;
+      right: -10%;
+      bottom: -18%;
+      background: var(--bg-glow-b);
+      animation: drift 18s var(--ease) infinite alternate-reverse;
+    }
+    @keyframes drift {
+      from { transform: translate3d(0, 0, 0) scale(1); }
+      to { transform: translate3d(40px, 28px, 0) scale(1.08); }
+    }
+
+    .preview-label {
+      position: absolute;
+      top: 22px;
+      left: 28px;
+      z-index: 5;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .preview-label h1 {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-bright);
+    }
+    .preview-label p {
+      margin: 0;
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+
+    .theme-switch {
+      position: absolute;
+      top: 22px;
+      right: 28px;
+      z-index: 5;
+      display: flex;
+      gap: 6px;
+      padding: 4px;
+      border-radius: 999px;
+      background: rgba(8, 12, 20, 0.45);
+      border: 1px solid var(--hairline);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+    }
+    .theme-switch button {
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      color: var(--text-dim);
+      transition: color 0.25s var(--ease), background 0.25s var(--ease);
+    }
+    .theme-switch button.active {
+      color: var(--text-bright);
+      background: var(--accent-soft);
+    }
+
+    /* App window */
+    .app-window {
+      position: relative;
+      z-index: 1;
+      width: min(1180px, calc(100vw - 36px));
+      height: min(740px, calc(100vh - 56px));
+      display: flex;
+      flex-direction: column;
+      border-radius: 18px;
+      overflow: hidden;
+      background: linear-gradient(165deg, rgba(16, 24, 40, 0.78), rgba(8, 12, 22, 0.88));
+      border: 1px solid var(--hairline-strong);
+      box-shadow: var(--shadow-float), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+      backdrop-filter: blur(var(--blur-heavy)) saturate(140%);
+      -webkit-backdrop-filter: blur(var(--blur-heavy)) saturate(140%);
+      animation: windowIn 0.7s var(--ease) both;
+    }
+    @keyframes windowIn {
+      from { opacity: 0; transform: translateY(18px) scale(0.985); filter: blur(6px); }
+      to { opacity: 1; transform: none; filter: none; }
+    }
+
+    /* Titlebar */
+    .topbar {
+      display: grid;
+      grid-template-columns: 1fr minmax(180px, 280px) 1fr;
+      align-items: center;
+      gap: 10px;
+      height: 46px;
+      padding: 0 10px 0 14px;
+      flex-shrink: 0;
+      border-bottom: 1px solid var(--hairline);
+      background: rgba(8, 12, 20, 0.35);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+    }
+    .topbar-left, .topbar-end {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+    .topbar-end { justify-content: flex-end; }
+    .brand {
+      width: 28px;
+      height: 28px;
+      border-radius: 9px;
+      display: grid;
+      place-items: center;
+      color: var(--accent);
+      background: var(--accent-soft);
+      box-shadow: inset 0 0 0 1px rgba(45, 212, 191, 0.25);
+      flex-shrink: 0;
+    }
+    .menu-btn {
+      height: 28px;
+      padding: 0 10px;
+      border-radius: 8px;
+      font-size: 12.5px;
+      color: var(--text);
+      transition: background 0.2s var(--ease), color 0.2s var(--ease);
+    }
+    .menu-btn:hover { background: var(--glass-soft); color: var(--text-bright); }
+    .path-chip {
+      min-width: 0;
+      max-width: 220px;
+      height: 28px;
+      padding: 0 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      color: var(--text-dim);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+    }
+
+    .search {
+      position: relative;
+      width: 100%;
+    }
+    .search input {
+      width: 100%;
+      height: 26px;
+      padding: 0 10px 0 28px;
+      border-radius: 8px;
+      border: 1px solid var(--hairline);
+      background: rgba(255, 255, 255, 0.035);
+      color: var(--text-bright);
+      font-size: 12px;
+      outline: none;
+      transition: border-color 0.25s var(--ease), box-shadow 0.25s var(--ease), background 0.25s var(--ease);
+    }
+    .search input::placeholder { color: var(--text-dim); font-size: 12px; }
+    .search input:focus {
+      border-color: rgba(45, 212, 191, 0.45);
+      background: rgba(45, 212, 191, 0.06);
+      box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.12), 0 0 24px rgba(45, 212, 191, 0.08);
+    }
+    .search svg {
+      position: absolute;
+      left: 9px;
+      top: 50%;
+      width: 12px;
+      height: 12px;
+      transform: translateY(-50%);
+      opacity: 0.55;
+      pointer-events: none;
+    }
+
+    .icon-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      color: var(--text);
+      transition: background 0.2s var(--ease), color 0.2s var(--ease), transform 0.2s var(--ease);
+    }
+    .icon-btn:hover {
+      background: var(--glass-soft);
+      color: var(--text-bright);
+    }
+    .icon-btn:active { transform: scale(0.96); }
+
+    .ai-btn {
+      height: 32px;
+      padding: 0 12px 0 10px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 12.5px;
+      font-weight: 500;
+      color: #042f2e;
+      background: linear-gradient(135deg, #5eead4, #2dd4bf 55%, #14b8a6);
+      box-shadow: 0 0 0 1px rgba(45, 212, 191, 0.35), 0 8px 24px rgba(45, 212, 191, 0.18);
+      transition: transform 0.2s var(--ease), filter 0.2s var(--ease);
+    }
+    .ai-btn:hover { filter: brightness(1.06); }
+    .ai-btn:active { transform: scale(0.97); }
+
+    .win-controls {
+      display: flex;
+      gap: 2px;
+      margin-left: 4px;
+    }
+    .win-dot {
+      width: 36px;
+      height: 32px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      color: var(--text-dim);
+      transition: background 0.2s var(--ease), color 0.2s var(--ease);
+    }
+    .win-dot:hover { background: rgba(255, 255, 255, 0.06); color: var(--text-bright); }
+    .win-dot.close:hover { background: rgba(251, 113, 133, 0.2); color: #fecdd3; }
+
+    /* Main layout */
+    .main {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 248px 1fr auto;
+    }
+
+    .sidebar {
+      min-width: 0;
+      border-right: 1px solid var(--hairline);
+      background: rgba(6, 10, 18, 0.28);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      display: flex;
+      flex-direction: column;
+    }
+    .explorer {
+      flex: 1;
+      overflow: auto;
+      padding: 6px 0 8px;
+    }
+    .row {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 24px;
+      padding: 0 10px;
+      border-radius: 0;
+      font-size: 12.5px;
+      color: var(--text);
+      text-align: left;
+      transition: background 0.18s var(--ease), color 0.18s var(--ease);
+    }
+    .row:hover {
+      background: rgba(255, 255, 255, 0.045);
+      color: var(--text-bright);
+    }
+    .row.active {
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-bright);
+    }
+    body.light .row.active {
+      background: rgba(15, 23, 42, 0.06);
+    }
+    .row.row-ws.active,
+    .row.row-project.active {
+      background: transparent;
+      color: var(--accent);
+    }
+    .row.row-ws.active:hover,
+    .row.row-project.active:hover {
+      background: transparent;
+      color: var(--accent);
+    }
+    .row.row-ws.active .ico,
+    .row.row-project.active .ico,
+    .row.row-ws.active .twist,
+    .row.row-project.active .twist {
+      opacity: 1;
+      color: var(--accent);
+    }
+    .row .twist { width: 10px; opacity: 0.55; flex-shrink: 0; display: grid; place-items: center; }
+    .row .ico { width: 14px; opacity: 0.8; flex-shrink: 0; display: grid; place-items: center; }
+    .row .label {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .indent-1 { padding-left: 16px; }
+    .indent-2 { padding-left: 26px; }
+    .indent-3 { padding-left: 36px; }
+    .badge {
+      margin-left: auto;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      color: var(--accent);
+      background: rgba(45, 212, 191, 0.12);
+    }
+
+    .detail {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      background: rgba(4, 8, 14, 0.22);
+    }
+    .detail-header {
+      height: 36px;
+      padding: 0 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 1px solid var(--hairline);
+      background: rgba(255, 255, 255, 0.02);
+    }
+    .tab {
+      height: 26px;
+      padding: 0 10px;
+      border-radius: 8px;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 12.5px;
+      color: var(--text-bright);
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--hairline);
+    }
+    .tab .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 10px var(--accent-glow);
+    }
+
+    .editor-area {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .editor-shell {
+      flex: 1;
+      min-height: 0;
+      margin: 0;
+      border-radius: 0;
+      border: 0;
+      background: transparent;
+      overflow: hidden;
+      position: relative;
+    }
+    .code {
+      padding: 14px 16px;
+      font-family: var(--mono);
+      font-size: 12.5px;
+      line-height: 1.7;
+      color: #a8b8cc;
+    }
+    .code .ln { color: #4b5a70; margin-right: 16px; user-select: none; }
+    .code .kw { color: #7dd3fc; }
+    .code .str { color: #86efac; }
+    .code .cm { color: #64748b; }
+    .code .fn { color: #5eead4; }
+
+    .terminal {
+      height: 168px;
+      margin: 0;
+      border-radius: 0;
+      border: 0;
+      border-top: 1px solid var(--hairline);
+      background: rgba(5, 8, 14, 0.35);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .term-head {
+      height: 32px;
+      padding: 0 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      border-bottom: 1px solid var(--hairline);
+    }
+    .term-tab {
+      height: 24px;
+      padding: 0 10px;
+      border-radius: 7px;
+      font-size: 11.5px;
+      color: var(--text-dim);
+      transition: all 0.2s var(--ease);
+    }
+    .term-tab.active {
+      color: var(--text-bright);
+      background: rgba(255, 255, 255, 0.06);
+    }
+    .term-body {
+      flex: 1;
+      padding: 10px 14px;
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.65;
+      overflow: auto;
+    }
+    .term-body .ok { color: var(--ok); }
+    .term-body .dim { color: var(--text-dim); }
+    .term-body .cmd { color: var(--accent); }
+    .cursor-blink {
+      display: inline-block;
+      width: 7px;
+      height: 13px;
+      margin-left: 2px;
+      background: var(--accent);
+      vertical-align: -1px;
+      animation: blink 1s steps(1) infinite;
+    }
+    @keyframes blink {
+      50% { opacity: 0; }
+    }
+
+    /* Tool strip + panel */
+    .tools {
+      display: flex;
+      border-left: 1px solid var(--hairline);
+      background: rgba(6, 10, 18, 0.3);
+    }
+    .tool-panel {
+      width: 260px;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--hairline);
+      background: rgba(10, 16, 28, 0.4);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      transform-origin: right center;
+      animation: panelIn 0.35s var(--ease) both;
+    }
+    .tool-panel.hidden { display: none; }
+    @keyframes panelIn {
+      from { opacity: 0; transform: translateX(12px); }
+      to { opacity: 1; transform: none; }
+    }
+    .tool-panel-head {
+      height: 40px;
+      padding: 0 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--hairline);
+    }
+    .tool-panel-head h2 {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-bright);
+    }
+    .tool-panel-body {
+      padding: 12px;
+      overflow: auto;
+      flex: 1;
+    }
+    .meta-block { margin-bottom: 14px; }
+    .meta-label {
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-bottom: 6px;
+    }
+    .chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip {
+      height: 26px;
+      padding: 0 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      color: var(--text-bright);
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--hairline);
+    }
+    .git-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--hairline);
+      margin-bottom: 8px;
+      font-size: 12.5px;
+    }
+    .git-row strong { color: var(--text-bright); font-weight: 500; }
+    .status-pill {
+      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: rgba(52, 211, 153, 0.12);
+      color: var(--ok);
+    }
+    .action-btn {
+      width: 100%;
+      height: 34px;
+      border-radius: 10px;
+      margin-top: 4px;
+      font-size: 12.5px;
+      color: var(--text-bright);
+      background: rgba(255, 255, 255, 0.045);
+      border: 1px solid var(--hairline);
+      transition: background 0.2s var(--ease), border-color 0.2s var(--ease), transform 0.2s var(--ease);
+    }
+    .action-btn:hover {
+      background: var(--accent-soft);
+      border-color: rgba(45, 212, 191, 0.3);
+    }
+    .action-btn:active { transform: scale(0.985); }
+
+    .tool-strip {
+      width: 48px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 10px 0;
+    }
+    .strip-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 11px;
+      display: grid;
+      place-items: center;
+      color: var(--text-dim);
+      position: relative;
+      transition: background 0.2s var(--ease), color 0.2s var(--ease), transform 0.2s var(--ease);
+    }
+    .strip-btn:hover {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-bright);
+    }
+    .strip-btn.active {
+      color: var(--accent);
+      background: var(--accent-soft);
+      box-shadow: inset 0 0 0 1px rgba(45, 212, 191, 0.22);
+    }
+    .strip-btn.active::before {
+      content: "";
+      position: absolute;
+      left: -6px;
+      width: 3px;
+      height: 14px;
+      border-radius: 999px;
+      background: var(--accent);
+      box-shadow: 0 0 10px var(--accent-glow);
+    }
+    .strip-btn .tiny {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+
+    /* Modal */
+    .modal-root {
+      position: absolute;
+      inset: 0;
+      z-index: 20;
+      display: grid;
+      place-items: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.28s var(--ease);
+    }
+    .modal-root.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .modal-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(3, 6, 12, 0.45);
+      backdrop-filter: blur(14px) saturate(120%);
+      -webkit-backdrop-filter: blur(14px) saturate(120%);
+    }
+    .modal {
+      position: relative;
+      width: min(420px, calc(100% - 48px));
+      border-radius: 18px;
+      border: 1px solid var(--hairline-strong);
+      background: rgba(14, 20, 34, 0.72);
+      backdrop-filter: blur(28px) saturate(150%);
+      -webkit-backdrop-filter: blur(28px) saturate(150%);
+      box-shadow: var(--shadow-float), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      padding: 18px;
+      transform: translateY(10px) scale(0.97);
+      transition: transform 0.32s var(--ease);
+    }
+    .modal-root.open .modal { transform: none; }
+    .modal h3 {
+      margin: 0 0 6px;
+      font-size: 16px;
+      color: var(--text-bright);
+      font-weight: 600;
+    }
+    .modal p {
+      margin: 0 0 16px;
+      font-size: 13px;
+      line-height: 1.55;
+      color: var(--text);
+    }
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+    .btn {
+      height: 34px;
+      padding: 0 14px;
+      border-radius: 10px;
+      font-size: 13px;
+      border: 1px solid var(--hairline);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text-bright);
+      transition: background 0.2s var(--ease), transform 0.2s var(--ease);
+    }
+    .btn:hover { background: rgba(255, 255, 255, 0.08); }
+    .btn:active { transform: scale(0.97); }
+    .btn.primary {
+      border-color: transparent;
+      background: linear-gradient(135deg, #5eead4, #14b8a6);
+      color: #042f2e;
+      font-weight: 600;
+    }
+
+    /* Toast */
+    .toast {
+      position: absolute;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(16px);
+      z-index: 30;
+      padding: 10px 14px;
+      border-radius: 12px;
+      font-size: 12.5px;
+      color: var(--text-bright);
+      background: rgba(12, 18, 30, 0.75);
+      border: 1px solid var(--hairline-strong);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      box-shadow: var(--shadow-float);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.28s var(--ease), transform 0.28s var(--ease);
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* Light theme variant */
+    body.light {
+      --bg-deep: #d7e0ec;
+      --bg-mid: #e8eef7;
+      --bg-glow-a: rgba(20, 184, 166, 0.28);
+      --bg-glow-b: rgba(59, 130, 246, 0.18);
+      --glass: rgba(255, 255, 255, 0.55);
+      --glass-strong: rgba(255, 255, 255, 0.72);
+      --glass-soft: rgba(15, 23, 42, 0.04);
+      --hairline: rgba(15, 23, 42, 0.08);
+      --hairline-strong: rgba(15, 23, 42, 0.12);
+      --text: #475569;
+      --text-bright: #0f172a;
+      --text-dim: #64748b;
+      --accent: #0d9488;
+      --accent-soft: rgba(13, 148, 136, 0.12);
+      --accent-glow: rgba(13, 148, 136, 0.28);
+    }
+    body.light .app-window {
+      background: linear-gradient(165deg, rgba(255, 255, 255, 0.72), rgba(241, 245, 249, 0.82));
+    }
+    body.light .ai-btn { color: #fff; }
+    body.light .btn.primary { color: #fff; }
+    body.light .code { color: #334155; }
+    body.light .code .ln { color: #94a3b8; }
+    body.light .code .kw { color: #0284c7; }
+    body.light .code .str { color: #059669; }
+    body.light .code .fn { color: #0f766e; }
+
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.25);
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <div class="preview-label">
+      <h1>FPM · UI Preview</h1>
+      <p>Frost Glass · 高斯模糊 · 丝滑交互草案</p>
+    </div>
+
+    <div class="theme-switch" role="group" aria-label="主题切换">
+      <button type="button" class="active" data-theme="dark">深色</button>
+      <button type="button" data-theme="light">浅色</button>
+    </div>
+
+    <div class="app-window" id="app">
+      <header class="topbar">
+        <div class="topbar-left">
+          <div class="brand" aria-hidden="true">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+              <circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/>
+            </svg>
+          </div>
+          <button class="menu-btn" type="button">文件</button>
+          <div class="path-chip" title="D:\code\owner">D:\code\owner</div>
+        </div>
+        <div class="search">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>
+          </svg>
+          <input id="search" type="search" placeholder="搜索项目 / 路径…" autocomplete="off" />
+        </div>
+        <div class="topbar-end">
+          <button class="icon-btn" type="button" id="btnSettings" title="设置" aria-label="设置">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+              <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9c.2.6.8 1.1 1.5 1.1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>
+            </svg>
+          </button>
+          <button class="ai-btn" type="button" id="btnAi">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M21 12a8.5 8.5 0 0 1-8.5 8.5H6l-3 2.2V12A8.5 8.5 0 1 1 21 12z"/>
+            </svg>
+            AI
+          </button>
+          <div class="win-controls" aria-hidden="true">
+            <button class="win-dot" type="button">─</button>
+            <button class="win-dot" type="button">□</button>
+            <button class="win-dot close" type="button">×</button>
+          </div>
+        </div>
+      </header>
+
+      <div class="main">
+        <aside class="sidebar">
+          <div class="explorer" id="explorer">
+            <button class="row row-ws active" type="button" data-depth="0">
+              <span class="twist"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></span>
+              <span class="ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6H9l2 2h8.5A1.5 1.5 0 0 1 21 9.5v8A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5v-10z"/></svg></span>
+              <span class="label">owner</span>
+              <span class="badge">3</span>
+            </button>
+            <button class="row row-project active indent-1" type="button">
+              <span class="twist"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></span>
+              <span class="ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 8.5 12 4l8 4.5v7L12 20l-8-4.5v-7z"/><path d="M12 12v8M4 8.5l8 3.5 8-3.5"/></svg></span>
+              <span class="label">frountend-project-manager</span>
+            </button>
+            <button class="row row-dir indent-2" type="button">
+              <span class="twist"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg></span>
+              <span class="ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6H9l2 2h8.5A1.5 1.5 0 0 1 21 9.5v8A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5v-10z"/></svg></span>
+              <span class="label">src</span>
+            </button>
+            <button class="row row-dir indent-2" type="button">
+              <span class="twist"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg></span>
+              <span class="ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6H9l2 2h8.5A1.5 1.5 0 0 1 21 9.5v8A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5v-10z"/></svg></span>
+              <span class="label">src-tauri</span>
+            </button>
+            <button class="row row-file indent-2 active" type="button">
+              <span class="twist"></span>
+              <span class="ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M7 3.5h7l4 4V20a1.5 1.5 0 0 1-1.5 1.5h-9.5A1.5 1.5 0 0 1 5.5 20V5A1.5 1.5 0 0 1 7 3.5z"/><path d="M14 3.5V8h4.5"/></svg></span>
+              <span class="label">package.json</span>
+            </button>
+            <button class="row row-project indent-1" type="button">
+              <span class="twist"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg></span>
+              <span class="ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 8.5 12 4l8 4.5v7L12 20l-8-4.5v-7z"/><path d="M12 12v8M4 8.5l8 3.5 8-3.5"/></svg></span>
+              <span class="label">design-system</span>
+            </button>
+            <button class="row row-project indent-1" type="button">
+              <span class="twist"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg></span>
+              <span class="ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 8.5 12 4l8 4.5v7L12 20l-8-4.5v-7z"/><path d="M12 12v8M4 8.5l8 3.5 8-3.5"/></svg></span>
+              <span class="label">marketing-site</span>
+            </button>
+          </div>
+        </aside>
+
+        <section class="detail">
+          <div class="detail-header">
+            <div class="tab"><span class="dot"></span>package.json</div>
+          </div>
+          <div class="editor-area">
+            <div class="editor-shell">
+              <div class="code">
+                <div><span class="ln">1</span><span class="cm">// Frontend Project Manager</span></div>
+                <div><span class="ln">2</span>{</div>
+                <div><span class="ln">3</span>&nbsp;&nbsp;<span class="str">"name"</span>: <span class="str">"frontend-project-manager"</span>,</div>
+                <div><span class="ln">4</span>&nbsp;&nbsp;<span class="str">"private"</span>: <span class="kw">true</span>,</div>
+                <div><span class="ln">5</span>&nbsp;&nbsp;<span class="str">"scripts"</span>: {</div>
+                <div><span class="ln">6</span>&nbsp;&nbsp;&nbsp;&nbsp;<span class="str">"tauri:dev"</span>: <span class="str">"tauri dev"</span>,</div>
+                <div><span class="ln">7</span>&nbsp;&nbsp;&nbsp;&nbsp;<span class="str">"tauri:build"</span>: <span class="str">"tauri build"</span></div>
+                <div><span class="ln">8</span>&nbsp;&nbsp;},</div>
+                <div><span class="ln">9</span>&nbsp;&nbsp;<span class="str">"dependencies"</span>: {</div>
+                <div><span class="ln">10</span>&nbsp;&nbsp;&nbsp;&nbsp;<span class="str">"react"</span>: <span class="str">"^19.2.7"</span></div>
+                <div><span class="ln">11</span>&nbsp;&nbsp;}</div>
+                <div><span class="ln">12</span>}</div>
+              </div>
+            </div>
+            <div class="terminal">
+              <div class="term-head">
+                <button class="term-tab active" type="button">终端</button>
+                <button class="term-tab" type="button">输出</button>
+                <button class="term-tab" type="button">问题</button>
+              </div>
+              <div class="term-body">
+                <div class="dim">PS D:\code\owner\frountend-project-manager&gt;</div>
+                <div><span class="cmd">npm run tauri:dev</span></div>
+                <div class="ok">✓ Vite ready in 184ms</div>
+                <div class="ok">✓ Tauri window launched</div>
+                <div class="dim">watching for file changes… <span class="cursor-blink"></span></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div class="tools">
+          <aside class="tool-panel" id="toolPanel">
+            <div class="tool-panel-head">
+              <h2 id="toolTitle">Git</h2>
+              <button class="icon-btn" type="button" id="btnCloseTool" style="width:28px;height:28px" title="收起">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <path d="m9 6 6 6-6 6"/>
+                </svg>
+              </button>
+            </div>
+            <div class="tool-panel-body" id="toolBody">
+              <div class="git-row">
+                <strong>main</strong>
+                <span class="status-pill">clean</span>
+              </div>
+              <div class="meta-block">
+                <div class="meta-label">最近提交</div>
+                <div style="font-size:12.5px;line-height:1.5;color:var(--text)">
+                  refine explorer glass selection states
+                </div>
+              </div>
+              <button class="action-btn" type="button" data-toast="已切换到 develop">切换分支…</button>
+              <button class="action-btn" type="button" data-toast="拉取完成">拉取 / 推送</button>
+            </div>
+          </aside>
+          <nav class="tool-strip" aria-label="工具栏">
+            <button class="strip-btn active" type="button" data-tool="git" title="Git">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+                <circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/>
+                <path d="M6 8.5v5.2A2.3 2.3 0 0 0 8.3 16H12"/><path d="M18 8.5v1.8A2.3 2.3 0 0 1 15.7 12H8.3"/>
+              </svg>
+            </button>
+            <button class="strip-btn" type="button" data-tool="ide" title="IDE">
+              <span class="tiny">IDE</span>
+            </button>
+            <button class="strip-btn" type="button" data-tool="cmd" title="命令">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+                <path d="m4 17 6-5-6-5"/><path d="M12 19h8"/>
+              </svg>
+            </button>
+            <button class="strip-btn" type="button" data-tool="env" title="环境变量">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+                <path d="M7 8V7a5 5 0 0 1 10 0v1"/><rect x="4" y="8" width="16" height="12" rx="2"/>
+              </svg>
+            </button>
+            <button class="strip-btn" type="button" data-tool="meta" title="元信息">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+                <circle cx="12" cy="12" r="9"/><path d="M12 10v6"/><circle cx="12" cy="7.5" r="0.8" fill="currentColor"/>
+              </svg>
+            </button>
+          </nav>
+        </div>
+      </div>
+
+      <div class="modal-root" id="modal">
+        <div class="modal-backdrop" data-close></div>
+        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+          <h3 id="modalTitle">设置</h3>
+          <p>这是预览里的毛玻璃弹层：背景高斯模糊 + 面板半透明描边，确认方案后会落到真实 Settings / IDE / AI 弹窗。</p>
+          <div class="modal-actions">
+            <button class="btn" type="button" data-close>取消</button>
+            <button class="btn primary" type="button" data-close>保存</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="toast" id="toast">操作完成</div>
+    </div>
+  </div>
+
+  <script>
+    const toolContent = {
+      git: {
+        title: "Git",
+        html: `
+          <div class="git-row"><strong>main</strong><span class="status-pill">clean</span></div>
+          <div class="meta-block">
+            <div class="meta-label">最近提交</div>
+            <div style="font-size:12.5px;line-height:1.5;color:var(--text)">refine explorer glass selection states</div>
+          </div>
+          <button class="action-btn" type="button" data-toast="已切换到 develop">切换分支…</button>
+          <button class="action-btn" type="button" data-toast="拉取完成">拉取 / 推送</button>
+        `
+      },
+      ide: {
+        title: "IDE",
+        html: `
+          <div class="meta-block"><div class="meta-label">用 IDE 打开</div></div>
+          <button class="action-btn" type="button" data-toast="已在资源管理器中显示">资源管理器</button>
+          <button class="action-btn" type="button" data-toast="已打开 Cursor">Cursor</button>
+          <button class="action-btn" type="button" data-toast="已打开 VS Code">VS Code</button>
+        `
+      },
+      cmd: {
+        title: "命令",
+        html: `
+          <div class="chip-row" style="margin-bottom:12px">
+            <span class="chip">dev</span><span class="chip">build</span><span class="chip">lint</span><span class="chip">test</span>
+          </div>
+          <button class="action-btn" type="button" data-toast="已启动 npm run dev">运行 dev</button>
+          <button class="action-btn" type="button" data-toast="已加入队列">运行 build</button>
+        `
+      },
+      env: {
+        title: "环境变量",
+        html: `
+          <div class="chip-row" style="margin-bottom:12px">
+            <span class="chip">.env</span><span class="chip">.env.local</span>
+          </div>
+          <div class="git-row"><strong>VITE_API</strong><span class="dim">••••••</span></div>
+          <div class="git-row"><strong>TAURI_ENV</strong><span class="dim">••••••</span></div>
+        `
+      },
+      meta: {
+        title: "元信息",
+        html: `
+          <div class="meta-block">
+            <div class="meta-label">Package</div>
+            <div style="color:var(--text-bright);font-size:13px">frontend-project-manager · pnpm</div>
+          </div>
+          <div class="meta-block">
+            <div class="meta-label">Frameworks</div>
+            <div class="chip-row">
+              <span class="chip">React</span><span class="chip">Vite</span><span class="chip">Tauri</span>
+            </div>
+          </div>
+        `
+      }
+    };
+
+    const panel = document.getElementById("toolPanel");
+    const toolTitle = document.getElementById("toolTitle");
+    const toolBody = document.getElementById("toolBody");
+    const toast = document.getElementById("toast");
+    const modal = document.getElementById("modal");
+    let activeTool = "git";
+    let toastTimer;
+
+    function showToast(msg) {
+      toast.textContent = msg;
+      toast.classList.add("show");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove("show"), 1600);
+    }
+
+    function setTool(id) {
+      const conf = toolContent[id];
+      if (!conf) return;
+      activeTool = id;
+      toolTitle.textContent = conf.title;
+      toolBody.innerHTML = conf.html;
+      panel.classList.remove("hidden");
+      document.querySelectorAll(".strip-btn").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.tool === id);
+      });
+    }
+
+    document.querySelectorAll(".strip-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = btn.dataset.tool;
+        if (activeTool === id && !panel.classList.contains("hidden")) {
+          panel.classList.add("hidden");
+          btn.classList.remove("active");
+          activeTool = null;
+          return;
+        }
+        setTool(id);
+      });
+    });
+
+    document.getElementById("btnCloseTool").addEventListener("click", () => {
+      panel.classList.add("hidden");
+      document.querySelectorAll(".strip-btn").forEach((b) => b.classList.remove("active"));
+      activeTool = null;
+    });
+
+    document.getElementById("explorer").addEventListener("click", (e) => {
+      const row = e.target.closest(".row");
+      if (!row) return;
+      if (row.classList.contains("row-ws")) {
+        document.querySelectorAll(".row-ws").forEach((r) => r.classList.remove("active"));
+        row.classList.add("active");
+        return;
+      }
+      if (row.classList.contains("row-project")) {
+        document.querySelectorAll(".row-project, .row-dir, .row-file").forEach((r) => r.classList.remove("active"));
+        row.classList.add("active");
+        return;
+      }
+      document.querySelectorAll(".row-dir, .row-file").forEach((r) => r.classList.remove("active"));
+      row.classList.add("active");
+    });
+
+    document.querySelectorAll(".term-tab").forEach((tab) => {
+      tab.addEventListener("click", () => {
+        document.querySelectorAll(".term-tab").forEach((t) => t.classList.remove("active"));
+        tab.classList.add("active");
+      });
+    });
+
+    document.getElementById("btnSettings").addEventListener("click", () => modal.classList.add("open"));
+    document.getElementById("btnAi").addEventListener("click", () => showToast("将打开 AI 对话窗口"));
+
+    modal.querySelectorAll("[data-close]").forEach((el) => {
+      el.addEventListener("click", () => modal.classList.remove("open"));
+    });
+
+    document.addEventListener("click", (e) => {
+      const action = e.target.closest("[data-toast]");
+      if (action) showToast(action.dataset.toast);
+    });
+
+    document.querySelectorAll(".theme-switch button").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".theme-switch button").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        document.body.classList.toggle("light", btn.dataset.theme === "light");
+      });
+    });
+
+    // Subtle parallax glow follow
+    const stage = document.querySelector(".stage");
+    stage.addEventListener("pointermove", (e) => {
+      const x = (e.clientX / window.innerWidth - 0.5) * 20;
+      const y = (e.clientY / window.innerHeight - 0.5) * 16;
+      stage.style.setProperty("--mx", x + "px");
+      stage.style.setProperty("--my", y + "px");
+    });
+  </script>
+</body>
+</html>

@@ -1,10 +1,14 @@
 import { Atom, ChatRoundDots, Settings } from 'reicon-react'
 import { invoke } from '@tauri-apps/api/core'
+import { getCurrentWindow } from '@tauri-apps/api/window'
+import type { MouseEvent } from 'react'
 import { useI18n } from '../i18n/useI18n'
 import { isTauri } from '../lib/tauri'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import { SearchBox } from './SearchBox'
+import { TitleFileMenu } from './TitleFileMenu'
+import { WindowControls } from './WindowControls'
 
 export function TopBar() {
   const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace)
@@ -16,17 +20,37 @@ export function TopBar() {
     void invoke('ai_open_chat_window', { feedText: null }).catch(() => undefined)
   }
 
+  const onDragMouseDown = (e: MouseEvent) => {
+    if (!isTauri()) return
+    if (e.button !== 0) return
+    if (e.detail === 2) {
+      void getCurrentWindow().toggleMaximize()
+      return
+    }
+    void getCurrentWindow().startDragging()
+  }
+
   return (
-    <header className="topbar">
-      <div className="brand">
-        <Atom className="ui-icon" size={18} color="currentColor" aria-hidden />
-        FPM
+    <header className="topbar titlebar">
+      <div className="topbar-left">
+        <div className="brand" title="FPM" aria-label="FPM">
+          <Atom className="ui-icon" size={16} color="currentColor" aria-hidden />
+        </div>
+        <TitleFileMenu />
+        <div
+          className="topbar-drag"
+          onMouseDown={onDragMouseDown}
+          title={activeWorkspace ?? undefined}
+        >
+          <span className="topbar-path">
+            {activeWorkspace ?? t('app.noWorkspace')}
+          </span>
+        </div>
       </div>
-      <div className="topbar-path" title={activeWorkspace ?? undefined}>
-        {activeWorkspace ?? t('app.noWorkspace')}
+      <div className="topbar-center">
+        <SearchBox />
       </div>
       <div className="topbar-end">
-        <SearchBox />
         <button
           type="button"
           className="btn icon-only"
@@ -38,13 +62,14 @@ export function TopBar() {
         </button>
         <button
           type="button"
-          className="btn primary btn-with-icon"
+          className="btn primary btn-with-icon ai-launch-btn"
           title={t('top.aiTitle')}
           onClick={openAi}
         >
           <ChatRoundDots className="ui-icon" size={15} color="currentColor" aria-hidden />
           {t('top.ai')}
         </button>
+        <WindowControls />
       </div>
     </header>
   )

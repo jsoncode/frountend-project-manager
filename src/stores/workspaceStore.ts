@@ -21,8 +21,12 @@ type WorkspaceState = {
   hydrateCache: () => Promise<void>
   /** Rescan active workspace (and update cache). */
   refreshProjects: () => Promise<void>
+  /** Rescan one workspace into the cache (and update active list if matches). */
+  refreshWorkspace: (path: string) => Promise<void>
   /** Rescan every configured workspace into the cache. */
   refreshAllProjects: () => Promise<void>
+  /** Ensure a single workspace is cached (tree expand). */
+  ensureWorkspaceCached: (path: string) => Promise<void>
   /** Ensure every workspace is cached (used when searching). */
   ensureAllWorkspacesCached: () => Promise<void>
   /** Drop a workspace from cache (e.g. after remove). */
@@ -106,6 +110,23 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       set({ loading: false, error: String(e), projects: [] })
     }
   },
+  refreshWorkspace: async (path) => {
+    if (!path) return
+    try {
+      const projects = await scanWorkspace(path)
+      set((s) => ({
+        projectCache: { ...s.projectCache, [path]: projects },
+        projects: s.activeWorkspace === path ? projects : s.projects,
+        error: null,
+      }))
+      persistCache(path, projects)
+    } catch (e) {
+      set((s) => ({
+        projectCache: { ...s.projectCache, [path]: [] },
+        error: s.activeWorkspace === path ? String(e) : s.error,
+      }))
+    }
+  },
   refreshAllProjects: async () => {
     const workspaces = useSettingsStore.getState().config?.workspaces ?? []
     if (workspaces.length === 0) {
@@ -133,6 +154,25 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       }
     } catch (e) {
       set({ loading: false, error: String(e) })
+    }
+  },
+  ensureWorkspaceCached: async (path) => {
+    if (!path) return
+    if (get().projectCache[path] !== undefined) return
+    try {
+      const list = await scanWorkspace(path)
+      set((s) => ({
+        projectCache: { ...s.projectCache, [path]: list },
+        projects:
+          s.activeWorkspace === path
+            ? list
+            : s.projects,
+      }))
+      persistCache(path, list)
+    } catch {
+      set((s) => ({
+        projectCache: { ...s.projectCache, [path]: [] },
+      }))
     }
   },
   ensureAllWorkspacesCached: async () => {

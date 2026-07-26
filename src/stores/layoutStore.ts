@@ -1,24 +1,33 @@
 import { invoke } from '@tauri-apps/api/core'
 import { create } from '../lib/createStore'
 
-export type SideTool = 'ide' | 'cmd' | 'git' | 'env' | 'meta'
+export type SideTool = 'git' | 'ide' | 'cmd' | 'env' | 'meta'
 export type ToolLayoutMode = 'single' | 'stack'
 
-export const TOOL_ORDER: SideTool[] = ['ide', 'cmd', 'git', 'env', 'meta']
+export const TOOL_ORDER: SideTool[] = ['git', 'ide', 'cmd', 'env', 'meta']
 
 type LayoutPersist = {
-  railWidth: number
-  listWidth: number
+  explorerWidth: number
   toolPanelWidth: number
   terminalHeight: number
   toolLayoutMode: ToolLayoutMode
   openTools: SideTool[]
 }
 
+/** Wire format — includes legacy dual-pane fields for migration. */
+type LayoutRemote = {
+  explorerWidth?: number
+  railWidth?: number
+  listWidth?: number
+  toolPanelWidth?: number
+  terminalHeight?: number
+  toolLayoutMode?: unknown
+  openTools?: unknown
+}
+
 type LayoutState = LayoutPersist & {
   hydrated: boolean
-  setRailWidth: (n: number) => void
-  setListWidth: (n: number) => void
+  setExplorerWidth: (n: number) => void
   setToolPanelWidth: (n: number) => void
   setTerminalHeight: (n: number) => void
   setToolLayoutMode: (mode: ToolLayoutMode) => void
@@ -37,7 +46,13 @@ function num(v: unknown, fallback: number) {
 }
 
 function isSideTool(v: unknown): v is SideTool {
-  return v === 'ide' || v === 'cmd' || v === 'git' || v === 'env' || v === 'meta'
+  return (
+    v === 'git' ||
+    v === 'ide' ||
+    v === 'cmd' ||
+    v === 'env' ||
+    v === 'meta'
+  )
 }
 
 function parseMode(v: unknown): ToolLayoutMode {
@@ -53,15 +68,25 @@ function parseOpenTools(v: unknown, mode: ToolLayoutMode): SideTool[] {
   return ['cmd']
 }
 
+function resolveExplorerWidth(o: LayoutRemote): number {
+  const explorer = num(o.explorerWidth, 0)
+  if (explorer > 0) return clamp(explorer, 200, 560)
+  const list = num(o.listWidth, 0)
+  const rail = num(o.railWidth, 0)
+  if (list > 0 && rail > 0) return clamp(list + rail * 0.35, 200, 560)
+  if (list > 0) return clamp(list, 200, 560)
+  if (rail > 0) return clamp(rail, 200, 560)
+  return 280
+}
+
 function fromLocalStorage(): LayoutPersist | null {
   try {
     const rawV4 = localStorage.getItem('fpm.layout.v4')
     if (rawV4) {
-      const o = JSON.parse(rawV4) as Record<string, unknown>
+      const o = JSON.parse(rawV4) as LayoutRemote
       const mode = parseMode(o.toolLayoutMode)
       return {
-        railWidth: num(o.railWidth, 240),
-        listWidth: num(o.listWidth, 280),
+        explorerWidth: resolveExplorerWidth(o),
         toolPanelWidth: num(o.toolPanelWidth, 300),
         terminalHeight: num(o.terminalHeight, 220),
         toolLayoutMode: mode,
@@ -70,21 +95,14 @@ function fromLocalStorage(): LayoutPersist | null {
     }
     const rawV3 = localStorage.getItem('fpm.layout.v3')
     if (rawV3) {
-      const o = JSON.parse(rawV3) as {
-        railWidth?: number
-        listWidth?: number
-        toolPanelWidth?: number
-        terminalHeight?: number
-        sideTool?: unknown
-      }
+      const o = JSON.parse(rawV3) as LayoutRemote & { sideTool?: unknown }
       const side = isSideTool(o.sideTool)
         ? o.sideTool
         : o.sideTool === null
           ? null
           : 'cmd'
       return {
-        railWidth: num(o.railWidth, 240),
-        listWidth: num(o.listWidth, 280),
+        explorerWidth: resolveExplorerWidth(o),
         toolPanelWidth: num(o.toolPanelWidth, 300),
         terminalHeight: num(o.terminalHeight, 220),
         toolLayoutMode: 'single',
@@ -99,8 +117,10 @@ function fromLocalStorage(): LayoutPersist | null {
 
 function snapshot(s: LayoutPersist) {
   return {
-    railWidth: s.railWidth,
-    listWidth: s.listWidth,
+    explorerWidth: s.explorerWidth,
+    // Keep legacy keys so older builds still load something sensible.
+    railWidth: 0,
+    listWidth: s.explorerWidth,
     toolPanelWidth: s.toolPanelWidth,
     terminalHeight: s.terminalHeight,
     toolLayoutMode: s.toolLayoutMode,
@@ -118,20 +138,26 @@ function schedulePersist() {
   }, 200)
 }
 
+function applyRemote(remote: LayoutRemote): LayoutPersist {
+  const mode = parseMode(remote.toolLayoutMode)
+  return {
+    explorerWidth: resolveExplorerWidth(remote),
+    toolPanelWidth: num(remote.toolPanelWidth, 300),
+    terminalHeight: num(remote.terminalHeight, 220),
+    toolLayoutMode: mode,
+    openTools: parseOpenTools(remote.openTools, mode),
+  }
+}
+
 export const useLayoutStore = create<LayoutState>((set, get) => ({
-  railWidth: 240,
-  listWidth: 280,
+  explorerWidth: 280,
   toolPanelWidth: 300,
   terminalHeight: 220,
   toolLayoutMode: 'single',
   openTools: ['cmd'],
   hydrated: false,
-  setRailWidth: (n) => {
-    set({ railWidth: clamp(n, 180, 420) })
-    schedulePersist()
-  },
-  setListWidth: (n) => {
-    set({ listWidth: clamp(n, 200, 480) })
+  setExplorerWidth: (n) => {
+    set({ explorerWidth: clamp(n, 200, 560) })
     schedulePersist()
   },
   setToolPanelWidth: (n) => {
@@ -155,43 +181,38 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
   toggleSideTool: (tool) => {
     set((s) => {
       const open = s.openTools.includes(tool)
-      if (s.toolLayoutMode === 'single') {
-        return { openTools: open ? [] : [tool] }
-      }
-      if (open) {
-        return { openTools: s.openTools.filter((id) => id !== tool) }
-      }
-      return {
-        openTools: TOOL_ORDER.filter(
-          (id) => id === tool || s.openTools.includes(id),
-        ),
-      }
+      return { openTools: open ? [] : [tool], toolLayoutMode: 'single' }
     })
     schedulePersist()
   },
   closeSideTool: (tool) => {
-    set((s) => ({ openTools: s.openTools.filter((id) => id !== tool) }))
+    set((s) => ({
+      openTools: s.openTools.filter((id) => id !== tool),
+      toolLayoutMode: 'single',
+    }))
     schedulePersist()
   },
   hydrate: async () => {
     try {
-      const remote = await invoke<LayoutPersist | null>('load_layout')
+      const remote = await invoke<LayoutRemote | null>('load_layout')
       if (remote) {
-        const mode = parseMode(remote.toolLayoutMode)
+        const applied = applyRemote(remote)
         set({
-          railWidth: num(remote.railWidth, 240),
-          listWidth: num(remote.listWidth, 280),
-          toolPanelWidth: num(remote.toolPanelWidth, 300),
-          terminalHeight: num(remote.terminalHeight, 220),
-          toolLayoutMode: mode,
-          openTools: parseOpenTools(remote.openTools, mode),
+          ...applied,
+          toolLayoutMode: 'single',
+          openTools: applied.openTools.slice(0, 1),
           hydrated: true,
         })
         return
       }
       const legacy = fromLocalStorage()
       if (legacy) {
-        set({ ...legacy, hydrated: true })
+        set({
+          ...legacy,
+          toolLayoutMode: 'single',
+          openTools: legacy.openTools.slice(0, 1),
+          hydrated: true,
+        })
         get().persist()
         try {
           localStorage.removeItem('fpm.layout.v4')

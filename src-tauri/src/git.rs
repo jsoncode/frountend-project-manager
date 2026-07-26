@@ -241,8 +241,15 @@ pub fn git_fetch(path: &str) -> Result<String, String> {
 }
 
 pub fn git_status(path: &str) -> Result<GitStatus, String> {
-    let git_dir = std::path::Path::new(path).join(".git");
-    if !git_dir.exists() {
+    // Accept both repo roots and nested folders inside a work tree.
+    let inside = git_command(path)
+        .args(["rev-parse", "--is-inside-work-tree"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "true")
+        .unwrap_or(false);
+    if !inside {
         return Err("非 Git 仓库".into());
     }
 
@@ -253,8 +260,16 @@ pub fn git_status(path: &str) -> Result<GitStatus, String> {
         .filter(|o| o.status.success())
         .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
 
+    // --relative: paths relative to `path` (the selected project), not repo root.
     let output = git_command(path)
-        .args(["status", "--porcelain=v1", "-unormal"])
+        .args([
+            "status",
+            "--porcelain=v1",
+            "-unormal",
+            "--relative",
+            "--",
+            ".",
+        ])
         .output()
         .map_err(|e| e.to_string())?;
 

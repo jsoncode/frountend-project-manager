@@ -39,7 +39,6 @@ export type ProjectSummary = {
   folderName: string
   path: string
   pkgName?: string | null
-  pkgVersion?: string | null
   /** First line of README.md (heading markers stripped). */
   displayName?: string | null
   frameworks: string[]
@@ -48,7 +47,6 @@ export type ProjectSummary = {
 
 export type ProjectDetails = {
   summary: ProjectSummary
-  languages: string[]
   packageManager: string
 }
 

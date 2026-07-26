@@ -1,24 +1,54 @@
 :root {
-  --bg-0: #071018;
-  --bg-1: #0a1628;
-  --bg-2: #0d1f2d;
-  --panel: rgba(14, 30, 48, 0.85);
-  --panel-strong: rgba(8, 20, 36, 0.95);
-  --border: #1e4d6b;
-  --border-dim: #1e3a5f;
-  --cyan: #22d3ee;
-  --cyan-soft: #67e8f9;
-  --text: #8ba3b8;
-  --text-bright: #e0f7fa;
+  /* Frost Glass — core palette */
+  --bg-0: #06090f;
+  --bg-1: #0b1220;
+  --bg-2: #101828;
+  --bg-glow-a: rgba(34, 197, 180, 0.16);
+  --bg-glow-b: rgba(56, 120, 255, 0.11);
+
+  --panel: rgba(12, 18, 30, 0.92);
+  --panel-strong: rgba(10, 16, 28, 0.96);
+  --glass-soft: rgba(255, 255, 255, 0.04);
+
+  --border: rgba(255, 255, 255, 0.12);
+  --border-dim: rgba(255, 255, 255, 0.08);
+  --hairline: var(--border-dim);
+  --hairline-strong: var(--border);
+
+  --cyan: #2dd4bf;
+  --cyan-soft: #5eead4;
+  --accent: var(--cyan);
+  --accent-soft: rgba(45, 212, 191, 0.16);
+  --accent-glow: rgba(45, 212, 191, 0.35);
+
+  --text: #9aa8bc;
+  --text-bright: #eef3fb;
+  --text-dim: #6b7a90;
+
   --danger: #fb7185;
   --ok: #34d399;
-  --font: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', Consolas, ui-monospace,
-    'Microsoft YaHei UI', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB',
-    'Noto Sans SC', sans-serif;
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --glow: 0 0 18px rgba(34, 211, 238, 0.18);
+  --warn: #fbbf24;
+  /* VS Code–like git modified / untracked text */
+  --git-modified: #e2c08d;
+  --git-mark: #cca700;
+
+  --font: 'IBM Plex Sans', 'Microsoft YaHei UI', 'Microsoft YaHei', 'PingFang SC',
+    'Hiragino Sans GB', 'Noto Sans SC', sans-serif;
+  --mono: 'IBM Plex Mono', 'Cascadia Code', 'Fira Code', Consolas, ui-monospace,
+    monospace;
+
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
+  /* Overlay-only blur — avoid stacking on large panels (WebView mosaic). */
+  --blur: 18px;
+  --blur-heavy: 28px;
+  --glow: 0 0 20px rgba(45, 212, 191, 0.16);
+  --shadow-float: 0 18px 50px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(255, 255, 255, 0.04);
 }
 
 * {
@@ -30,10 +60,38 @@ body,
 #root {
   margin: 0;
   height: 100%;
-  background: linear-gradient(160deg, var(--bg-0) 0%, var(--bg-1) 55%, var(--bg-2) 100%);
   color: var(--text);
   font-family: var(--font);
-  font-size: 15px;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/*
+  Ambient color is baked into radial gradients — NOT filter:blur orbs.
+  Blurred pseudo-elements + nested backdrop-filter cause mosaic banding
+  in Chromium/WebView2.
+*/
+html,
+body {
+  background:
+    radial-gradient(
+      ellipse 80% 60% at 8% -5%,
+      var(--bg-glow-a),
+      transparent 58%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 102% 105%,
+      var(--bg-glow-b),
+      transparent 52%
+    ),
+    linear-gradient(165deg, #0a1220 0%, var(--bg-0) 48%, #070b14 100%);
+  overflow: hidden;
+}
+
+#root {
+  position: relative;
+  z-index: 1;
+  height: 100%;
 }
 
 button,
@@ -49,6 +107,10 @@ textarea {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1e4d6b;
-  border-radius: 4px;
+  background: rgba(148, 163, 184, 0.28);
+  border-radius: 8px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.42);
 }
