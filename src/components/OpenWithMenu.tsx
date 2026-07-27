@@ -41,6 +41,15 @@ export function OpenWithMenu({ path, x, y, onClose }: Props) {
     }
   }
 
+  const copyPath = async () => {
+    try {
+      await navigator.clipboard.writeText(path)
+    } catch {
+      /* ignore */
+    }
+    onClose()
+  }
+
   return (
     <ContextMenuPortal x={x} y={y} onClose={close}>
       {ides.map((ide) => (
@@ -59,6 +68,9 @@ export function OpenWithMenu({ path, x, y, onClose }: Props) {
         <div className="branch-menu-hint muted">{t('open.noIde')}</div>
       )}
       <div className="branch-menu-sep" />
+      <button type="button" role="menuitem" onClick={() => void copyPath()}>
+        {t('explorer.copyPath')}
+      </button>
       <button type="button" role="menuitem" className="btn-with-icon" onClick={() => void reveal()}>
         <FolderOpen className="ui-icon" size={14} color="currentColor" aria-hidden />
         {t('open.inFileManager')}

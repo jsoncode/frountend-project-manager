@@ -4,6 +4,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import type { MouseEvent } from 'react'
 import { useI18n } from '../i18n/useI18n'
 import { isTauri } from '../lib/tauri'
+import { useProjectStore } from '../stores/projectStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import { SearchBox } from './SearchBox'
@@ -12,8 +13,14 @@ import { WindowControls } from './WindowControls'
 
 export function TopBar() {
   const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace)
+  const selectedProject = useProjectStore((s) => s.selected)
   const setSettingsOpen = useSettingsStore((s) => s.setSettingsOpen)
   const { t } = useI18n()
+
+  const titlePath = selectedProject?.path ?? activeWorkspace
+  const titleLabel = selectedProject?.path
+    ?? activeWorkspace
+    ?? t('app.noWorkspace')
 
   const openAi = () => {
     if (!isTauri()) return
@@ -40,10 +47,10 @@ export function TopBar() {
         <div
           className="topbar-drag"
           onMouseDown={onDragMouseDown}
-          title={activeWorkspace ?? undefined}
+          title={titlePath ?? undefined}
         >
           <span className="topbar-path">
-            {activeWorkspace ?? t('app.noWorkspace')}
+            {titleLabel}
           </span>
         </div>
       </div>

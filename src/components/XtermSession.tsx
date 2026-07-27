@@ -1,10 +1,11 @@
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
-import { Terminal } from '@xterm/xterm'
+import { Terminal, type ILink, type ILinkProvider } from '@xterm/xterm'
 import { invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-shell'
-import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { useI18n } from '../i18n/useI18n'
+import { findFilePathsInLine } from '../lib/termFileLinks'
 import {
   createReadyGate,
   fitTerminal,
@@ -15,6 +16,8 @@ import {
   unregisterPtyTerminal,
 } from '../lib/ptyHost'
 import { isTauri } from '../lib/tauri'
+import { useEditorStore } from '../stores/editorStore'
+import { useExplorerStore } from '../stores/explorerStore'
 import { useTerminalStore } from '../stores/terminalStore'
 import { ContextMenuPortal } from './ContextMenuPortal'
 import '@xterm/xterm/css/xterm.css'
@@ -30,16 +33,49 @@ type TermMenu = {
   y: number
   hasSelection: boolean
   selection: string
+  filePath?: string
+}
+
+function createFilePathLinkProvider(
+  terminal: Terminal,
+  onPathActivate: (event: MouseEvent, path: string) => void,
+): ILinkProvider {
+  return {
+    provideLinks(y, callback) {
+      const line = terminal.buffer.active.getLine(y - 1)
+      if (!line) {
+        callback(undefined)
+        return
+      }
+      const text = line.translateToString(true)
+      const matches = findFilePathsInLine(text)
+      if (matches.length === 0) {
+        callback(undefined)
+        return
+      }
+      const links: ILink[] = matches.map((m) => ({
+        text: m.path,
+        range: {
+          start: { x: m.start + 1, y },
+          end: { x: m.end, y },
+        },
+        activate: (event) => onPathActivate(event, m.path),
+      }))
+      callback(links)
+    },
+  }
 }
 
 export function XtermSession({ sessionId, cwd, active }: Props) {
   const hostRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
+  const cwdRef = useRef(cwd)
   const activeRef = useRef(active)
   const markConnected = useTerminalStore((s) => s.markConnected)
   const { t } = useI18n()
   const [menu, setMenu] = useState<TermMenu | null>(null)
   activeRef.current = active
+  cwdRef.current = cwd
 
   const closeMenu = useCallback(() => setMenu(null), [])
 
@@ -86,6 +122,20 @@ export function XtermSession({ sessionId, cwd, active }: Props) {
     term.loadAddon(
       new WebLinksAddon((_event, uri) => {
         void open(uri)
+      }),
+    )
+
+    const fileLinks = term.registerLinkProvider(
+      createFilePathLinkProvider(term, (event, path) => {
+        event.preventDefault()
+        event.stopPropagation()
+        setMenu({
+          x: event.clientX,
+          y: event.clientY,
+          hasSelection: false,
+          selection: '',
+          filePath: path,
+        })
       }),
     )
 
@@ -158,6 +208,7 @@ export function XtermSession({ sessionId, cwd, active }: Props) {
     return () => {
       disposed = true
       onData.dispose()
+      fileLinks.dispose()
       resizeObs.disconnect()
       termRef.current = null
       unregisterPtyTerminal(sessionId)
@@ -185,7 +236,7 @@ export function XtermSession({ sessionId, cwd, active }: Props) {
     return () => window.clearTimeout(t)
   }, [active, sessionId])
 
-  const onContextMenu = (e: MouseEvent) => {
+  const onContextMenu = (e: ReactMouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
     const term = termRef.current
@@ -218,6 +269,25 @@ export function XtermSession({ sessionId, cwd, active }: Props) {
     void invoke('ai_open_chat_window', { feedText }).catch(() => undefined)
   }
 
+  const copyFilePath = () => {
+    if (!menu?.filePath) return
+    void navigator.clipboard.writeText(menu.filePath).catch(() => undefined)
+    setMenu(null)
+  }
+
+  const openFilePath = () => {
+    const path = menu?.filePath
+    if (!path) return
+    setMenu(null)
+    const projectPath = cwdRef.current
+    useEditorStore.getState().openTab(path, projectPath)
+    useExplorerStore.getState().setSelection({
+      kind: 'file',
+      path,
+      projectPath,
+    })
+  }
+
   return (
     <div
       ref={hostRef}
@@ -227,26 +297,39 @@ export function XtermSession({ sessionId, cwd, active }: Props) {
     >
       {menu && (
         <ContextMenuPortal x={menu.x} y={menu.y} onClose={closeMenu}>
-          <button
-            type="button"
-            role="menuitem"
-            disabled={!menu.hasSelection}
-            onClick={copySelection}
-          >
-            {t('term.ctx.copy')}
-          </button>
-          <button type="button" role="menuitem" onClick={selectAll}>
-            {t('term.ctx.selectAll')}
-          </button>
-          <div className="branch-menu-sep" />
-          <button
-            type="button"
-            role="menuitem"
-            disabled={!menu.hasSelection}
-            onClick={feedAi}
-          >
-            {t('term.ctx.feedAi')}
-          </button>
+          {menu.filePath ? (
+            <>
+              <button type="button" role="menuitem" onClick={copyFilePath}>
+                {t('term.ctx.copyPath')}
+              </button>
+              <button type="button" role="menuitem" onClick={openFilePath}>
+                {t('term.ctx.openFile')}
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                role="menuitem"
+                disabled={!menu.hasSelection}
+                onClick={copySelection}
+              >
+                {t('term.ctx.copy')}
+              </button>
+              <button type="button" role="menuitem" onClick={selectAll}>
+                {t('term.ctx.selectAll')}
+              </button>
+              <div className="branch-menu-sep" />
+              <button
+                type="button"
+                role="menuitem"
+                disabled={!menu.hasSelection}
+                onClick={feedAi}
+              >
+                {t('term.ctx.feedAi')}
+              </button>
+            </>
+          )}
         </ContextMenuPortal>
       )}
     </div>

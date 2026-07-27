@@ -5,30 +5,18 @@ import { useI18n } from '../i18n/useI18n'
 import { truncateAttachment } from '../lib/aiChat'
 import { focusTerminal } from '../lib/ptyHost'
 import { isTauri } from '../lib/tauri'
-import type { ProjectSummary } from '../lib/types'
-import { findWorkspaceForPath } from '../lib/workspacePath'
 import { useProjectStore } from '../stores/projectStore'
-import { useSettingsStore } from '../stores/settingsStore'
 import { useTerminalStore } from '../stores/terminalStore'
-import { useWorkspaceStore } from '../stores/workspaceStore'
 import { ModalShell } from './ModalShell'
 import { XtermSession } from './XtermSession'
 
-function findProjectByPath(
-  projectPath: string,
-  cache: Record<string, ProjectSummary[]>,
-): { project: ProjectSummary; workspace: string } | null {
-  const target = projectPath.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
-  for (const [ws, list] of Object.entries(cache)) {
-    for (const p of list) {
-      const path = p.path.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
-      if (path === target) return { project: p, workspace: ws }
-    }
-  }
-  return null
-}
-
-export function TerminalPanel({ height }: { height: number }) {
+export function TerminalPanel({
+  height,
+  fill = false,
+}: {
+  height?: number
+  fill?: boolean
+}) {
   const sessions = useTerminalStore((s) => s.sessions)
   const activeId = useTerminalStore((s) => s.activeId)
   const issueAlerts = useTerminalStore((s) => s.issueAlerts)
@@ -37,12 +25,6 @@ export function TerminalPanel({ height }: { height: number }) {
   const closeSession = useTerminalStore((s) => s.closeSession)
   const clearIssueAlert = useTerminalStore((s) => s.clearIssueAlert)
   const selected = useProjectStore((s) => s.selected)
-  const selectProject = useProjectStore((s) => s.selectProject)
-  const projectCache = useWorkspaceStore((s) => s.projectCache)
-  const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace)
-  const setActiveWorkspace = useWorkspaceStore((s) => s.setActiveWorkspace)
-  const setSearch = useWorkspaceStore((s) => s.setSearch)
-  const workspaces = useSettingsStore((s) => s.config?.workspaces ?? [])
   const [pendingCloseId, setPendingCloseId] = useState<string | null>(null)
   const { t } = useI18n()
 
@@ -54,38 +36,8 @@ export function TerminalPanel({ height }: { height: number }) {
     if (activeId) focusTerminal(activeId)
   }, [activeId])
 
-  const locateSessionProject = (projectPath: string) => {
-    const hit = findProjectByPath(projectPath, projectCache)
-    const workspace =
-      hit?.workspace ||
-      findWorkspaceForPath(projectPath, workspaces) ||
-      activeWorkspace
-    if (workspace && workspace !== activeWorkspace) {
-      setActiveWorkspace(workspace)
-    }
-    // Clear search so the project is visible in the tree.
-    if (useWorkspaceStore.getState().search.trim()) {
-      setSearch('')
-    }
-    if (hit) {
-      void selectProject(hit.project)
-      return
-    }
-    // Fallback: select a minimal summary so detail pane still switches.
-    const folderName =
-      projectPath.replace(/[/\\]+$/, '').split(/[/\\]/).pop() || projectPath
-    void selectProject({
-      folderName,
-      path: projectPath,
-      frameworks: [],
-      scripts: {},
-    })
-  }
-
   const activateTab = (id: string) => {
-    const session = sessions.find((s) => s.id === id)
     setActive(id)
-    if (session) locateSessionProject(session.projectPath)
   }
 
   const addTerminal = () => {
@@ -122,7 +74,10 @@ export function TerminalPanel({ height }: { height: number }) {
   }
 
   return (
-    <div className="terminal" style={{ height }}>
+    <div
+      className={`terminal${fill ? ' terminal-fill' : ''}`}
+      style={fill ? undefined : { height }}
+    >
       <div className="terminal-tabs">
         {sessions.map((s) => (
           <button

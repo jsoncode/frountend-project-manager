@@ -121,22 +121,48 @@ fn detect_package_manager(dir: &Path) -> String {
     }
 }
 
+/// Workspace child folders that should appear as projects.
+/// Skips hidden dirs (`.git`, `.vscode`, …) and common non-project names.
+fn is_listable_project_dir(path: &Path) -> bool {
+    if !path.is_dir() {
+        return false;
+    }
+    let name = match path.file_name().and_then(|s| s.to_str()) {
+        Some(n) if !n.is_empty() => n,
+        _ => return false,
+    };
+    if name.starts_with('.') {
+        return false;
+    }
+    !name.eq_ignore_ascii_case("node_modules")
+}
+
 fn summary_from_dir(dir: PathBuf) -> Option<ProjectSummary> {
-    let pkg = read_package_json(&dir)?;
+    if !is_listable_project_dir(&dir) {
+        return None;
+    }
     let folder_name = dir
         .file_name()
         .map(|s| s.to_string_lossy().to_string())
         .unwrap_or_else(|| dir.to_string_lossy().to_string());
+    let pkg = read_package_json(&dir);
     Some(ProjectSummary {
         folder_name,
         path: dir.to_string_lossy().to_string(),
         pkg_name: pkg
-            .get("name")
+            .as_ref()
+            .and_then(|p| p.get("name"))
             .and_then(|v| v.as_str())
             .map(|s| s.to_string()),
         display_name: read_readme_display_name(&dir),
-        frameworks: detect_frameworks(&pkg),
-        scripts: extract_scripts(&pkg),
+        frameworks: pkg
+            .as_ref()
+            .map(detect_frameworks)
+            .unwrap_or_default(),
+        scripts: pkg
+            .as_ref()
+            .map(extract_scripts)
+            .unwrap_or_default(),
     })
 }
 
@@ -149,10 +175,8 @@ pub fn list_projects(workspace: &str) -> Result<Vec<ProjectSummary>, String> {
     let entries = fs::read_dir(&root).map_err(|e| e.to_string())?;
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.is_dir() {
-            if let Some(summary) = summary_from_dir(path) {
-                projects.push(summary);
-            }
+        if let Some(summary) = summary_from_dir(path) {
+            projects.push(summary);
         }
     }
     projects.sort_by(|a, b| a.folder_name.cmp(&b.folder_name));
@@ -161,11 +185,71 @@ pub fn list_projects(workspace: &str) -> Result<Vec<ProjectSummary>, String> {
 
 pub fn scan_project(path: &str) -> Result<ProjectDetails, String> {
     let dir = PathBuf::from(path);
+    if !dir.is_dir() {
+        return Err(format!("Not a directory: {path}"));
+    }
     let summary = summary_from_dir(dir.clone()).ok_or_else(|| {
-        format!("No package.json in {path}")
+        format!("Not a project directory: {path}")
     })?;
     Ok(ProjectDetails {
         package_manager: detect_package_manager(&dir),
         summary,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_workspace(tag: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let root = std::env::temp_dir().join(format!(
+            "fpm-scan-{}-{}-{}",
+            tag,
+            std::process::id(),
+            nanos
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        root
+    }
+
+    #[test]
+    fn lists_bare_folder_without_package_json_or_git() {
+        let root = temp_workspace("bare");
+        fs::create_dir_all(root.join("bare-app")).unwrap();
+        fs::create_dir_all(root.join("with-pkg")).unwrap();
+        fs::write(
+            root.join("with-pkg/package.json"),
+            r#"{"name":"with-pkg","scripts":{"dev":"vite"}}"#,
+        )
+        .unwrap();
+        fs::create_dir_all(root.join(".hidden")).unwrap();
+        fs::create_dir_all(root.join("node_modules")).unwrap();
+
+        let projects = list_projects(root.to_str().unwrap()).unwrap();
+        let names: Vec<_> = projects.iter().map(|p| p.folder_name.as_str()).collect();
+        assert!(names.contains(&"bare-app"), "got {names:?}");
+        assert!(names.contains(&"with-pkg"), "got {names:?}");
+        assert!(!names.contains(&".hidden"));
+        assert!(!names.iter().any(|n| n.eq_ignore_ascii_case("node_modules")));
+
+        let bare = projects.iter().find(|p| p.folder_name == "bare-app").unwrap();
+        assert!(bare.pkg_name.is_none());
+        assert!(bare.scripts.is_empty());
+
+        let with_pkg = projects.iter().find(|p| p.folder_name == "with-pkg").unwrap();
+        assert_eq!(with_pkg.pkg_name.as_deref(), Some("with-pkg"));
+        assert!(with_pkg.scripts.contains_key("dev"));
+
+        let details = scan_project(bare.path.as_str()).unwrap();
+        assert_eq!(details.summary.folder_name, "bare-app");
+
+        let _ = fs::remove_dir_all(&root);
+    }
 }

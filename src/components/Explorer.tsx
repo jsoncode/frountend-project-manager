@@ -159,14 +159,20 @@ export function Explorer() {
   }
 
   const selectProjectRow = (p: ProjectSummary, workspace: string) => {
+    const fromSearch = searching
     if (workspace && workspace !== activeWorkspace) {
       setActiveWorkspace(workspace)
     }
     void selectProject(p)
     setSelection({ kind: 'project', path: p.path, workspace })
-    if (searching) {
+    if (fromSearch) {
       void touchSearchHistory(p.folderName)
       setSearch('')
+      // After search clears, scroll the picked project to the top of the tree.
+      window.setTimeout(() => {
+        const el = rowRefs.current.get(`proj:${p.path}`)
+        el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 50)
     }
   }
 
@@ -189,16 +195,25 @@ export function Explorer() {
   const onToggleProject = (p: ProjectSummary, workspace: string) => {
     const id = `proj:${p.path}`
     const willOpen = !expanded.has(id)
+    const fromSearch = searching
     if (workspace && workspace !== activeWorkspace) {
       setActiveWorkspace(workspace)
     }
     void selectProject(p)
     setSelection({ kind: 'project', path: p.path, workspace })
     expandId(`ws:${workspace}`)
+    if (fromSearch) {
+      void touchSearchHistory(p.folderName)
+      setSearch('')
+      window.setTimeout(() => {
+        const el = rowRefs.current.get(`proj:${p.path}`)
+        el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 50)
+    }
     if (willOpen) {
       expandId(id)
       void loadDir(p.path, true)
-    } else {
+    } else if (!fromSearch) {
       setExpanded((prev) => {
         const next = new Set(prev)
         next.delete(id)
@@ -271,16 +286,6 @@ export function Explorer() {
     }
     setMenu(null)
   }
-
-  useEffect(() => {
-    if (!selectedProject) return
-    const el = rowRefs.current.get(`proj:${selectedProject.path}`)
-    if (!el) return
-    const timer = window.setTimeout(() => {
-      el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-    }, 40)
-    return () => window.clearTimeout(timer)
-  }, [selectedProject?.path, expanded])
 
   const isSelected = (kind: string, path: string) => {
     if (!selection) return false
@@ -617,6 +622,13 @@ export function Explorer() {
           <button
             type="button"
             role="menuitem"
+            onClick={() => void copyPath(menu.path)}
+          >
+            {t('explorer.copyPath')}
+          </button>
+          <button
+            type="button"
+            role="menuitem"
             className="btn-with-icon"
             onClick={() => void revealPath(menu.path)}
           >
@@ -656,16 +668,16 @@ export function Explorer() {
           <button
             type="button"
             role="menuitem"
-            onClick={() => void revealPath(menu.path)}
+            onClick={() => void copyPath(menu.path)}
           >
-            {t('open.inFileManager')}
+            {t('explorer.copyPath')}
           </button>
           <button
             type="button"
             role="menuitem"
-            onClick={() => void copyPath(menu.path)}
+            onClick={() => void revealPath(menu.path)}
           >
-            {t('explorer.copyPath')}
+            {t('open.inFileManager')}
           </button>
         </ContextMenuPortal>
       )}

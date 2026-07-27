@@ -1,9 +1,111 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::process::Command;
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::OnceLock;
 
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
+
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+/// 0 = unknown, 1 = supported, 2 = unsupported.
+const REL_UNKNOWN: u8 = 0;
+const REL_YES: u8 = 1;
+const REL_NO: u8 = 2;
+
+static STATUS_RELATIVE: AtomicU8 = AtomicU8::new(REL_UNKNOWN);
+
+/// True once we have confirmed `--relative` fails at runtime (overrides probe).
+static STATUS_RELATIVE_DENIED: AtomicBool = AtomicBool::new(false);
+
+fn git_no_window(cmd: &mut Command) {
+    #[cfg(windows)]
+    {
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+}
+
+/// Feature-detect via `git status -h` (more reliable than version strings).
+fn probe_status_relative_help() -> bool {
+    static CACHED: OnceLock<bool> = OnceLock::new();
+    *CACHED.get_or_init(|| {
+        let mut cmd = Command::new("git");
+        cmd.args(["status", "-h"]);
+        git_no_window(&mut cmd);
+        let Ok(output) = cmd.output() else {
+            return false;
+        };
+        let text = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        // Help lists the flag only when the installed git accepts it.
+        text.contains("--relative")
+    })
+}
+
+fn status_relative_supported() -> bool {
+    if STATUS_RELATIVE_DENIED.load(Ordering::Relaxed) {
+        return false;
+    }
+    match STATUS_RELATIVE.load(Ordering::Relaxed) {
+        REL_YES => true,
+        REL_NO => false,
+        _ => {
+            let yes = probe_status_relative_help();
+            STATUS_RELATIVE.store(if yes { REL_YES } else { REL_NO }, Ordering::Relaxed);
+            yes
+        }
+    }
+}
+
+fn deny_status_relative() {
+    STATUS_RELATIVE_DENIED.store(true, Ordering::Relaxed);
+    STATUS_RELATIVE.store(REL_NO, Ordering::Relaxed);
+}
+
+fn is_unknown_relative_option(stderr: &str) -> bool {
+    let lower = stderr.to_ascii_lowercase();
+    lower.contains("unknown option") && lower.contains("relative")
+}
+
+/// Strip worktree-relative prefix so paths match `--relative` output.
+fn strip_status_prefix(repo_rel: &str, prefix: &str) -> Option<String> {
+    let path = repo_rel.replace('\\', "/");
+    let mut prefix = prefix.replace('\\', "/");
+    if prefix.is_empty() {
+        return Some(path);
+    }
+    if !prefix.ends_with('/') {
+        prefix.push('/');
+    }
+    path.strip_prefix(&prefix).map(|s| s.to_string())
+}
+
+fn git_show_prefix(path: &str) -> String {
+    git_command(path)
+        .args(["rev-parse", "--show-prefix"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().replace('\\', "/"))
+        .unwrap_or_default()
+}
+
+fn run_git_status(path: &str, use_relative: bool) -> Result<std::process::Output, String> {
+    let mut args = vec!["status", "--porcelain=v1", "-unormal"];
+    if use_relative {
+        args.push("--relative");
+    }
+    args.extend(["--", "."]);
+    git_command(path)
+        .args(&args)
+        .output()
+        .map_err(|e| e.to_string())
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -41,9 +143,6 @@ pub struct GitStatus {
 
 /// Cap remote-heavy repos so UI doesn't render thousands of rows.
 const MAX_BRANCHES: usize = 200;
-
-#[cfg(windows)]
-const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 fn git_command(path: &str) -> Command {
     let mut cmd = Command::new("git");
@@ -260,18 +359,24 @@ pub fn git_status(path: &str) -> Result<GitStatus, String> {
         .filter(|o| o.status.success())
         .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
 
-    // --relative: paths relative to `path` (the selected project), not repo root.
-    let output = git_command(path)
-        .args([
-            "status",
-            "--porcelain=v1",
-            "-unormal",
-            "--relative",
-            "--",
-            ".",
-        ])
-        .output()
-        .map_err(|e| e.to_string())?;
+    // Prefer `--relative` when help lists it; fall back if runtime rejects it.
+    let mut use_relative = status_relative_supported();
+    let mut output = run_git_status(path, use_relative)?;
+
+    if !output.status.success() {
+        let err = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        if use_relative && is_unknown_relative_option(&err) {
+            deny_status_relative();
+            use_relative = false;
+            output = run_git_status(path, false)?;
+        } else {
+            return Err(if err.is_empty() {
+                "git status failed".into()
+            } else {
+                err
+            });
+        }
+    }
 
     if !output.status.success() {
         let err = String::from_utf8_lossy(&output.stderr).trim().to_string();
@@ -281,6 +386,12 @@ pub fn git_status(path: &str) -> Result<GitStatus, String> {
             err
         });
     }
+
+    let prefix = if use_relative {
+        String::new()
+    } else {
+        git_show_prefix(path)
+    };
 
     let mut entries = Vec::new();
     for line in String::from_utf8_lossy(&output.stdout).lines() {
@@ -293,6 +404,13 @@ pub fn git_status(path: &str) -> Result<GitStatus, String> {
             to.to_string()
         } else {
             rest.to_string()
+        };
+        let file_path = if use_relative {
+            file_path
+        } else if let Some(rel) = strip_status_prefix(&file_path, &prefix) {
+            rel
+        } else {
+            continue;
         };
         entries.push(GitStatusEntry {
             label: status_label(&code),
@@ -453,4 +571,36 @@ pub fn git_pull_branch(path: &str, branch: &str) -> Result<String, String> {
     } else {
         format!("updated {local}: {stderr}")
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn detects_unknown_relative_option_message() {
+        let err = "error: unknown option `relative'\nusage: git status [<options>]";
+        assert!(is_unknown_relative_option(err));
+        assert!(!is_unknown_relative_option("error: pathspec did not match"));
+    }
+
+    #[test]
+    fn strip_repo_prefix_for_nested_project() {
+        assert_eq!(
+            strip_status_prefix("packages/app/src/a.ts", "packages/app/"),
+            Some("src/a.ts".into())
+        );
+        assert_eq!(
+            strip_status_prefix("packages/app/src/a.ts", "packages/app"),
+            Some("src/a.ts".into())
+        );
+        assert_eq!(
+            strip_status_prefix("src/a.ts", ""),
+            Some("src/a.ts".into())
+        );
+        assert_eq!(
+            strip_status_prefix("other/pkg/x.ts", "packages/app/"),
+            None
+        );
+    }
 }

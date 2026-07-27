@@ -1049,6 +1049,15 @@ body.resizing-row * {
   overflow: hidden;
 }
 
+.editor-slot-collapsed {
+  flex: 0 0 0;
+  min-height: 0;
+  height: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .editor-shell {
   flex: 1;
   min-height: 0;
@@ -1153,6 +1162,16 @@ body.resizing-row * {
   border-top: 1px solid var(--border-dim);
   border-radius: 0;
   background: transparent;
+}
+
+.terminal-fill {
+  flex: 1 1 auto;
+  min-height: 0;
+  border-top: none;
+}
+
+.main-col-term-only .detail-header {
+  flex-shrink: 0;
 }
 
 .explorer-scroll {
