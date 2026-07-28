@@ -168,40 +168,72 @@ export function XtermSession({ sessionId, cwd, active }: Props) {
 
     const fit = new FitAddon()
     term.loadAddon(fit)
-    term.loadAddon(
-      new WebLinksAddon((_event, uri) => {
-        void open(uri)
-      }),
-    )
-
     const clearLinkSelection = () => {
       term.clearSelection()
     }
+
+    /** Track pointer down to distinguish click vs drag-select on links. */
+    const pointerDownRef = { x: 0, y: 0 }
+    const onPointerDown = (e: MouseEvent) => {
+      pointerDownRef.x = e.clientX
+      pointerDownRef.y = e.clientY
+    }
+    host.addEventListener('mousedown', onPointerDown, true)
+
+    const shouldIgnoreLinkOpen = (event: MouseEvent) => {
+      // Right / middle never auto-open.
+      if (event.button !== 0) return true
+      if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) {
+        return true
+      }
+      // Drag-select ending on a link must not open (xterm fires activate on mouseup).
+      const dx = Math.abs(event.clientX - pointerDownRef.x)
+      const dy = Math.abs(event.clientY - pointerDownRef.y)
+      if (dx > 3 || dy > 3) return true
+      const sel = term.getSelection()
+      if (term.hasSelection() && sel.trim().length > 0) return true
+      return false
+    }
+
+    term.loadAddon(
+      new WebLinksAddon((event, uri) => {
+        if (shouldIgnoreLinkOpen(event)) return
+        void open(uri)
+      }),
+    )
 
     const fileLinks = term.registerLinkProvider(
       createFilePathLinkProvider(term, (event, path) => {
         event.preventDefault()
         event.stopPropagation()
-        // Link click still goes through xterm's mouse selection pipeline;
-        // clear immediately and keep clearing briefly while mouse settles.
-        suppressSelectUntilRef.current = Date.now() + 400
-        clearLinkSelection()
-        queueMicrotask(clearLinkSelection)
-        window.setTimeout(clearLinkSelection, 0)
-        window.setTimeout(clearLinkSelection, 50)
 
+        const hadSelection =
+          term.hasSelection() && (term.getSelection()?.trim().length ?? 0) > 0
+        const selection = hadSelection ? (term.getSelection() ?? '') : ''
+
+        // Right-click / modifier: show path menu; keep selection so Copy works.
         if (event.button === 2 || event.ctrlKey || event.metaKey) {
           pathMenuFromLinkRef.current = true
           setMenu({
             x: event.clientX,
             y: event.clientY,
-            hasSelection: false,
-            selection: '',
+            hasSelection: selection.length > 0,
+            selection,
             filePath: path,
           })
           return
         }
-        // Primary click: open folder / reveal file in the system file manager.
+
+        if (shouldIgnoreLinkOpen(event)) {
+          return
+        }
+
+        // Primary click only: open folder / reveal file in the system file manager.
+        suppressSelectUntilRef.current = Date.now() + 400
+        clearLinkSelection()
+        queueMicrotask(clearLinkSelection)
+        window.setTimeout(clearLinkSelection, 0)
+        window.setTimeout(clearLinkSelection, 50)
         void invoke('reveal_in_file_manager', { path }).catch(() => undefined)
       }),
     )
@@ -286,6 +318,7 @@ export function XtermSession({ sessionId, cwd, active }: Props) {
       fileLinks.dispose()
       host.removeEventListener('mouseup', onMouseSettle, true)
       host.removeEventListener('mousemove', onMouseSettle, true)
+      host.removeEventListener('mousedown', onPointerDown, true)
       resizeObs.disconnect()
       termRef.current = null
       unregisterPtyTerminal(sessionId)
@@ -385,8 +418,28 @@ export function XtermSession({ sessionId, cwd, active }: Props) {
     >
       {menu && (
         <ContextMenuPortal x={menu.x} y={menu.y} onClose={closeMenu}>
-          {menu.filePath ? (
+          <button
+            type="button"
+            role="menuitem"
+            disabled={!menu.hasSelection}
+            onClick={copySelection}
+          >
+            {t('term.ctx.copy')}
+          </button>
+          <button type="button" role="menuitem" onClick={selectAll}>
+            {t('term.ctx.selectAll')}
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            disabled={!menu.hasSelection}
+            onClick={feedAi}
+          >
+            {t('term.ctx.feedAi')}
+          </button>
+          {menu.filePath && (
             <>
+              <div className="branch-menu-sep" />
               <button type="button" role="menuitem" onClick={revealFilePath}>
                 {t('term.ctx.revealPath')}
               </button>
@@ -395,29 +448,6 @@ export function XtermSession({ sessionId, cwd, active }: Props) {
               </button>
               <button type="button" role="menuitem" onClick={openFilePath}>
                 {t('term.ctx.openFile')}
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                type="button"
-                role="menuitem"
-                disabled={!menu.hasSelection}
-                onClick={copySelection}
-              >
-                {t('term.ctx.copy')}
-              </button>
-              <button type="button" role="menuitem" onClick={selectAll}>
-                {t('term.ctx.selectAll')}
-              </button>
-              <div className="branch-menu-sep" />
-              <button
-                type="button"
-                role="menuitem"
-                disabled={!menu.hasSelection}
-                onClick={feedAi}
-              >
-                {t('term.ctx.feedAi')}
               </button>
             </>
           )}
