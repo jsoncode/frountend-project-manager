@@ -2782,10 +2782,6 @@ body.resizing-row * {
   background: rgba(34, 211, 238, 0.12);
 }
 
-.merge-file-row.is-conflict .merge-file-path {
-  color: #f87171;
-}
-
 .merge-file-path {
   flex: 1;
   min-width: 0;
@@ -2794,6 +2790,24 @@ body.resizing-row * {
   white-space: nowrap;
   font-family: Consolas, 'Courier New', ui-monospace, monospace;
   font-size: 12px;
+}
+
+.merge-file-row.is-conflict .merge-file-path {
+  color: #f87171;
+}
+
+.merge-file-row.is-clean .merge-file-path {
+  color: #94a3b8;
+}
+
+.merge-file-meta {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-dim, #94a3b8);
+}
+
+.merge-file-row.is-conflict .merge-file-meta {
+  color: #f87171;
 }
 
 .merge-file-code {

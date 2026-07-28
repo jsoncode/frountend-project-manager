@@ -129,21 +129,24 @@ export function GitToolPanel() {
   }
 
   const startMerge = async (ref: string) => {
-    echoTerm(`\r\n\x1b[36m$ git merge ${ref}\x1b[0m\r\n`)
     try {
       const result = await invoke<MergeStartResult>('git_merge_start', {
         path: selected.path,
         gitRef: ref,
       })
       await refreshGit()
-      if (result.status === 'conflicts' || result.merge.inProgress) {
-        echoTerm(`\x1b[33m${result.message}\x1b[0m\r\n`)
-        setMergeModal({ initial: result.merge })
-      } else {
-        echoTerm(`\x1b[32m${result.message || t('merge.cleanOk')}\x1b[0m\r\n`)
+      if (result.status === 'uptodate') {
+        echoTerm(`\r\n\x1b[32m$ git merge ${ref}\x1b[0m — ${t('merge.upToDate')}\r\n`)
+        return
       }
+      // Always open the review modal (pending or conflicts) — never dump git
+      // merge banners into the interactive PTY (that garbles the prompt).
+      echoTerm(
+        `\r\n\x1b[36m$ git merge --no-commit ${ref}\x1b[0m — ${result.message}\r\n`,
+      )
+      setMergeModal({ initial: result.merge })
     } catch (e) {
-      echoTerm(`\x1b[31m${String(e)}\x1b[0m\r\n`)
+      echoTerm(`\r\n\x1b[31m$ git merge ${ref}\x1b[0m — ${String(e)}\x1b[0m\r\n`)
       await refreshMergeStatus().catch(() => undefined)
     }
   }

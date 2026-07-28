@@ -155,7 +155,9 @@ export function MergeConflictModal({
             <p className="muted merge-summary">
               {status.conflictCount > 0
                 ? t('merge.conflictSummary', { n: status.conflictCount })
-                : t('merge.noConflicts')}
+                : status.inProgress
+                  ? t('merge.pendingSummary', { n: status.files.length })
+                  : t('merge.noConflicts')}
             </p>
             <div className="merge-file-list" role="listbox">
               {status.files.length === 0 ? (
@@ -167,13 +169,20 @@ export function MergeConflictModal({
                     type="button"
                     role="option"
                     aria-selected={selected === f.path}
-                    className={`merge-file-row${f.conflict ? ' is-conflict' : ''}${
-                      selected === f.path ? ' is-selected' : ''
-                    }`}
+                    className={`merge-file-row${
+                      f.conflict ? ' is-conflict' : ' is-clean'
+                    }${selected === f.path ? ' is-selected' : ''}`}
                     onClick={() => setSelected(f.path)}
+                    onDoubleClick={() => {
+                      if (f.conflict) setDiffFile(f.path)
+                    }}
                   >
                     <span className="merge-file-path">{f.path}</span>
-                    <span className="merge-file-code">{f.code}</span>
+                    <span className="merge-file-meta">
+                      {f.conflict
+                        ? t('merge.fileConflict')
+                        : f.label || f.code}
+                    </span>
                   </button>
                 ))
               )}

@@ -803,20 +803,26 @@ pub fn git_merge_status(path: &str) -> Result<MergeStatus, String> {
     let in_progress = merge_in_progress(path);
     let current = current_branch_name(path);
     let incoming = read_merge_incoming(path);
-    let status = git_status(path)?;
-    let files: Vec<MergeFileEntry> = status
-        .entries
-        .into_iter()
-        .map(|e| {
-            let conflict = is_conflict_code(&e.code);
-            MergeFileEntry {
-                path: e.path,
-                code: e.code,
-                conflict,
-                label: e.label,
-            }
-        })
-        .collect();
+
+    // Prefer a merge-aware file list: unmerged (conflicts) + staged merge changes.
+    let mut files = merge_changed_files(path)?;
+    if files.is_empty() {
+        let status = git_status(path)?;
+        files = status
+            .entries
+            .into_iter()
+            .map(|e| {
+                let conflict = is_conflict_code(&e.code);
+                MergeFileEntry {
+                    path: e.path,
+                    code: e.code,
+                    conflict,
+                    label: e.label,
+                }
+            })
+            .collect();
+    }
+
     let conflict_count = files.iter().filter(|f| f.conflict).count() as u32;
     Ok(MergeStatus {
         in_progress,
@@ -827,12 +833,108 @@ pub fn git_merge_status(path: &str) -> Result<MergeStatus, String> {
     })
 }
 
+/// Files touched by an in-progress merge (conflicts + staged auto-merged).
+fn merge_changed_files(path: &str) -> Result<Vec<MergeFileEntry>, String> {
+    if !merge_in_progress(path) {
+        return Ok(Vec::new());
+    }
+
+    use std::collections::BTreeMap;
+    let mut map: BTreeMap<String, MergeFileEntry> = BTreeMap::new();
+
+    // Unmerged paths → conflicts (UU).
+    let unmerged = git_command(path)
+        .args(["ls-files", "-u"])
+        .output()
+        .map_err(|e| e.to_string())?;
+    if unmerged.status.success() {
+        for line in String::from_utf8_lossy(&unmerged.stdout).lines() {
+            // format: <mode> <hash> <stage>\t<path>
+            let Some((_, rest)) = line.split_once('\t') else {
+                continue;
+            };
+            let file = rest.trim().replace('\\', "/");
+            if file.is_empty() {
+                continue;
+            }
+            map.insert(
+                file.clone(),
+                MergeFileEntry {
+                    path: file,
+                    code: "UU".into(),
+                    conflict: true,
+                    label: "conflict".into(),
+                },
+            );
+        }
+    }
+
+    // Staged changes from the merge (auto-resolved).
+    let cached = git_command(path)
+        .args(["diff", "--cached", "--name-status", "-z"])
+        .output()
+        .map_err(|e| e.to_string())?;
+    if cached.status.success() {
+        let raw = String::from_utf8_lossy(&cached.stdout);
+        let parts: Vec<&str> = raw.split('\0').filter(|s| !s.is_empty()).collect();
+        let mut i = 0;
+        while i < parts.len() {
+            let status = parts[i];
+            i += 1;
+            if i >= parts.len() {
+                break;
+            }
+            // Rename/copy: status\0old\0new
+            let (code, file) = if status.starts_with('R') || status.starts_with('C') {
+                let _old = parts[i];
+                i += 1;
+                if i >= parts.len() {
+                    break;
+                }
+                let newp = parts[i];
+                i += 1;
+                (status.chars().next().unwrap_or('R').to_string(), newp)
+            } else {
+                let f = parts[i];
+                i += 1;
+                (status.to_string(), f)
+            };
+            let file = file.replace('\\', "/");
+            if file.is_empty() || map.contains_key(&file) {
+                continue;
+            }
+            let label = match code.chars().next().unwrap_or('M') {
+                'A' => "added",
+                'D' => "deleted",
+                'R' => "renamed",
+                'C' => "copied",
+                _ => "modified",
+            };
+            map.insert(
+                file.clone(),
+                MergeFileEntry {
+                    path: file,
+                    code,
+                    conflict: false,
+                    label: label.into(),
+                },
+            );
+        }
+    }
+
+    Ok(map.into_values().collect())
+}
+
 pub fn git_merge_start(path: &str, git_ref: &str) -> Result<MergeStartResult, String> {
     require_git_repo(path)?;
     if merge_in_progress(path) {
         let merge = git_merge_status(path)?;
         return Ok(MergeStartResult {
-            status: "conflicts".into(),
+            status: if merge.conflict_count > 0 {
+                "conflicts".into()
+            } else {
+                "pending".into()
+            },
             message: "已有未完成的合并，请先继续或取消".into(),
             merge,
         });
@@ -843,43 +945,52 @@ pub fn git_merge_start(path: &str, git_ref: &str) -> Result<MergeStartResult, St
         return Err("合并目标为空".into());
     }
 
+    // Stop before commit so the UI can show the changed-file list (WebStorm-style).
+    // --no-ff keeps MERGE_HEAD even when a fast-forward would otherwise apply.
     let output = git_command(path)
-        .args(["merge", "--no-edit", git_ref])
+        .args(["merge", "--no-commit", "--no-ff", git_ref])
         .output()
         .map_err(|e| e.to_string())?;
 
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    let combined = format!("{stdout}\n{stderr}").to_lowercase();
+
+    if combined.contains("already up to date") {
+        return Ok(MergeStartResult {
+            status: "uptodate".into(),
+            message: "Already up to date.".into(),
+            merge: git_merge_status(path)?,
+        });
+    }
+
     let merge = git_merge_status(path)?;
-    if output.status.success() && !merge.in_progress {
-        let msg = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if merge.in_progress {
+        let status = if merge.conflict_count > 0 {
+            "conflicts"
+        } else {
+            "pending"
+        };
         return Ok(MergeStartResult {
-            status: "clean".into(),
-            message: if msg.is_empty() {
-                format!("merged {git_ref}")
+            status: status.into(),
+            message: if merge.conflict_count > 0 {
+                format!("合并产生 {} 个冲突，请在弹框中解决", merge.conflict_count)
             } else {
-                msg
+                format!(
+                    "已暂存 {} 个文件变更，请确认后完成合并",
+                    merge.files.len()
+                )
             },
             merge,
         });
     }
 
-    if merge.in_progress || merge.conflict_count > 0 {
-        let err = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        return Ok(MergeStartResult {
-            status: "conflicts".into(),
-            message: if err.is_empty() {
-                "合并产生冲突，请解决后完成合并".into()
-            } else {
-                err
-            },
-            merge,
-        });
-    }
-
-    let err = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    Err(if err.is_empty() {
-        format!("合并失败: {git_ref}")
+    Err(if !stderr.is_empty() {
+        stderr
+    } else if !stdout.is_empty() {
+        stdout
     } else {
-        err
+        format!("合并失败: {git_ref}")
     })
 }
 
