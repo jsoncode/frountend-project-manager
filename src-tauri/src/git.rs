@@ -480,6 +480,157 @@ pub fn git_checkout(path: &str, branch: &str) -> Result<String, String> {
     })
 }
 
+fn require_git_repo(path: &str) -> Result<(), String> {
+    let git_dir = std::path::Path::new(path).join(".git");
+    if !git_dir.exists() {
+        return Err("非 Git 仓库".into());
+    }
+    Ok(())
+}
+
+/// Create a local branch from `from`, switch to it, then
+/// `git push -u origin <name>`.
+pub fn git_create_branch(path: &str, name: &str, from: &str) -> Result<String, String> {
+    require_git_repo(path)?;
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("分支名为空".into());
+    }
+    if name.contains("..") || name.contains(' ') || name.contains('\\') {
+        return Err("分支名不合法".into());
+    }
+
+    let start = normalize_branch_name(from.trim());
+    if start.is_empty() {
+        return Err("起始分支为空".into());
+    }
+
+    let start_ref = if from.trim().starts_with("origin/")
+        || from.trim().starts_with("remotes/origin/")
+    {
+        format!("origin/{start}")
+    } else {
+        start.clone()
+    };
+
+    if ref_exists(path, &format!("refs/heads/{name}")) {
+        return Err(format!("本地分支 {name} 已存在"));
+    }
+    if ref_exists(path, &format!("refs/remotes/origin/{name}")) {
+        return Err(format!("远程分支 origin/{name} 已存在"));
+    }
+
+    // Create + checkout in one step.
+    let switch = git_command(path)
+        .args(["switch", "-c", name, "--no-track", &start_ref])
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    if !switch.status.success() {
+        let err = String::from_utf8_lossy(&switch.stderr).trim().to_string();
+        return Err(if err.is_empty() {
+            format!("无法创建并切换到分支 {name}")
+        } else {
+            err
+        });
+    }
+
+    let mut notes = vec![format!("created & switched to {name} ← {start_ref}")];
+
+    let push_out = git_command(path)
+        .args(["push", "-u", "origin", name])
+        .output()
+        .map_err(|e| e.to_string())?;
+    if !push_out.status.success() {
+        let err = String::from_utf8_lossy(&push_out.stderr).trim().to_string();
+        return Err(if err.is_empty() {
+            format!("已切换到 {name}，但推送到 origin 失败")
+        } else {
+            format!("已切换到 {name}，但推送失败: {err}")
+        });
+    }
+    notes.push(format!("pushed origin/{name} (-u)"));
+
+    Ok(notes.join("; "))
+}
+
+fn ref_exists(path: &str, refname: &str) -> bool {
+    git_command(path)
+        .args(["show-ref", "--verify", "--quiet", refname])
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+/// Delete a local or remote branch. Refuses to delete the currently checked-out branch.
+pub fn git_delete_branch(
+    path: &str,
+    branch: &str,
+    is_remote: bool,
+    also_local: bool,
+) -> Result<String, String> {
+    require_git_repo(path)?;
+    let local = normalize_branch_name(branch.trim());
+    if local.is_empty() {
+        return Err("分支名为空".into());
+    }
+
+    if let Some(cur) = current_branch_name(path) {
+        if cur == local {
+            return Err("不能删除当前所在分支".into());
+        }
+    }
+
+    let mut notes = Vec::new();
+
+    if is_remote {
+        let output = git_command(path)
+            .args(["push", "origin", "--delete", &local])
+            .output()
+            .map_err(|e| e.to_string())?;
+        if !output.status.success() {
+            let err = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            return Err(if err.is_empty() {
+                format!("无法删除远程分支 origin/{local}")
+            } else {
+                err
+            });
+        }
+        notes.push(format!("deleted origin/{local}"));
+
+        if also_local {
+            let local_del = git_command(path)
+                .args(["branch", "-D", &local])
+                .output()
+                .map_err(|e| e.to_string())?;
+            if local_del.status.success() {
+                notes.push(format!("deleted local {local}"));
+            } else {
+                let err = String::from_utf8_lossy(&local_del.stderr).trim().to_string();
+                if !err.is_empty() {
+                    notes.push(format!("local {local}: {err}"));
+                }
+            }
+        }
+    } else {
+        let output = git_command(path)
+            .args(["branch", "-D", &local])
+            .output()
+            .map_err(|e| e.to_string())?;
+        if !output.status.success() {
+            let err = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            return Err(if err.is_empty() {
+                format!("无法删除本地分支 {local}")
+            } else {
+                err
+            });
+        }
+        notes.push(format!("deleted {local}"));
+    }
+
+    Ok(notes.join("; "))
+}
+
 fn normalize_branch_name(branch: &str) -> String {
     branch
         .strip_prefix("remotes/origin/")

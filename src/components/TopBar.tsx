@@ -9,6 +9,7 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import { SearchBox } from './SearchBox'
 import { TitleFileMenu } from './TitleFileMenu'
+import { Tooltip } from './Tooltip'
 import { WindowControls } from './WindowControls'
 
 /** Interactive chrome — must not start a window drag. */
@@ -51,36 +52,42 @@ export function TopBar() {
   return (
     <header className="topbar titlebar" onMouseDown={onTitlebarMouseDown}>
       <div className="topbar-left">
-        <div className="brand" title="FPM" aria-label="FPM">
-          <Atom className="ui-icon" size={16} color="currentColor" aria-hidden />
-        </div>
+        <Tooltip title="FPM">
+          <div className="brand" aria-label="FPM">
+            <Atom className="ui-icon" size={16} color="currentColor" aria-hidden />
+          </div>
+        </Tooltip>
         <TitleFileMenu />
-        <div className="topbar-path-wrap" title={titlePath ?? undefined}>
-          <span className="topbar-path">{titleLabel}</span>
-        </div>
+        <Tooltip title={titlePath ?? undefined}>
+          <div className="topbar-path-wrap">
+            <span className="topbar-path">{titleLabel}</span>
+          </div>
+        </Tooltip>
       </div>
       <div className="topbar-center">
         <SearchBox />
       </div>
       <div className="topbar-end">
-        <button
-          type="button"
-          className="btn icon-only"
-          title={t('top.settings')}
-          aria-label={t('top.settings')}
-          onClick={() => setSettingsOpen(true)}
-        >
-          <Settings className="ui-icon" size={16} color="currentColor" aria-hidden />
-        </button>
-        <button
-          type="button"
-          className="btn primary btn-with-icon ai-launch-btn"
-          title={t('top.aiTitle')}
-          onClick={openAi}
-        >
-          <ChatRoundDots className="ui-icon" size={15} color="currentColor" aria-hidden />
-          {t('top.ai')}
-        </button>
+        <Tooltip title={t('top.settings')}>
+          <button
+            type="button"
+            className="btn icon-only"
+            aria-label={t('top.settings')}
+            onClick={() => setSettingsOpen(true)}
+          >
+            <Settings className="ui-icon" size={16} color="currentColor" aria-hidden />
+          </button>
+        </Tooltip>
+        <Tooltip title={t('top.aiTitle')}>
+          <button
+            type="button"
+            className="btn primary btn-with-icon ai-launch-btn"
+            onClick={openAi}
+          >
+            <ChatRoundDots className="ui-icon" size={15} color="currentColor" aria-hidden />
+            {t('top.ai')}
+          </button>
+        </Tooltip>
         <WindowControls />
       </div>
     </header>

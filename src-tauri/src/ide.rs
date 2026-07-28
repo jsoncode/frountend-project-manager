@@ -1185,9 +1185,13 @@ pub fn reveal_in_file_manager(path: &str) -> Result<(), String> {
 
     #[cfg(target_os = "windows")]
     {
+        // explorer's `/select,C:\path with spaces\file` is mis-parsed and often
+        // opens the user Documents folder instead. Pass a single raw token:
+        // `/select,"C:\path with spaces\file"`.
         let mut cmd = Command::new("explorer");
         if p.is_file() {
-            cmd.arg(format!("/select,{}", p.to_string_lossy()));
+            let select = format!("/select,\"{}\"", p.to_string_lossy());
+            cmd.raw_arg(select);
         } else {
             cmd.arg(p.as_os_str());
         }

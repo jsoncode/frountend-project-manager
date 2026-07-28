@@ -1,5 +1,6 @@
 import { Settings } from 'reicon-react'
 import { useState } from 'react'
+import { Tooltip } from '../components/Tooltip'
 import { useI18n } from '../i18n/useI18n'
 import { useAiStore } from '../stores/aiStore'
 import { AiModelSettingsModal } from './AiModelSettingsModal'
@@ -35,15 +36,16 @@ export function AiTopBar() {
             ))
           )}
         </select>
-        <button
-          type="button"
-          className="ai-btn ai-btn-sm ai-topbar-settings"
-          title={t('ai.settings')}
-          aria-label={t('ai.settings')}
-          onClick={() => setSettingsOpen(true)}
-        >
-          <Settings className="ui-icon" size={20} color="currentColor" aria-hidden />
-        </button>
+        <Tooltip title={t('ai.settings')}>
+          <button
+            type="button"
+            className="ai-btn ai-btn-sm ai-topbar-settings"
+            aria-label={t('ai.settings')}
+            onClick={() => setSettingsOpen(true)}
+          >
+            <Settings className="ui-icon" size={20} color="currentColor" aria-hidden />
+          </button>
+        </Tooltip>
       </header>
       {settingsOpen ? (
         <AiModelSettingsModal onClose={() => setSettingsOpen(false)} />

@@ -17,11 +17,22 @@ import { BranchSwitchModal } from './BranchSwitchModal'
 import { ContextMenuPortal } from './ContextMenuPortal'
 import { HistoryChips } from './HistoryChips'
 import { ModalShell } from './ModalShell'
+import { Tooltip } from './Tooltip'
 
 type MenuState = {
   x: number
   y: number
   branch: BranchItem
+}
+
+type CreateState = {
+  from: string
+  name: string
+}
+
+type DeleteState = {
+  branch: BranchItem
+  alsoLocal: boolean
 }
 
 export function GitToolPanel() {
@@ -37,6 +48,10 @@ export function GitToolPanel() {
   const [menu, setMenu] = useState<MenuState | null>(null)
   const [commitTarget, setCommitTarget] = useState<string | null>(null)
   const [commitMsg, setCommitMsg] = useState('')
+  const [createState, setCreateState] = useState<CreateState | null>(null)
+  const [deleteState, setDeleteState] = useState<DeleteState | null>(null)
+  const [branchBusy, setBranchBusy] = useState(false)
+  const [branchError, setBranchError] = useState<string | null>(null)
   const [checking, setChecking] = useState(false)
   const [pulling, setPulling] = useState(false)
   const { t } = useI18n()
@@ -74,6 +89,11 @@ export function GitToolPanel() {
   const localName = (name: string) =>
     name.replace(/^remotes\//, '').replace(/^origin\//, '')
 
+  const isBranchNameTaken = (name: string) => {
+    const n = name.trim()
+    if (!n) return false
+    return (git?.branches ?? []).some((b) => localName(b.name) === n)
+  }
   const pullBranch = async (branch: BranchItem) => {
     const name = localName(branch.name)
     setPulling(true)
@@ -84,7 +104,6 @@ export function GitToolPanel() {
         branch: name,
       })
       echoTerm(`\x1b[32m${msg}\x1b[0m\r\n`)
-      // Re-read tracking counts (no full remote fetch needed after pull)
       await refreshGit()
     } catch (e) {
       echoTerm(`\x1b[31m${String(e)}\x1b[0m\r\n`)
@@ -106,13 +125,75 @@ export function GitToolPanel() {
     setCommitTarget(null)
     setCommitMsg('')
     const quoted = JSON.stringify(msg)
-    // Windows PowerShell 5.1 does not support bash-style `&&`.
-    // Chain with `; if ($?) { ... }` so a failed step stops the rest.
     const cmds =
       git?.current === branch || branch.startsWith('origin/')
         ? `git add -A; if ($?) { git commit -m ${quoted} }`
         : `git switch ${JSON.stringify(localName(branch))}; if ($?) { git add -A }; if ($?) { git commit -m ${quoted} }`
     runGit(cmds)
+  }
+
+  const doCreateBranch = async () => {
+    if (!createState || !createState.name.trim() || !selected) return
+    const name = createState.name.trim()
+    if (isBranchNameTaken(name)) {
+      setBranchError(t('git.branchNameTaken', { name }))
+      return
+    }
+    setBranchBusy(true)
+    setBranchError(null)
+    const from = createState.from
+    echoTerm(
+      `\r\n\x1b[36m$ git switch -c ${name} ← ${from} && git push -u origin ${name}\x1b[0m\r\n`,
+    )
+    try {
+      const msg = await invoke<string>('git_create_branch', {
+        path: selected.path,
+        name,
+        from,
+      })
+      echoTerm(`\x1b[32m${msg}\x1b[0m\r\n`)
+      setCreateState(null)
+      await refreshGit()
+    } catch (e) {
+      const err = String(e)
+      setBranchError(err)
+      echoTerm(`\x1b[31m${err}\x1b[0m\r\n`)
+      await refreshGit().catch(() => undefined)
+      // Already switched (or created) — close so the user isn't stuck retrying create.
+      if (err.includes('已切换') || err.includes('已创建')) {
+        setCreateState(null)
+      }
+    } finally {
+      setBranchBusy(false)
+    }
+  }
+
+  const doDeleteBranch = async () => {
+    if (!deleteState) return
+    setBranchBusy(true)
+    setBranchError(null)
+    const { branch, alsoLocal } = deleteState
+    const label = branch.isRemote
+      ? `origin/${localName(branch.name)}`
+      : localName(branch.name)
+    echoTerm(`\r\n\x1b[36m$ git delete ${label}\x1b[0m\r\n`)
+    try {
+      const msg = await invoke<string>('git_delete_branch', {
+        path: selected.path,
+        branch: branch.name,
+        isRemote: branch.isRemote,
+        alsoLocal: branch.isRemote ? alsoLocal : false,
+      })
+      echoTerm(`\x1b[32m${msg}\x1b[0m\r\n`)
+      setDeleteState(null)
+      await refreshGit()
+    } catch (e) {
+      const err = String(e)
+      setBranchError(err)
+      echoTerm(`\x1b[31m${err}\x1b[0m\r\n`)
+    } finally {
+      setBranchBusy(false)
+    }
   }
 
   const isMenuCurrent =
@@ -121,57 +202,60 @@ export function GitToolPanel() {
     (git.current === menu.branch.name ||
       (!menu.branch.isRemote && git.current === localName(menu.branch.name)))
 
-  // origin/master 与本地 master 视为同一逻辑分支：不合并，可签出
   const sameLocalAsCurrent =
     !!menu && !!git?.current && localName(menu.branch.name) === git.current
 
   const branches = git?.branches ?? []
   const localBranches = branches.filter((b) => !b.isRemote)
   const remoteBranches = branches.filter((b) => b.isRemote)
+  const createNameTaken = Boolean(
+    createState?.name.trim() && isBranchNameTaken(createState.name),
+  )
 
   const renderBranch = (b: BranchItem) => {
     const isCurrent = !b.isRemote && git?.current === b.name
     return (
-      <div
+      <Tooltip
         key={b.name}
-        className={`branch-item ${isCurrent ? 'current' : ''} clickable`}
         title={
           isCurrent
             ? t('git.current')
             : `${t('git.dblclick')} · ${t('git.contextHint')}`
         }
-        onDoubleClick={() => {
-          if (!isCurrent) setSwitchTarget(b.name)
-        }}
-        onContextMenu={(e) => onContext(e, b)}
       >
-        <span className="branch-mark" aria-hidden>
-          <BranchDown
-            size={12}
-            color="currentColor"
-            weight={isCurrent ? 'Filled' : 'Outline'}
-          />
-        </span>
-        <span className="branch-name">{b.name}</span>
-        {b.behind > 0 && (
-          <span
-            className="branch-badge behind"
-            title={t('git.behindHint', { n: b.behind })}
-          >
-            <ArrowDown className="inline-icon" size={10} color="currentColor" aria-hidden />
-            {b.behind}
+        <div
+          className={`branch-item ${isCurrent ? 'current' : ''} clickable`}
+          onDoubleClick={() => {
+            if (!isCurrent) setSwitchTarget(b.name)
+          }}
+          onContextMenu={(e) => onContext(e, b)}
+        >
+          <span className="branch-mark" aria-hidden>
+            <BranchDown
+              size={12}
+              color="currentColor"
+              weight={isCurrent ? 'Filled' : 'Outline'}
+            />
           </span>
-        )}
-        {b.ahead > 0 && (
-          <span
-            className="branch-badge ahead"
-            title={t('git.aheadHint', { n: b.ahead })}
-          >
-            <ArrowUp className="inline-icon" size={10} color="currentColor" aria-hidden />
-            {b.ahead}
-          </span>
-        )}
-      </div>
+          <span className="branch-name">{b.name}</span>
+          {b.behind > 0 && (
+            <Tooltip title={t('git.behindHint', { n: b.behind })}>
+              <span className="branch-badge behind">
+                <ArrowDown className="inline-icon" size={10} color="currentColor" aria-hidden />
+                {b.behind}
+              </span>
+            </Tooltip>
+          )}
+          {b.ahead > 0 && (
+            <Tooltip title={t('git.aheadHint', { n: b.ahead })}>
+              <span className="branch-badge ahead">
+                <ArrowUp className="inline-icon" size={10} color="currentColor" aria-hidden />
+                {b.ahead}
+              </span>
+            </Tooltip>
+          )}
+        </div>
+      </Tooltip>
     )
   }
 
@@ -248,6 +332,49 @@ export function GitToolPanel() {
               {t('git.ctx.checkout')}
             </button>
           )}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setCreateState({
+                from: menu.branch.name,
+                name: localName(menu.branch.name),
+              })
+              setBranchError(null)
+              setMenu(null)
+            }}
+          >
+            {t('git.ctx.newBranch')}
+          </button>
+          {!isMenuCurrent && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setDeleteState({
+                  branch: menu.branch,
+                  alsoLocal: false,
+                })
+                setBranchError(null)
+                setMenu(null)
+              }}
+            >
+              {t('git.ctx.deleteBranch')}
+            </button>
+          )}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              void navigator.clipboard
+                .writeText(menu.branch.name)
+                .catch(() => undefined)
+              setMenu(null)
+            }}
+          >
+            {t('git.ctx.copyName')}
+          </button>
+          <div className="branch-menu-sep" />
           <button
             type="button"
             role="menuitem"
@@ -341,7 +468,7 @@ export function GitToolPanel() {
             type="button"
             role="menuitem"
             onClick={() => {
-              runGit('git log --oneline -20')
+              runGit('git log --oneline -10')
               setMenu(null)
             }}
           >
@@ -373,6 +500,120 @@ export function GitToolPanel() {
             >
               <CheckCircle className="ui-icon" size={14} color="currentColor" aria-hidden />
               {t('git.ctx.commit')}
+            </button>
+          </div>
+        </ModalShell>
+      )}
+
+      {createState && (
+        <ModalShell
+          title={t('git.newBranchTitle')}
+          onClose={() => setCreateState(null)}
+        >
+          <p className="muted">
+            {t('git.newBranchHint', { name: createState.from })}
+          </p>
+          <input
+            className="input-block"
+            value={createState.name}
+            onChange={(e) => {
+              setBranchError(null)
+              setCreateState((s) => (s ? { ...s, name: e.target.value } : s))
+            }}
+            onFocus={(e) => e.currentTarget.select()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !createNameTaken && createState.name.trim()) {
+                void doCreateBranch()
+              }
+            }}
+            placeholder={t('git.newBranchPlaceholder')}
+            autoFocus
+          />
+          {createNameTaken && (
+            <div className="status-banner dirty" style={{ marginTop: 10 }}>
+              {t('git.branchNameTaken', { name: createState.name.trim() })}
+            </div>
+          )}
+          {branchError && !createNameTaken && (
+            <div className="status-banner dirty" style={{ marginTop: 10 }}>
+              {branchError}
+            </div>
+          )}
+          <div className="modal-actions">
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setCreateState(null)}
+              disabled={branchBusy}
+            >
+              {t('branch.cancel')}
+            </button>
+            <button
+              type="button"
+              className="btn primary"
+              disabled={
+                branchBusy ||
+                !createState.name.trim() ||
+                createNameTaken
+              }
+              onClick={() => void doCreateBranch()}
+            >
+              {branchBusy ? t('git.creatingBranch') : t('git.ctx.newBranch')}
+            </button>
+          </div>
+        </ModalShell>
+      )}
+
+      {deleteState && (
+        <ModalShell
+          title={t('git.deleteBranchTitle')}
+          onClose={() => setDeleteState(null)}
+          closeOnEsc={false}
+        >
+          <p className="muted">
+            {deleteState.branch.isRemote
+              ? t('git.deleteRemoteConfirm', {
+                  name: localName(deleteState.branch.name),
+                })
+              : t('git.deleteLocalConfirm', {
+                  name: localName(deleteState.branch.name),
+                })}
+          </p>
+          {deleteState.branch.isRemote && (
+            <label className="checkbox-row" style={{ marginTop: 10 }}>
+              <input
+                type="checkbox"
+                checked={deleteState.alsoLocal}
+                onChange={(e) =>
+                  setDeleteState((s) =>
+                    s ? { ...s, alsoLocal: e.target.checked } : s,
+                  )
+                }
+              />
+              <span>{t('git.deleteAlsoLocal')}</span>
+            </label>
+          )}
+          {branchError && (
+            <div className="status-banner dirty" style={{ marginTop: 10 }}>
+              {branchError}
+            </div>
+          )}
+          <div className="modal-actions">
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setDeleteState(null)}
+              disabled={branchBusy}
+            >
+              {t('branch.cancel')}
+            </button>
+            <button
+              type="button"
+              className="btn danger"
+              disabled={branchBusy}
+              onClick={() => void doDeleteBranch()}
+            >
+              {branchBusy ? t('git.deletingBranch') : t('git.ctx.deleteBranch')}
             </button>
           </div>
         </ModalShell>

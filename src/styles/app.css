@@ -230,6 +230,20 @@
   font-size: 13px;
 }
 
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+}
+
+.checkbox-row input {
+  margin: 0;
+}
+
 .input-block:focus {
   outline: none;
   border-color: var(--cyan);
@@ -2528,5 +2542,45 @@ body.resizing-row * {
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* —— Tooltip (antd-like, portaled) —— */
+.ui-tooltip-trigger {
+  display: inline-flex;
+  max-width: 100%;
+  vertical-align: middle;
+}
+
+.ui-tooltip {
+  position: fixed;
+  z-index: 10050;
+  pointer-events: auto;
+  animation: ui-tooltip-in 120ms var(--ease);
+}
+
+.ui-tooltip-inner {
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(15, 23, 42, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: var(--shadow-float);
+  color: var(--text-bright);
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+@keyframes ui-tooltip-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 

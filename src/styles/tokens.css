@@ -64,6 +64,23 @@ body,
   font-family: var(--font);
   font-size: 14px;
   -webkit-font-smoothing: antialiased;
+  /* Only searchable / editable surfaces should allow text selection & copy. */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+input,
+textarea,
+select,
+[contenteditable='true'],
+.user-select-text,
+.monaco-editor,
+.monaco-editor *,
+.monaco-host,
+.xterm,
+.xterm * {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 /*

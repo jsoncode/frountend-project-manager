@@ -118,6 +118,7 @@ export function AiSidebar() {
         <ModalShell
           title={t('ai.deleteTitle')}
           onClose={() => setPendingDelete(null)}
+          closeOnEsc={false}
         >
           <p className="muted">
             {t('ai.deleteConfirm', { title: pendingDelete.title })}

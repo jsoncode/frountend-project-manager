@@ -22,34 +22,7 @@ export function BranchSwitchModal({ branch, onClose }: Props) {
   const [error, setError] = useState<string | null>(null)
   const { t } = useI18n()
 
-  useEffect(() => {
-    if (!selected) {
-      setLoading(false)
-      setError(t('branch.noProject'))
-      return
-    }
-    let cancelled = false
-    setLoading(true)
-    setError(null)
-    void invoke<GitStatus>('git_status', { path: selected.path })
-      .then((s) => {
-        if (!cancelled) {
-          setStatus(s)
-          setLoading(false)
-        }
-      })
-      .catch((e) => {
-        if (!cancelled) {
-          setError(String(e))
-          setLoading(false)
-        }
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [selected, branch, t])
-
-  const confirm = async () => {
+  const doSwitch = async () => {
     if (!selected) return
     setSwitching(true)
     setError(null)
@@ -64,11 +37,88 @@ export function BranchSwitchModal({ branch, onClose }: Props) {
     } catch (e) {
       setError(String(e))
       setSwitching(false)
+      setLoading(false)
     }
   }
 
+  useEffect(() => {
+    if (!selected) {
+      setLoading(false)
+      setError(t('branch.noProject'))
+      return
+    }
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    void invoke<GitStatus>('git_status', { path: selected.path })
+      .then(async (s) => {
+        if (cancelled) return
+        setStatus(s)
+        // Clean working tree → switch immediately, no confirm dialog.
+        if (s.clean) {
+          setSwitching(true)
+          try {
+            await invoke<string>('git_checkout', {
+              path: selected.path,
+              branch,
+            })
+            if (cancelled) return
+            await touchBranchHistory(selected.path, branch)
+            await refresh()
+            if (!cancelled) onClose()
+          } catch (e) {
+            if (!cancelled) {
+              setError(String(e))
+              setSwitching(false)
+              setLoading(false)
+            }
+          }
+          return
+        }
+        setLoading(false)
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setError(String(e))
+          setLoading(false)
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-run for project/branch
+  }, [selected, branch, t])
+
+  // Clean auto-switch: keep a lightweight progress shell until done/error.
+  if (loading || (status?.clean && !error)) {
+    return (
+      <ModalShell
+        title={t('branch.confirmTitle')}
+        onClose={onClose}
+        closeOnEsc={false}
+        className="branch-modal"
+      >
+        <p className="muted">
+          {switching || status?.clean
+            ? t('branch.switching')
+            : t('branch.checking')}
+        </p>
+        {error && (
+          <div className="status-banner dirty" style={{ marginTop: 10 }}>
+            {error}
+          </div>
+        )}
+      </ModalShell>
+    )
+  }
+
   return (
-    <ModalShell title={t('branch.confirmTitle')} onClose={onClose} className="branch-modal">
+    <ModalShell
+      title={t('branch.confirmTitle')}
+      onClose={onClose}
+      closeOnEsc={false}
+      className="branch-modal"
+    >
       <p className="branch-switch-path">
         <span className="muted">{t('branch.from')}</span>{' '}
         <strong>{status?.current ?? '—'}</strong>{' '}
@@ -78,16 +128,7 @@ export function BranchSwitchModal({ branch, onClose }: Props) {
         <strong className="cyan-text">{branch}</strong>
       </p>
 
-      {loading && <p className="muted">{t('branch.checking')}</p>}
-
-      {!loading && status?.clean && (
-        <div className="status-banner clean">
-          <div className="status-title">{t('branch.cleanTitle')}</div>
-          <div className="muted">{t('branch.cleanDesc')}</div>
-        </div>
-      )}
-
-      {!loading && status && !status.clean && (
+      {status && !status.clean && (
         <div className="status-banner dirty">
           <div className="status-title">
             {t('branch.dirtyTitle', { count: status.entries.length })}
@@ -119,8 +160,8 @@ export function BranchSwitchModal({ branch, onClose }: Props) {
         <button
           type="button"
           className="btn primary btn-with-icon"
-          disabled={loading || switching || !selected}
-          onClick={() => void confirm()}
+          disabled={switching || !selected}
+          onClick={() => void doSwitch()}
         >
           <CheckCircle className="ui-icon" size={14} color="currentColor" aria-hidden />
           {switching ? t('branch.switching') : t('branch.confirm')}

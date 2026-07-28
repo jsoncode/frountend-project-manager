@@ -34,6 +34,16 @@ description = "Checkout git branch"
 commands.allow = ["git_checkout"]
 
 [[permission]]
+identifier = "allow-git-create-branch"
+description = "Create a local git branch from a start point"
+commands.allow = ["git_create_branch"]
+
+[[permission]]
+identifier = "allow-git-delete-branch"
+description = "Delete a local or remote git branch"
+commands.allow = ["git_delete_branch"]
+
+[[permission]]
 identifier = "allow-git-fetch"
 description = "Fetch git remotes"
 commands.allow = ["git_fetch"]

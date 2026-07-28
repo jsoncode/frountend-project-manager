@@ -4,6 +4,7 @@ import { useI18n } from '../i18n/useI18n'
 import type { HistoryItem } from '../lib/types'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useWorkspaceStore } from '../stores/workspaceStore'
+import { Tooltip } from './Tooltip'
 
 /** Stable empty ref — never put `?? []` inside a Zustand selector (causes React #185). */
 const EMPTY_HISTORY: HistoryItem[] = []
@@ -110,15 +111,16 @@ export function SearchBox({ autofocus = false }: { autofocus?: boolean }) {
         autoComplete="off"
       />
       {search.length > 0 && (
-        <button
-          type="button"
-          className="search-clear"
-          title={t('top.searchClear')}
-          aria-label={t('top.searchClear')}
-          onClick={clear}
-        >
-          <X className="ui-icon" size={14} color="currentColor" aria-hidden />
-        </button>
+        <Tooltip title={t('top.searchClear')}>
+          <button
+            type="button"
+            className="search-clear"
+            aria-label={t('top.searchClear')}
+            onClick={clear}
+          >
+            <X className="ui-icon" size={14} color="currentColor" aria-hidden />
+          </button>
+        </Tooltip>
       )}
       {open && picks.length > 0 && (
         <div className="search-suggest" role="listbox">
@@ -138,17 +140,18 @@ export function SearchBox({ autofocus = false }: { autofocus?: boolean }) {
               >
                 {item}
               </button>
-              <button
-                type="button"
-                className="search-suggest-del"
-                title={t('top.searchHistoryDel')}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  void deleteHistory('', 'search', item)
-                }}
-              >
-                <Trash className="ui-icon" size={12} color="currentColor" aria-hidden />
-              </button>
+              <Tooltip title={t('top.searchHistoryDel')}>
+                <button
+                  type="button"
+                  className="search-suggest-del"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    void deleteHistory('', 'search', item)
+                  }}
+                >
+                  <Trash className="ui-icon" size={12} color="currentColor" aria-hidden />
+                </button>
+              </Tooltip>
             </div>
           ))}
         </div>

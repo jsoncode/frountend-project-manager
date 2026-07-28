@@ -234,6 +234,33 @@ async fn git_checkout(path: String, branch: String) -> Result<String, String> {
 }
 
 #[tauri::command(async)]
+async fn git_create_branch(
+    path: String,
+    name: String,
+    from: String,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        git::git_create_branch(&path, &name, &from)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command(async)]
+async fn git_delete_branch(
+    path: String,
+    branch: String,
+    is_remote: bool,
+    also_local: bool,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        git::git_delete_branch(&path, &branch, is_remote, also_local)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command(async)]
 async fn git_fetch(path: String) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || git::git_fetch(&path))
         .await
@@ -668,6 +695,8 @@ pub fn run() {
             git_branches,
             git_status,
             git_checkout,
+            git_create_branch,
+            git_delete_branch,
             git_fetch,
             git_pull_branch,
             list_env_files,

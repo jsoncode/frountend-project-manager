@@ -8,6 +8,7 @@ import {
 } from '../lib/closeEditorFile'
 import { editorPathKey, useEditorStore } from '../stores/editorStore'
 import { useExplorerStore } from '../stores/explorerStore'
+import { Tooltip } from './Tooltip'
 
 /** Multi-tab title bar above the editor (VS Code–like). */
 export function ProjectHeader() {
@@ -57,51 +58,51 @@ export function ProjectHeader() {
             doc?.status === 'ready' && doc.value !== doc.baseline
           const active = activeKey === key
           return (
-            <div
-              key={key}
-              role="tab"
-              aria-selected={active}
-              className={`editor-tab${active ? ' active' : ''}`}
-              title={tab.path}
-              onClick={() => {
-                activateTab(tab.path)
-                setSelection({
-                  kind: 'file',
-                  path: tab.path,
-                  projectPath: tab.projectPath,
-                })
-              }}
-              onMouseDown={(e) => {
-                // Prevent middle-click autoscroll before auxclick closes the tab.
-                if (e.button === 1) e.preventDefault()
-              }}
-              onAuxClick={(e) => {
-                if (e.button !== 1) return
-                e.preventDefault()
-                e.stopPropagation()
-                closeEditorTab(tab.path, () =>
-                  window.confirm(t('editor.closeUnsavedConfirm')),
-                )
-              }}
-            >
-              <span className="editor-tab-label">
-                {dirty ? `${name} *` : name}
-              </span>
-              <button
-                type="button"
-                className="editor-tab-close"
-                title={closeTitle}
-                aria-label={closeTitle}
-                onClick={(e) => {
+            <Tooltip key={key} title={tab.path}>
+              <div
+                role="tab"
+                aria-selected={active}
+                className={`editor-tab${active ? ' active' : ''}`}
+                onClick={() => {
+                  activateTab(tab.path)
+                  setSelection({
+                    kind: 'file',
+                    path: tab.path,
+                    projectPath: tab.projectPath,
+                  })
+                }}
+                onMouseDown={(e) => {
+                  if (e.button === 1) e.preventDefault()
+                }}
+                onAuxClick={(e) => {
+                  if (e.button !== 1) return
+                  e.preventDefault()
                   e.stopPropagation()
                   closeEditorTab(tab.path, () =>
                     window.confirm(t('editor.closeUnsavedConfirm')),
                   )
                 }}
               >
-                <X size={12} color="currentColor" aria-hidden />
-              </button>
-            </div>
+                <span className="editor-tab-label">
+                  {dirty ? `${name} *` : name}
+                </span>
+                <Tooltip title={closeTitle}>
+                  <button
+                    type="button"
+                    className="editor-tab-close"
+                    aria-label={closeTitle}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      closeEditorTab(tab.path, () =>
+                        window.confirm(t('editor.closeUnsavedConfirm')),
+                      )
+                    }}
+                  >
+                    <X size={12} color="currentColor" aria-hidden />
+                  </button>
+                </Tooltip>
+              </div>
+            </Tooltip>
           )
         })}
       </div>

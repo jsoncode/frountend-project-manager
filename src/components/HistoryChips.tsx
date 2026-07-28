@@ -1,6 +1,7 @@
 import { Star, Trash } from 'reicon-react'
 import type { HistoryItem } from '../lib/types'
 import { useI18n } from '../i18n/useI18n'
+import { Tooltip } from './Tooltip'
 
 type Props = {
   title: string
@@ -79,36 +80,41 @@ function HistoryChip({
   const { t } = useI18n()
   return (
     <span className={`history-chip ${item.pinned ? 'pinned' : ''}`}>
-      <button
-        type="button"
-        className="history-chip-main"
+      <Tooltip
         title={`${item.value} · ${t('history.usedTimes', { count: item.count })}`}
-        onClick={() => onRun(item.value)}
       >
-        {item.value}
-      </button>
-      <button
-        type="button"
-        className="history-chip-icon"
-        title={item.pinned ? t('history.unpin') : t('history.pin')}
-        onClick={() => onTogglePin(item.value, !item.pinned)}
-      >
-        <Star
-          className="ui-icon"
-          size={12}
-          color="currentColor"
-          weight={item.pinned ? 'Filled' : 'Outline'}
-          aria-hidden
-        />
-      </button>
-      <button
-        type="button"
-        className="history-chip-icon danger"
-        title={t('history.delete')}
-        onClick={() => onDelete(item.value)}
-      >
-        <Trash className="ui-icon" size={12} color="currentColor" aria-hidden />
-      </button>
+        <button
+          type="button"
+          className="history-chip-main"
+          onClick={() => onRun(item.value)}
+        >
+          {item.value}
+        </button>
+      </Tooltip>
+      <Tooltip title={item.pinned ? t('history.unpin') : t('history.pin')}>
+        <button
+          type="button"
+          className="history-chip-icon"
+          onClick={() => onTogglePin(item.value, !item.pinned)}
+        >
+          <Star
+            className="ui-icon"
+            size={12}
+            color="currentColor"
+            weight={item.pinned ? 'Filled' : 'Outline'}
+            aria-hidden
+          />
+        </button>
+      </Tooltip>
+      <Tooltip title={t('history.delete')}>
+        <button
+          type="button"
+          className="history-chip-icon danger"
+          onClick={() => onDelete(item.value)}
+        >
+          <Trash className="ui-icon" size={12} color="currentColor" aria-hidden />
+        </button>
+      </Tooltip>
     </span>
   )
 }

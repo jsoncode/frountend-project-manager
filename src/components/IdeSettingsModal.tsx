@@ -415,6 +415,7 @@ export function IdeSettingsModal() {
         <ModalShell
           title={t('ide.delTitle')}
           onClose={() => setPendingDelete(null)}
+          closeOnEsc={false}
         >
           <p className="muted">
             {t('ide.delConfirm', {

@@ -36,32 +36,77 @@ type TermMenu = {
   filePath?: string
 }
 
+/** Assemble wrapped buffer rows so long paths remain one logical string. */
+function getLogicalLine(
+  terminal: Terminal,
+  row0: number,
+): { text: string; rowStart: number; rowTextLen: number } | null {
+  const buffer = terminal.buffer.active
+  const current = buffer.getLine(row0)
+  if (!current) return null
+
+  let start = row0
+  while (start > 0 && buffer.getLine(start)?.isWrapped) {
+    start -= 1
+  }
+
+  let text = ''
+  let rowStart = 0
+  let rowTextLen = 0
+  let r = start
+  for (;;) {
+    const line = buffer.getLine(r)
+    if (!line) break
+    const next = buffer.getLine(r + 1)
+    const wraps = Boolean(next?.isWrapped)
+    const piece = wraps
+      ? line.translateToString(false).slice(0, terminal.cols)
+      : line.translateToString(true)
+    if (r === row0) {
+      rowStart = text.length
+      rowTextLen = piece.length
+    }
+    text += piece
+    if (!wraps) break
+    r += 1
+  }
+
+  return { text, rowStart, rowTextLen }
+}
+
 function createFilePathLinkProvider(
   terminal: Terminal,
   onPathActivate: (event: MouseEvent, path: string) => void,
 ): ILinkProvider {
   return {
     provideLinks(y, callback) {
-      const line = terminal.buffer.active.getLine(y - 1)
-      if (!line) {
+      const row0 = y - 1
+      const logical = getLogicalLine(terminal, row0)
+      if (!logical || logical.rowTextLen <= 0) {
         callback(undefined)
         return
       }
-      const text = line.translateToString(true)
-      const matches = findFilePathsInLine(text)
+      const matches = findFilePathsInLine(logical.text)
       if (matches.length === 0) {
         callback(undefined)
         return
       }
-      const links: ILink[] = matches.map((m) => ({
-        text: m.path,
-        range: {
-          start: { x: m.start + 1, y },
-          end: { x: m.end, y },
-        },
-        activate: (event) => onPathActivate(event, m.path),
-      }))
-      callback(links)
+      const rowEnd = logical.rowStart + logical.rowTextLen
+      const links: ILink[] = []
+      for (const m of matches) {
+        const overlapStart = Math.max(m.start, logical.rowStart)
+        const overlapEnd = Math.min(m.end, rowEnd)
+        if (overlapStart >= overlapEnd) continue
+        links.push({
+          text: m.path,
+          range: {
+            start: { x: overlapStart - logical.rowStart + 1, y },
+            end: { x: overlapEnd - logical.rowStart, y },
+          },
+          activate: (event) => onPathActivate(event, m.path),
+        })
+      }
+      callback(links.length > 0 ? links : undefined)
     },
   }
 }
@@ -74,6 +119,10 @@ export function XtermSession({ sessionId, cwd, active }: Props) {
   const markConnected = useTerminalStore((s) => s.markConnected)
   const { t } = useI18n()
   const [menu, setMenu] = useState<TermMenu | null>(null)
+  /** Path-link handler already opened a menu; skip the host contextmenu overwrite. */
+  const pathMenuFromLinkRef = useRef(false)
+  /** After a path-link click, suppress xterm drag-selection for a short window. */
+  const suppressSelectUntilRef = useRef(0)
   activeRef.current = active
   cwdRef.current = cwd
 
@@ -125,11 +174,24 @@ export function XtermSession({ sessionId, cwd, active }: Props) {
       }),
     )
 
+    const clearLinkSelection = () => {
+      term.clearSelection()
+    }
+
     const fileLinks = term.registerLinkProvider(
       createFilePathLinkProvider(term, (event, path) => {
         event.preventDefault()
         event.stopPropagation()
+        // Link click still goes through xterm's mouse selection pipeline;
+        // clear immediately and keep clearing briefly while mouse settles.
+        suppressSelectUntilRef.current = Date.now() + 400
+        clearLinkSelection()
+        queueMicrotask(clearLinkSelection)
+        window.setTimeout(clearLinkSelection, 0)
+        window.setTimeout(clearLinkSelection, 50)
+
         if (event.button === 2 || event.ctrlKey || event.metaKey) {
+          pathMenuFromLinkRef.current = true
           setMenu({
             x: event.clientX,
             y: event.clientY,
@@ -143,6 +205,14 @@ export function XtermSession({ sessionId, cwd, active }: Props) {
         void invoke('reveal_in_file_manager', { path }).catch(() => undefined)
       }),
     )
+
+    const onMouseSettle = () => {
+      if (Date.now() <= suppressSelectUntilRef.current) {
+        clearLinkSelection()
+      }
+    }
+    host.addEventListener('mouseup', onMouseSettle, true)
+    host.addEventListener('mousemove', onMouseSettle, true)
 
     const gate = createReadyGate()
     registerPtyTerminal(sessionId, term, fit, gate)
@@ -214,6 +284,8 @@ export function XtermSession({ sessionId, cwd, active }: Props) {
       disposed = true
       onData.dispose()
       fileLinks.dispose()
+      host.removeEventListener('mouseup', onMouseSettle, true)
+      host.removeEventListener('mousemove', onMouseSettle, true)
       resizeObs.disconnect()
       termRef.current = null
       unregisterPtyTerminal(sessionId)
@@ -244,6 +316,10 @@ export function XtermSession({ sessionId, cwd, active }: Props) {
   const onContextMenu = (e: ReactMouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
+    if (pathMenuFromLinkRef.current) {
+      pathMenuFromLinkRef.current = false
+      return
+    }
     const term = termRef.current
     const hasSelection = Boolean(term?.hasSelection())
     const selection = hasSelection ? (term?.getSelection() ?? '') : ''

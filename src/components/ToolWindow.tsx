@@ -22,6 +22,7 @@ import { CommandPanel } from './CommandPanel'
 import { GitToolPanel } from './GitToolPanel'
 import { IdeIcon } from './IdeIcon'
 import { ResizeHandle } from './ResizeHandle'
+import { Tooltip } from './Tooltip'
 
 const TOOL_LABEL: Record<
   SideTool,
@@ -179,36 +180,42 @@ export function ToolWindow() {
             {selected ? t('tool.ideHint') : t('top.ideNeedProject')}
           </p>
           <div className="ide-open-list">
-            <button
-              type="button"
-              className="ide-open-item"
-              disabled={!selected}
+            <Tooltip
               title={
                 selected ? t('open.inFileManager') : t('top.ideNeedProject')
               }
-              onClick={() => void revealSelected()}
             >
-              <span className="ide-open-folder" aria-hidden>
-                <FolderOpen size={18} color="currentColor" />
-              </span>
-              <span className="ide-open-name">{t('open.inFileManager')}</span>
-            </button>
-            {ides.map((ide) => (
               <button
-                key={ide.id}
                 type="button"
                 className="ide-open-item"
                 disabled={!selected}
+                onClick={() => void revealSelected()}
+              >
+                <span className="ide-open-folder" aria-hidden>
+                  <FolderOpen size={18} color="currentColor" />
+                </span>
+                <span className="ide-open-name">{t('open.inFileManager')}</span>
+              </button>
+            </Tooltip>
+            {ides.map((ide) => (
+              <Tooltip
+                key={ide.id}
                 title={
                   selected
                     ? t('top.openInIde', { name: ide.name })
                     : t('top.ideNeedProject')
                 }
-                onClick={() => void openIde(ide.id)}
               >
-                <IdeIcon iconPath={ide.iconPath} name={ide.name} size={22} />
-                <span className="ide-open-name">{ide.name}</span>
-              </button>
+                <button
+                  type="button"
+                  className="ide-open-item"
+                  disabled={!selected}
+                  onClick={() => void openIde(ide.id)}
+                >
+                  <IdeIcon iconPath={ide.iconPath} name={ide.name} size={22} />
+                  <span className="ide-open-name">{ide.name}</span>
+                </button>
+              </Tooltip>
             ))}
             {ides.length === 0 && (
               <div className="muted">{t('top.noIde')}</div>
@@ -252,17 +259,18 @@ export function ToolWindow() {
               <aside key={id} className="tool-panel">
                 <div className="tool-panel-head">
                   <h2>{t(TOOL_LABEL[id])}</h2>
-                  <button
-                    type="button"
-                    className="btn btn-sm tool-panel-close"
-                    title={t('tool.collapse')}
-                    onClick={() => {
-                      closeSideTool(id)
-                      persist()
-                    }}
-                  >
-                    <ChevronRight className="ui-icon" size={16} color="currentColor" aria-hidden />
-                  </button>
+                  <Tooltip title={t('tool.collapse')}>
+                    <button
+                      type="button"
+                      className="btn btn-sm tool-panel-close"
+                      onClick={() => {
+                        closeSideTool(id)
+                        persist()
+                      }}
+                    >
+                      <ChevronRight className="ui-icon" size={16} color="currentColor" aria-hidden />
+                    </button>
+                  </Tooltip>
                 </div>
                 <div className="tool-panel-body">{renderBody(id)}</div>
               </aside>
@@ -275,26 +283,26 @@ export function ToolWindow() {
         {TOOL_ORDER.map((id) => {
           const Icon = TOOL_ICON[id]
           return (
-            <button
-              key={id}
-              type="button"
-              className={`tool-strip-btn ${openTools.includes(id) ? 'active' : ''}`}
-              title={t(TOOL_LABEL[id])}
-              aria-label={t(TOOL_LABEL[id])}
-              aria-pressed={openTools.includes(id)}
-              onClick={() => {
-                toggleSideTool(id)
-                persist()
-              }}
-            >
-              {id === 'ide' ? (
-                <span className="tool-strip-label">IDE</span>
-              ) : Icon ? (
-                <span className="tool-strip-icon">
-                  <Icon size={18} color="currentColor" aria-hidden />
-                </span>
-              ) : null}
-            </button>
+            <Tooltip key={id} title={t(TOOL_LABEL[id])}>
+              <button
+                type="button"
+                className={`tool-strip-btn ${openTools.includes(id) ? 'active' : ''}`}
+                aria-label={t(TOOL_LABEL[id])}
+                aria-pressed={openTools.includes(id)}
+                onClick={() => {
+                  toggleSideTool(id)
+                  persist()
+                }}
+              >
+                {id === 'ide' ? (
+                  <span className="tool-strip-label">IDE</span>
+                ) : Icon ? (
+                  <span className="tool-strip-icon">
+                    <Icon size={18} color="currentColor" aria-hidden />
+                  </span>
+                ) : null}
+              </button>
+            </Tooltip>
           )
         })}
       </nav>

@@ -1,6 +1,6 @@
 import { FolderOpen } from 'reicon-react'
 import { invoke } from '@tauri-apps/api/core'
-import { useCallback } from 'react'
+import { useCallback, type ReactNode } from 'react'
 import { useI18n } from '../i18n/useI18n'
 import { showErrorLog } from '../stores/errorLogStore'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -12,9 +12,11 @@ type Props = {
   x: number
   y: number
   onClose: () => void
+  /** Extra items below the shared open/copy/reveal actions (e.g. workspace refresh/remove). */
+  children?: ReactNode
 }
 
-export function OpenWithMenu({ path, x, y, onClose }: Props) {
+export function OpenWithMenu({ path, x, y, onClose, children }: Props) {
   const config = useSettingsStore((s) => s.config)
   const { t } = useI18n()
   const ides = (config?.ides ?? []).filter((i) => i.enabled)
@@ -41,14 +43,16 @@ export function OpenWithMenu({ path, x, y, onClose }: Props) {
     }
   }
 
-  const copyPath = async () => {
+  const copyText = async (text: string) => {
     try {
-      await navigator.clipboard.writeText(path)
+      await navigator.clipboard.writeText(text)
     } catch {
       /* ignore */
     }
     onClose()
   }
+
+  const fileName = path.replace(/[/\\]+$/, '').split(/[/\\]/).pop() || path
 
   return (
     <ContextMenuPortal x={x} y={y} onClose={close}>
@@ -68,13 +72,22 @@ export function OpenWithMenu({ path, x, y, onClose }: Props) {
         <div className="branch-menu-hint muted">{t('open.noIde')}</div>
       )}
       <div className="branch-menu-sep" />
-      <button type="button" role="menuitem" onClick={() => void copyPath()}>
+      <button type="button" role="menuitem" onClick={() => void copyText(path)}>
         {t('explorer.copyPath')}
+      </button>
+      <button type="button" role="menuitem" onClick={() => void copyText(fileName)}>
+        {t('explorer.copyName')}
       </button>
       <button type="button" role="menuitem" className="btn-with-icon" onClick={() => void reveal()}>
         <FolderOpen className="ui-icon" size={14} color="currentColor" aria-hidden />
         {t('open.inFileManager')}
       </button>
+      {children ? (
+        <>
+          <div className="branch-menu-sep" />
+          {children}
+        </>
+      ) : null}
     </ContextMenuPortal>
   )
 }

@@ -1,9 +1,10 @@
 import { Play } from 'reicon-react'
 import { useI18n } from '../i18n/useI18n'
-import { HistoryChips } from './HistoryChips'
 import { useProjectStore } from '../stores/projectStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useTerminalStore } from '../stores/terminalStore'
+import { HistoryChips } from './HistoryChips'
+import { Tooltip } from './Tooltip'
 
 /** npm/pnpm/yarn scripts — shown inside the right tool panel. */
 export function CommandPanel() {
@@ -32,18 +33,18 @@ export function CommandPanel() {
       </div>
       <div className="script-list">
         {scripts.map((name) => (
-          <button
-            key={name}
-            type="button"
-            className="script-list-item btn-with-icon"
-            title={details.summary.scripts[name]}
-            onClick={() =>
-              void runScript(selected.path, selected.folderName, pm, name)
-            }
-          >
-            <Play className="ui-icon" size={11} color="currentColor" aria-hidden />
-            <span className="script-list-name">{name}</span>
-          </button>
+          <Tooltip key={name} title={details.summary.scripts[name]}>
+            <button
+              type="button"
+              className="script-list-item btn-with-icon"
+              onClick={() =>
+                void runScript(selected.path, selected.folderName, pm, name)
+              }
+            >
+              <Play className="ui-icon" size={11} color="currentColor" aria-hidden />
+              <span className="script-list-name">{name}</span>
+            </button>
+          </Tooltip>
         ))}
         {scripts.length === 0 && (
           <span className="muted">{t('cmd.noScripts')}</span>

@@ -202,6 +202,7 @@ export function AiModelSettingsModal({ onClose }: Props) {
           title={t('ai.deleteModelTitle')}
           onClose={() => setPendingDelete(null)}
           nested
+          closeOnEsc={false}
         >
           <p className="muted">
             {t('ai.deleteModelConfirm', {

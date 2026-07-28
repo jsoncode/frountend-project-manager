@@ -8,6 +8,7 @@ import { isTauri } from '../lib/tauri'
 import { useProjectStore } from '../stores/projectStore'
 import { useTerminalStore } from '../stores/terminalStore'
 import { ModalShell } from './ModalShell'
+import { Tooltip } from './Tooltip'
 import { XtermSession } from './XtermSession'
 
 export function TerminalPanel({
@@ -89,10 +90,11 @@ export function TerminalPanel({
             <span className={s.connected ? 'term-dot running' : 'term-dot'} />
             {s.title}
             {issueAlerts[s.id] ? (
-              <span
-                className={`term-issue-dot ${issueAlerts[s.id]!.kind}`}
-                title={t('term.aiAnalyzeHint')}
-              />
+              <Tooltip title={t('term.aiAnalyzeHint')}>
+                <span
+                  className={`term-issue-dot ${issueAlerts[s.id]!.kind}`}
+                />
+              </Tooltip>
             ) : null}
             <span
               className="term-close"
@@ -105,15 +107,16 @@ export function TerminalPanel({
             </span>
           </button>
         ))}
-        <button
-          type="button"
-          className="terminal-tab add"
-          disabled={!selected}
-          onClick={addTerminal}
-          title={t('term.new')}
-        >
-          <Add className="ui-icon" size={14} color="currentColor" aria-hidden />
-        </button>
+        <Tooltip title={t('term.new')}>
+          <button
+            type="button"
+            className="terminal-tab add"
+            disabled={!selected}
+            onClick={addTerminal}
+          >
+            <Add className="ui-icon" size={14} color="currentColor" aria-hidden />
+          </button>
+        </Tooltip>
         {active ? (
           <span className="terminal-status muted">
             {active.connected ? t('term.connected') : t('term.disconnected')}
@@ -163,15 +166,16 @@ export function TerminalPanel({
           {t('term.aiChat')}
         </button>
         {activeIssue && activeId ? (
-          <button
-            type="button"
-            className="term-ai-bar-dismiss"
-            title={t('term.aiAnalyzeDismiss')}
-            aria-label={t('term.aiAnalyzeDismiss')}
-            onClick={() => clearIssueAlert(activeId)}
-          >
-            <X className="ui-icon" size={14} color="currentColor" aria-hidden />
-          </button>
+          <Tooltip title={t('term.aiAnalyzeDismiss')}>
+            <button
+              type="button"
+              className="term-ai-bar-dismiss"
+              aria-label={t('term.aiAnalyzeDismiss')}
+              onClick={() => clearIssueAlert(activeId)}
+            >
+              <X className="ui-icon" size={14} color="currentColor" aria-hidden />
+            </button>
+          </Tooltip>
         ) : null}
       </div>
 
@@ -179,6 +183,7 @@ export function TerminalPanel({
         <ModalShell
           title={t('term.closeRunningTitle')}
           onClose={() => setPendingCloseId(null)}
+          closeOnEsc={false}
         >
           <p className="muted">
             {t('term.closeRunningDesc', { name: pendingClose.title })}

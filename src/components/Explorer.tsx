@@ -33,6 +33,7 @@ import { useWorkspaceStore } from '../stores/workspaceStore'
 import { ContextMenuPortal } from './ContextMenuPortal'
 import { ModalShell } from './ModalShell'
 import { OpenWithMenu } from './OpenWithMenu'
+import { Tooltip } from './Tooltip'
 
 type DirEntry = {
   name: string
@@ -90,20 +91,40 @@ export function Explorer() {
   const q = search.trim()
   const searching = q.length > 0
 
-  const toggleExpanded = useCallback((id: string) => {
+  /** Keep only directory expands (multi-open allowed). */
+  const keepDirExpands = (prev: Set<string>) => {
+    const next = new Set<string>()
+    for (const id of prev) {
+      if (id.startsWith('dir:')) next.add(id)
+    }
+    return next
+  }
+
+  /** Accordion: at most one workspace expanded. */
+  const expandOnlyWorkspace = useCallback((ws: string) => {
+    const wsId = `ws:${ws}`
     setExpanded((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
+      const next = keepDirExpands(prev)
+      next.add(wsId)
       return next
     })
   }, [])
 
-  const expandId = useCallback((id: string) => {
+  /** Accordion: at most one workspace + one project expanded. */
+  const expandOnlyProject = useCallback((workspace: string, projectPath: string) => {
     setExpanded((prev) => {
-      if (prev.has(id)) return prev
+      const next = keepDirExpands(prev)
+      next.add(`ws:${workspace}`)
+      next.add(`proj:${projectPath}`)
+      return next
+    })
+  }, [])
+
+  const toggleDirExpanded = useCallback((id: string) => {
+    setExpanded((prev) => {
       const next = new Set(prev)
-      next.add(id)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
       return next
     })
   }, [])
@@ -133,18 +154,24 @@ export function Explorer() {
   }, [])
 
   useEffect(() => {
-    if (activeWorkspace) expandId(`ws:${activeWorkspace}`)
-  }, [activeWorkspace, expandId])
+    if (!activeWorkspace || searching) return
+    expandOnlyWorkspace(activeWorkspace)
+  }, [activeWorkspace, searching, expandOnlyWorkspace])
 
   useEffect(() => {
     if (!searching) return
-    for (const ws of workspaces) {
-      const list = projectCache[ws] ?? []
-      if (list.some((p) => projectMatchesQuery(p, q))) {
-        expandId(`ws:${ws}`)
+    // Search may surface matches across workspaces — expand all hits.
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      for (const ws of workspaces) {
+        const list = projectCache[ws] ?? []
+        if (list.some((p) => projectMatchesQuery(p, q))) {
+          next.add(`ws:${ws}`)
+        }
       }
-    }
-  }, [searching, q, workspaces, projectCache, expandId])
+      return next
+    })
+  }, [searching, q, workspaces, projectCache])
 
   const confirmRemove = async () => {
     if (!config || !pendingRemove) return
@@ -168,7 +195,6 @@ export function Explorer() {
     if (fromSearch) {
       void touchSearchHistory(p.folderName)
       setSearch('')
-      // After search clears, scroll the picked project to the top of the tree.
       window.setTimeout(() => {
         const el = rowRefs.current.get(`proj:${p.path}`)
         el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -179,14 +205,22 @@ export function Explorer() {
   /** Select + expand (e.g. context menu). */
   const openProject = (p: ProjectSummary, workspace: string) => {
     selectProjectRow(p, workspace)
-    expandId(`ws:${workspace}`)
-    expandId(`proj:${p.path}`)
+    expandOnlyProject(workspace, p.path)
     void loadDir(p.path, true)
   }
 
   const onToggleWorkspace = (ws: string) => {
     const id = `ws:${ws}`
-    toggleExpanded(id)
+    const willOpen = !expanded.has(id)
+    if (willOpen) {
+      expandOnlyWorkspace(ws)
+    } else {
+      setExpanded((prev) => {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
+    }
     setActiveWorkspace(ws)
     setSelection({ kind: 'workspace', path: ws })
     void refreshWorkspace(ws)
@@ -201,7 +235,6 @@ export function Explorer() {
     }
     void selectProject(p)
     setSelection({ kind: 'project', path: p.path, workspace })
-    expandId(`ws:${workspace}`)
     if (fromSearch) {
       void touchSearchHistory(p.folderName)
       setSearch('')
@@ -211,7 +244,7 @@ export function Explorer() {
       }, 50)
     }
     if (willOpen) {
-      expandId(id)
+      expandOnlyProject(workspace, p.path)
       void loadDir(p.path, true)
     } else if (!fromSearch) {
       setExpanded((prev) => {
@@ -219,6 +252,9 @@ export function Explorer() {
         next.delete(id)
         return next
       })
+    } else {
+      expandOnlyProject(workspace, p.path)
+      void loadDir(p.path, true)
     }
   }
 
@@ -250,7 +286,7 @@ export function Explorer() {
     e?.stopPropagation()
     const id = `dir:${entry.path}`
     const willOpen = !expanded.has(id)
-    toggleExpanded(id)
+    toggleDirExpanded(id)
     setSelection({ kind: 'dir', path: entry.path, projectPath })
     ensureProjectContext(projectPath)
     if (willOpen) void loadDir(entry.path, true)
@@ -331,28 +367,28 @@ export function Explorer() {
         const dirDirty = rel != null && Boolean(gitDecorations.dirs[rel])
         return (
           <div key={entry.path}>
-            <button
-              type="button"
-              className={`explorer-row explorer-dir-row ${isSelected('dir', entry.path) ? 'active' : ''}${dirDirty ? ' git-changed' : ''}`}
-              style={{ paddingLeft: 10 + depth * 10 }}
-              title={entry.path}
-              onClick={(e) => onToggleDir(entry, projectPath, e)}
-              onContextMenu={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                setSelection({
-                  kind: 'dir',
-                  path: entry.path,
-                  projectPath,
-                })
-                setMenu({
-                  kind: 'entry',
-                  path: entry.path,
-                  x: e.clientX,
-                  y: e.clientY,
-                })
-              }}
-            >
+            <Tooltip title={entry.path}>
+              <button
+                type="button"
+                className={`explorer-row explorer-dir-row ${isSelected('dir', entry.path) ? 'active' : ''}${dirDirty ? ' git-changed' : ''}`}
+                style={{ paddingLeft: 10 + depth * 10 }}
+                onClick={(e) => onToggleDir(entry, projectPath, e)}
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  setSelection({
+                    kind: 'dir',
+                    path: entry.path,
+                    projectPath,
+                  })
+                  setMenu({
+                    kind: 'entry',
+                    path: entry.path,
+                    x: e.clientX,
+                    y: e.clientY,
+                  })
+                }}
+              >
               <span
                 className="explorer-twist"
                 onClick={(e) => onToggleDir(entry, projectPath, e)}
@@ -374,9 +410,10 @@ export function Explorer() {
               />
               <span className="explorer-label">{entry.name}</span>
               {dirDirty ? (
-                <span className="git-dir-dot" title="modified" aria-hidden />
+                <span className="git-dir-dot" aria-hidden />
               ) : null}
             </button>
+            </Tooltip>
             {open ? renderEntries(entry.path, projectPath, depth + 1) : null}
           </div>
         )
@@ -384,29 +421,28 @@ export function Explorer() {
       const gitMark =
         rel != null ? gitDecorations.files[rel] ?? null : null
       return (
-        <button
-          key={entry.path}
-          type="button"
-          className={`explorer-row explorer-file-row ${isSelected('file', entry.path) ? 'active' : ''}${gitMark ? ' git-changed' : ''}`}
-          style={{ paddingLeft: 10 + depth * 10 }}
-          title={entry.path}
-          onClick={() => onSelectFile(entry, projectPath)}
-          onContextMenu={(e) => {
-            e.preventDefault()
-            e.stopPropagation()
-            setSelection({
-              kind: 'file',
-              path: entry.path,
-              projectPath,
-            })
-            setMenu({
-              kind: 'entry',
-              path: entry.path,
-              x: e.clientX,
-              y: e.clientY,
-            })
-          }}
-        >
+        <Tooltip key={entry.path} title={entry.path}>
+          <button
+            type="button"
+            className={`explorer-row explorer-file-row ${isSelected('file', entry.path) ? 'active' : ''}${gitMark ? ' git-changed' : ''}`}
+            style={{ paddingLeft: 10 + depth * 10 }}
+            onClick={() => onSelectFile(entry, projectPath)}
+            onContextMenu={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setSelection({
+                kind: 'file',
+                path: entry.path,
+                projectPath,
+              })
+              setMenu({
+                kind: 'entry',
+                path: entry.path,
+                x: e.clientX,
+                y: e.clientY,
+              })
+            }}
+          >
           <span className="explorer-twist" aria-hidden />
           <Document
             className="explorer-icon"
@@ -416,11 +452,12 @@ export function Explorer() {
           />
           <span className="explorer-label">{entry.name}</span>
           {gitMark ? (
-            <span className={`git-file-mark git-mark-${gitMark}`} title={gitMark}>
+            <span className={`git-file-mark git-mark-${gitMark}`}>
               {gitMark}
             </span>
           ) : null}
         </button>
+        </Tooltip>
       )
     })
   }
@@ -464,23 +501,23 @@ export function Explorer() {
 
           return (
             <div key={ws} className="explorer-ws">
-              <button
-                type="button"
-                className={`explorer-row explorer-ws-row ${wsActive ? 'active' : ''}`}
-                style={{ paddingLeft: 10 }}
-                title={ws}
-                onClick={() => onToggleWorkspace(ws)}
-                onContextMenu={(e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  setMenu({
-                    kind: 'workspace',
-                    path: ws,
-                    x: e.clientX,
-                    y: e.clientY,
-                  })
-                }}
-              >
+              <Tooltip title={ws}>
+                <button
+                  type="button"
+                  className={`explorer-row explorer-ws-row ${wsActive ? 'active' : ''}`}
+                  style={{ paddingLeft: 10 }}
+                  onClick={() => onToggleWorkspace(ws)}
+                  onContextMenu={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    setMenu({
+                      kind: 'workspace',
+                      path: ws,
+                      x: e.clientX,
+                      y: e.clientY,
+                    })
+                  }}
+                >
                 <span
                   className="explorer-twist"
                   onClick={(e) => {
@@ -507,6 +544,7 @@ export function Explorer() {
                   {shortWorkspaceName(ws)}
                 </span>
               </button>
+              </Tooltip>
 
               {wsOpen &&
                 projects.map((p) => {
@@ -523,28 +561,28 @@ export function Explorer() {
 
                   return (
                     <div key={p.path}>
-                      <button
-                        type="button"
-                        ref={(node) => {
-                          if (node) rowRefs.current.set(projId, node)
-                          else rowRefs.current.delete(projId)
-                        }}
-                        className={`explorer-row explorer-project-row ${projActive ? 'active' : ''}${projGitDirty ? ' git-changed' : ''}`}
-                        style={{ paddingLeft: 20 }}
-                        title={`${p.path}\n${projectSubtitle(p)}`}
-                        onClick={() => onToggleProject(p, ws)}
-                        onContextMenu={(e) => {
-                          e.preventDefault()
-                          e.stopPropagation()
-                          openProject(p, ws)
-                          setMenu({
-                            kind: 'project',
-                            path: p.path,
-                            x: e.clientX,
-                            y: e.clientY,
-                          })
-                        }}
-                      >
+                      <Tooltip title={`${p.path}\n${projectSubtitle(p)}`}>
+                        <button
+                          type="button"
+                          ref={(node) => {
+                            if (node) rowRefs.current.set(projId, node)
+                            else rowRefs.current.delete(projId)
+                          }}
+                          className={`explorer-row explorer-project-row ${projActive ? 'active' : ''}${projGitDirty ? ' git-changed' : ''}`}
+                          style={{ paddingLeft: 20 }}
+                          onClick={() => onToggleProject(p, ws)}
+                          onContextMenu={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            openProject(p, ws)
+                            setMenu({
+                              kind: 'project',
+                              path: p.path,
+                              x: e.clientX,
+                              y: e.clientY,
+                            })
+                          }}
+                        >
                         <span
                           className="explorer-twist"
                           onClick={(e) => {
@@ -572,6 +610,7 @@ export function Explorer() {
                           <span className="git-dir-dot" aria-hidden />
                         ) : null}
                       </button>
+                      </Tooltip>
                       {projOpen ? renderEntries(p.path, p.path, 2) : null}
                     </div>
                   )
@@ -602,7 +641,8 @@ export function Explorer() {
       </div>
 
       {menu?.kind === 'workspace' && (
-        <ContextMenuPortal
+        <OpenWithMenu
+          path={menu.path}
           x={menu.x}
           y={menu.y}
           onClose={() => setMenu(null)}
@@ -622,22 +662,6 @@ export function Explorer() {
           <button
             type="button"
             role="menuitem"
-            onClick={() => void copyPath(menu.path)}
-          >
-            {t('explorer.copyPath')}
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className="btn-with-icon"
-            onClick={() => void revealPath(menu.path)}
-          >
-            {t('open.inFileManager')}
-          </button>
-          <div className="branch-menu-sep" />
-          <button
-            type="button"
-            role="menuitem"
             className="btn-with-icon"
             onClick={() => {
               setPendingRemove(menu.path)
@@ -647,7 +671,7 @@ export function Explorer() {
             <Trash className="ui-icon" size={14} color="currentColor" aria-hidden />
             {t('ws.remove')}
           </button>
-        </ContextMenuPortal>
+        </OpenWithMenu>
       )}
 
       {menu?.kind === 'project' && (
@@ -686,6 +710,7 @@ export function Explorer() {
         <ModalShell
           title={t('ws.removeTitle')}
           onClose={() => setPendingRemove(null)}
+          closeOnEsc={false}
         >
           <p className="muted">
             {t('ws.removeConfirm', {

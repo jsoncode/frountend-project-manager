@@ -3,9 +3,12 @@
 /**
  * File path with extension — allows spaces in names
  * (e.g. `D:\xxx\xx xx.text at …`).
+ * Extension must start with a letter so version dots like `_0.1.0_` are not
+ * treated as the file extension.
+ * `(?<![A-Za-z0-9])` prevents `file:/data/...` from matching as `e:/data/...`.
  */
 const WIN_FILE =
-  /[A-Za-z]:(?:[\\/][^\\/<>:"|?*\r\n]+)+?\.[A-Za-z0-9]{1,20}(?::\d+){0,2}/g
+  /(?<![A-Za-z0-9])[A-Za-z]:(?:[\\/][^\\/<>:"|?*\r\n]+)+\.[A-Za-z][A-Za-z0-9]{0,19}(?::\d+){0,2}/g
 
 /**
  * Drive path without requiring an extension (dirs / bare paths).
@@ -13,13 +16,20 @@ const WIN_FILE =
  * (e.g. `D:\cxa-back\frountend-project-manager > tsc`).
  */
 const WIN_PATH =
-  /[A-Za-z]:(?:[\\/][^\\/<>:"|?*\s\r\n]+)+/g
+  /(?<![A-Za-z0-9])[A-Za-z]:(?:[\\/][^\\/<>:"|?*\s\r\n]+)+/g
 
 const POSIX_FILE =
   /(?:^|[\s("'`])(\/(?:[^/\s<>"|*?]+\/)*[^/\s<>"|*?]+\.[A-Za-z0-9]{1,20})(?::\d+){0,2}/g
 
 const POSIX_PATH =
   /(?:^|[\s("'`])(\/(?:[^/\s<>"|*?]+\/)+[^/\s<>"|*?]+)/g
+
+/**
+ * `file:/path`, `file:///path`, `file:///C:/path` — matched as a whole so the
+ * trailing `e:` in `file:` is never treated as a Windows drive.
+ */
+const FILE_URI =
+  /(?:^|[\s("'`<])(file:\/\/\/?(?:[A-Za-z]:)?[^\s<>"|*]+|file:\/[^\s<>"|*]+)/gi
 
 const TRAILING_JUNK = /[.,;:!?)\]}'"`]+$/
 /** Strip editor-style `:12` / `:12:34` suffixes. */
@@ -36,6 +46,7 @@ export type FilePathMatch = {
   end: number
 }
 
+/** Convert `file:` URIs and tidy quotes / trailing punctuation. */
 export function cleanTerminalFilePath(raw: string): string {
   let p = raw.trim()
   if (
@@ -46,8 +57,34 @@ export function cleanTerminalFilePath(raw: string): string {
   }
   p = p.replace(TRAILING_JUNK, '')
   p = p.replace(LINE_COL_SUFFIX, '')
+
+  if (/^file:/i.test(p)) {
+    p = decodeFileUri(p)
+  }
+
   if (/^[A-Za-z]:/.test(p)) {
     return p.replace(/\//g, '\\')
+  }
+  return p
+}
+
+function decodeFileUri(uri: string): string {
+  let p = uri
+  try {
+    const u = new URL(uri)
+    p = decodeURIComponent(u.pathname || '')
+    // `file:///C:/Users/...` → pathname `/C:/Users/...`
+    if (/^\/[A-Za-z]:/.test(p)) {
+      p = p.slice(1)
+    }
+  } catch {
+    p = uri
+      .replace(/^file:\/\/\//i, '')
+      .replace(/^file:\/\//i, '/')
+      .replace(/^file:/i, '')
+    if (/^\/[A-Za-z]:/.test(p)) {
+      p = p.slice(1)
+    }
   }
   return p
 }
@@ -115,6 +152,8 @@ export function findFilePathsInLine(line: string): FilePathMatch[] {
   const raw: FilePathMatch[] = []
   const seen = new Set<string>()
 
+  // file: URIs first so they win over a false `e:` drive match inside `file:`.
+  collectRegex(line, FILE_URI, raw, seen, 1)
   collectRegex(line, WIN_FILE, raw, seen)
   collectRegex(line, WIN_PATH, raw, seen)
   collectRegex(line, POSIX_FILE, raw, seen, 1)
