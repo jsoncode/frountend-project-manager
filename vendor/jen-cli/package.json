@@ -1,0 +1,10 @@
+{
+  "name": "jen-cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Vendored Jenkins CLI for Frontend Project Manager",
+  "bin": {
+    "jen-cli": "./bin/jen-cli.mjs"
+  }
+}

@@ -322,3 +322,28 @@ commands.allow = ["save_project_cache"]
 identifier = "allow-drop-project-cache"
 description = "Drop project scan cache entry from SQLite"
 commands.allow = ["drop_project_cache"]
+
+[[permission]]
+identifier = "allow-jen-cli-get-state"
+description = "Load jen-cli settings state"
+commands.allow = ["jen_cli_get_state"]
+
+[[permission]]
+identifier = "allow-jen-cli-save-servers"
+description = "Save Jenkins server config for jen-cli"
+commands.allow = ["jen_cli_save_servers"]
+
+[[permission]]
+identifier = "allow-jen-cli-save-defaults"
+description = "Save jen-cli defaults and param keys"
+commands.allow = ["jen_cli_save_defaults"]
+
+[[permission]]
+identifier = "allow-jen-cli-reset-servers"
+description = "Reset Jenkins server config from example"
+commands.allow = ["jen_cli_reset_servers"]
+
+[[permission]]
+identifier = "allow-jen-cli-set-path-enabled"
+description = "Enable or disable jen-cli on user PATH"
+commands.allow = ["jen_cli_set_path_enabled"]

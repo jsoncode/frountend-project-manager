@@ -131,7 +131,8 @@ pub fn spawn(
         })
         .map_err(|e| format!("打开 PTY 失败: {e}"))?;
 
-    let cmd = shell_command(cwd_path);
+    let mut cmd = shell_command(cwd_path);
+    crate::jen_cli::apply_pty_env(&app, &mut cmd);
     let mut child = pair
         .slave
         .spawn_command(cmd)

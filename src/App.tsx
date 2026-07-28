@@ -5,6 +5,7 @@ import { ErrorLogModal } from './components/ErrorLogModal'
 import { NewWorkspaceModal } from './components/NewWorkspaceModal'
 import { Sidebar } from './components/Sidebar'
 import { IdeSettingsModal } from './components/IdeSettingsModal'
+import { JenCliSettingsModal } from './components/JenCliSettingsModal'
 import { ResizeHandle } from './components/ResizeHandle'
 import { SettingsModal } from './components/SettingsModal'
 import { TopBar } from './components/TopBar'
@@ -72,6 +73,7 @@ export default function App() {
       </div>
       <SettingsModal />
       <IdeSettingsModal />
+      <JenCliSettingsModal />
       <AiSettingsModal />
       <ErrorLogModal />
       <NewWorkspaceModal />

@@ -15,6 +15,7 @@ mod env_files;
 mod fs_explorer;
 mod git;
 mod ide;
+mod jen_cli;
 mod process;
 mod pty_term;
 mod scan;
@@ -379,6 +380,31 @@ fn pty_kill(app: AppHandle, terminal_id: String) -> Result<(), String> {
     pty_term::kill(app, terminal_id)
 }
 
+#[tauri::command]
+fn jen_cli_get_state(app: AppHandle) -> Result<jen_cli::JenCliState, String> {
+    jen_cli::get_state(&app)
+}
+
+#[tauri::command]
+fn jen_cli_save_servers(app: AppHandle, servers: serde_json::Value) -> Result<(), String> {
+    jen_cli::save_servers(&app, servers)
+}
+
+#[tauri::command]
+fn jen_cli_save_defaults(app: AppHandle, defaults: serde_json::Value) -> Result<(), String> {
+    jen_cli::save_defaults(&app, defaults)
+}
+
+#[tauri::command]
+fn jen_cli_reset_servers(app: AppHandle) -> Result<serde_json::Value, String> {
+    jen_cli::reset_servers_from_example(&app)
+}
+
+#[tauri::command]
+fn jen_cli_set_path_enabled(app: AppHandle, enabled: bool) -> Result<(), String> {
+    jen_cli::set_path_enabled(&app, enabled)
+}
+
 /// Pretty-print a file with embedded bat (ANSI). Also available via terminal `cat`/`type`/`bat`.
 #[tauri::command]
 fn preview_file(path: String, cwd: Option<String>) -> Result<String, String> {
@@ -586,6 +612,10 @@ pub fn run() {
                 return Err(Box::new(std::io::Error::other(e)));
             }
 
+            if let Err(e) = jen_cli::ensure_configs(app.handle()) {
+                log::warn!("jen-cli config init: {e}");
+            }
+
             // Single config load — must stay fast (no IDE disk scans).
             let locale = config::load_or_default(app.handle())
                 .map(|c| c.locale)
@@ -713,6 +743,11 @@ pub fn run() {
             pty_write,
             pty_resize,
             pty_kill,
+            jen_cli_get_state,
+            jen_cli_save_servers,
+            jen_cli_save_defaults,
+            jen_cli_reset_servers,
+            jen_cli_set_path_enabled,
             preview_file,
             detect_ides,
             list_installed_editors,

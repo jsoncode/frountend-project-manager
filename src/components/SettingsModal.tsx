@@ -3,6 +3,7 @@ import {
   Language,
   Monitor,
   Settings,
+  TerminalSquare,
 } from 'reicon-react'
 import { useI18n } from '../i18n/useI18n'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -13,6 +14,7 @@ export function SettingsModal() {
   const setSettingsOpen = useSettingsStore((s) => s.setSettingsOpen)
   const setIdeModalOpen = useSettingsStore((s) => s.setIdeModalOpen)
   const setAiSettingsOpen = useSettingsStore((s) => s.setAiSettingsOpen)
+  const setJenCliModalOpen = useSettingsStore((s) => s.setJenCliModalOpen)
   const { locale, setLocale, t } = useI18n()
 
   if (!open) return null
@@ -77,6 +79,25 @@ export function SettingsModal() {
         >
           <ChatRoundDots className="ui-icon" size={14} color="currentColor" aria-hidden />
           {t('settings.openAi')}
+        </button>
+      </section>
+
+      <section className="settings-section">
+        <h4 className="btn-with-icon">
+          <TerminalSquare className="ui-icon" size={15} color="currentColor" aria-hidden />
+          {t('settings.jenCliSection')}
+        </h4>
+        <p className="muted">{t('settings.jenCliHint')}</p>
+        <button
+          type="button"
+          className="btn primary btn-with-icon"
+          onClick={() => {
+            setSettingsOpen(false)
+            setJenCliModalOpen(true)
+          }}
+        >
+          <TerminalSquare className="ui-icon" size={14} color="currentColor" aria-hidden />
+          {t('settings.openJenCli')}
         </button>
       </section>
 

@@ -1,0 +1,10 @@
+{
+  "defaultServer": "tx",
+  "servers": {
+    "tx": {
+      "baseUrl": "https://jenkins.example.com",
+      "username": "your-user",
+      "apiToken": "your-api-token"
+    }
+  }
+}

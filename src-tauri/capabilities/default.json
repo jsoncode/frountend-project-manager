@@ -87,6 +87,11 @@
     "allow-save-layout",
     "allow-load-project-cache",
     "allow-save-project-cache",
-    "allow-drop-project-cache"
+    "allow-drop-project-cache",
+    "allow-jen-cli-get-state",
+    "allow-jen-cli-save-servers",
+    "allow-jen-cli-save-defaults",
+    "allow-jen-cli-reset-servers",
+    "allow-jen-cli-set-path-enabled"
   ]
 }
