@@ -77,11 +77,12 @@ fn is_jen_cli_root(dir: &Path) -> bool {
     dir.join("bin").join("jen-cli.mjs").is_file()
 }
 
-/// Directory that should be prepended to PATH (Windows: `path/` with only .cmd/.ps1).
+/// Directory that should be prepended to PATH.
+/// Prefer `path/` (cmd/ps1 + extensionless bash shim for Git Bash / npm script-shell).
 fn path_inject_dir(root: &Path) -> PathBuf {
-    let win_path = root.join("path");
-    if cfg!(windows) && win_path.join("jen-cli.cmd").is_file() {
-        return try_canonicalize(&win_path);
+    let shim_path = root.join("path");
+    if shim_path.join("jen-cli").is_file() || shim_path.join("jen-cli.cmd").is_file() {
+        return try_canonicalize(&shim_path);
     }
     try_canonicalize(root)
 }
@@ -342,6 +343,9 @@ pub fn apply_pty_env(app: &AppHandle, cmd: &mut portable_pty::CommandBuilder) {
         cmd.env(path_key, &current);
         #[cfg(windows)]
         cmd.env("PATH", &current);
+        // Shell profiles often rebuild $env:Path from User/Machine and wipe the
+        // CreateProcess injection. Startup -Command / rc reads this and re-prepends.
+        cmd.env("FPM_JEN_CLI_SHIM", &shim_s);
     }
     if let Ok(p) = servers_path(app) {
         cmd.env(
@@ -359,41 +363,106 @@ pub fn apply_pty_env(app: &AppHandle, cmd: &mut portable_pty::CommandBuilder) {
 
 #[cfg(windows)]
 fn user_path_get() -> Result<String, String> {
-    let mut cmd = Command::new("powershell.exe");
-    cmd.args([
-        "-NoProfile",
-        "-NonInteractive",
-        "-Command",
-        "[Environment]::GetEnvironmentVariable('Path','User')",
-    ]);
-    git_no_window(&mut cmd);
-    let output = cmd.output().map_err(|e| e.to_string())?;
-    if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+    use windows::core::PCWSTR;
+    use windows::Win32::Foundation::ERROR_SUCCESS;
+    use windows::Win32::System::Registry::{
+        RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_EXPAND_SZ, RRF_RT_REG_SZ,
+    };
+
+    // HKCU\Environment\Path — avoid PowerShell (SetEnvironmentVariable broadcasts
+    // WM_SETTINGCHANGE and can deadlock the Tauri GUI).
+    let sub_key: Vec<u16> = "Environment\0".encode_utf16().collect();
+    let value_name: Vec<u16> = "Path\0".encode_utf16().collect();
+    let mut data = vec![0u16; 32_768];
+    let mut data_bytes = (data.len() * 2) as u32;
+    let status = unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            PCWSTR(sub_key.as_ptr()),
+            PCWSTR(value_name.as_ptr()),
+            RRF_RT_REG_SZ | RRF_RT_REG_EXPAND_SZ,
+            None,
+            Some(data.as_mut_ptr() as *mut _),
+            Some(&mut data_bytes),
+        )
+    };
+    if status != ERROR_SUCCESS {
+        // Missing Path value → empty user PATH is fine.
+        if status.0 == 2 {
+            // ERROR_FILE_NOT_FOUND
+            return Ok(String::new());
+        }
+        return Err(format!("读取用户 PATH 失败 (Win32 {})", status.0));
     }
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    let nchars = (data_bytes as usize / 2).saturating_sub(1); // drop NUL
+    Ok(String::from_utf16_lossy(&data[..nchars.min(data.len())]).trim().to_string())
 }
 
 #[cfg(windows)]
 fn user_path_set(value: &str) -> Result<(), String> {
-    let mut cmd = Command::new("powershell.exe");
-    cmd.args([
-        "-NoProfile",
-        "-NonInteractive",
-        "-Command",
-        "[Environment]::SetEnvironmentVariable('Path', $env:FPM_NEW_USER_PATH, 'User')",
-    ])
-    .env("FPM_NEW_USER_PATH", value);
-    git_no_window(&mut cmd);
-    let output = cmd.output().map_err(|e| e.to_string())?;
-    if !output.status.success() {
-        let err = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        return Err(if err.is_empty() {
-            "写入用户 PATH 失败".into()
-        } else {
-            err
-        });
+    use windows::core::PCWSTR;
+    use windows::Win32::Foundation::{ERROR_SUCCESS, LPARAM, WPARAM};
+    use windows::Win32::System::Registry::{
+        RegCloseKey, RegOpenKeyExW, RegSetValueExW, HKEY_CURRENT_USER, KEY_SET_VALUE, REG_EXPAND_SZ,
+    };
+    use windows::Win32::UI::WindowsAndMessaging::{
+        SendMessageTimeoutW, HWND_BROADCAST, SMTO_ABORTIFHUNG, WM_SETTINGCHANGE,
+    };
+
+    let sub_key: Vec<u16> = "Environment\0".encode_utf16().collect();
+    let value_name: Vec<u16> = "Path\0".encode_utf16().collect();
+    let mut data: Vec<u16> = value.encode_utf16().collect();
+    data.push(0);
+
+    let mut hkey = Default::default();
+    let open = unsafe {
+        RegOpenKeyExW(
+            HKEY_CURRENT_USER,
+            PCWSTR(sub_key.as_ptr()),
+            Some(0),
+            KEY_SET_VALUE,
+            &mut hkey,
+        )
+    };
+    if open != ERROR_SUCCESS {
+        return Err(format!("打开 HKCU\\Environment 失败 (Win32 {})", open.0));
     }
+
+    let set = unsafe {
+        RegSetValueExW(
+            hkey,
+            PCWSTR(value_name.as_ptr()),
+            Some(0),
+            REG_EXPAND_SZ,
+            Some(std::slice::from_raw_parts(
+                data.as_ptr() as *const u8,
+                data.len() * 2,
+            )),
+        )
+    };
+    unsafe {
+        let _ = RegCloseKey(hkey);
+    }
+    if set != ERROR_SUCCESS {
+        return Err(format!("写入用户 PATH 失败 (Win32 {})", set.0));
+    }
+
+    // Notify other apps; SMTO_ABORTIFHUNG + short timeout so a stuck window
+    // cannot freeze our settings UI (the PowerShell API waits indefinitely).
+    let env_name: Vec<u16> = "Environment\0".encode_utf16().collect();
+    unsafe {
+        let mut result = 0usize;
+        let _ = SendMessageTimeoutW(
+            HWND_BROADCAST,
+            WM_SETTINGCHANGE,
+            WPARAM(0),
+            LPARAM(env_name.as_ptr() as isize),
+            SMTO_ABORTIFHUNG,
+            1500,
+            Some(&mut result),
+        );
+    }
+
     // Refresh cache so new PTYs see the change.
     if let Ok(mut guard) = USER_PATH_CACHE.lock() {
         *guard = Some(value.to_string());

@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Extensionless shim for Git Bash / npm script-shell / Unix.
+# Windows also ships jen-cli.cmd + jen-cli.ps1 for cmd / PowerShell.
+set -e
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if ! command -v node >/dev/null 2>&1; then
+  echo "[jen-cli] Node.js is not installed or not on PATH. Install Node.js 18+." >&2
+  exit 1
+fi
+exec node "$DIR/../bin/jen-cli.mjs" "$@"

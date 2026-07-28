@@ -28,6 +28,7 @@ import {
 	shouldRequireProject,
 	uniqueNonEmpty
 } from "../lib/presetParams.mjs";
+import { resolveJenkinsConfigPath } from "../lib/fpmPaths.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -42,7 +43,7 @@ jen-cli
   jen-cli list --key <paramName> [--job <jobName>] [--server <alias>]
 
 参数:
-  --config <path>     配置文件路径 (默认: ./jenkins.config.json)
+  --config <path>     配置文件路径 (默认: FPM 设置目录 / 仓库 jenkins.config.json)
   --server <alias>    Jenkins 服务器别名 (默认: tx，可选项： tx/txProd/jen/whalePlus/devJenkins)
   --job <name>        Jenkins Job 名称，可含 folder，例如 "folderA/my-job" (默认: server=tx 时为 system3_Front_docker3，server=txProd 时为 pro_system3_Front_docker3)
   --params <csv>      逗号分隔参数，例如 "branch=uat5,NodeVersion=24.12.0"
@@ -78,12 +79,9 @@ jen-cli
 function parseArgs(argv) {
 	const defaults = loadJenDefaults();
 	const cli = defaults.cliDefaults || {};
-	const envConfig = process.env.JENKINS_CONFIG_PATH;
 	const out = {
 		command: null,
-		configPath: envConfig
-			? path.resolve(envConfig)
-			: path.resolve(repoRoot, "jenkins.config.json"),
+		configPath: resolveJenkinsConfigPath(repoRoot),
 		server: undefined,
 		job: undefined,
 		paramsCsv: undefined,

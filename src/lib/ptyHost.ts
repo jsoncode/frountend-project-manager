@@ -78,6 +78,19 @@ export function writeToTerminal(id: string, data: string) {
   entries.get(id)?.term.write(data)
 }
 
+/**
+ * Write app-injected text (git status echoes, errors, etc.) into xterm.
+ * Normalizes bare `\n` → `\r\n` so lines don't staircase in the PTY view.
+ * Do NOT use for raw `pty://data` streams (those may use lone `\r` for progress).
+ */
+export function writeHostToTerminal(id: string, data: string) {
+  const normalized = data
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/\n/g, '\r\n')
+  entries.get(id)?.term.write(normalized)
+}
+
 export function focusTerminal(id: string) {
   entries.get(id)?.term.focus()
 }

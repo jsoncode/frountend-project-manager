@@ -40,12 +40,19 @@ fn shell_command(cwd: &Path) -> CommandBuilder {
         // Windows PowerShell 5.1 defaults to the system ANSI code page (GBK on
         // Chinese Windows). Force UTF-8 so git commit subjects / modern CLIs
         // round-trip correctly through ConPTY.
+        //
+        // Profiles run before -Command and often rebuild $env:Path from the
+        // registry, wiping CreateProcess PATH (jen-cli shim). Re-prepend via
+        // FPM_JEN_CLI_SHIM after profiles so interactive + early commands see it.
         let mut cmd = CommandBuilder::new("powershell.exe");
         cmd.arg("-NoLogo");
         cmd.arg("-NoExit");
         cmd.arg("-Command");
         cmd.arg(
-            "chcp 65001 > $null; \
+            "if ($env:FPM_JEN_CLI_SHIM) { \
+               $env:Path = $env:FPM_JEN_CLI_SHIM + ';' + $env:Path \
+             }; \
+             chcp 65001 > $null; \
              [Console]::InputEncoding = New-Object System.Text.UTF8Encoding $false; \
              [Console]::OutputEncoding = [Console]::InputEncoding; \
              $OutputEncoding = [Console]::OutputEncoding",
@@ -72,8 +79,9 @@ fn shell_command(cwd: &Path) -> CommandBuilder {
                 "/bin/bash".into()
             }
         });
+        // Interactive login shell; PATH re-prepend happens after first prompt
+        // on the frontend side if needed. Prefer env inherit + wait-for-prompt.
         let mut cmd = CommandBuilder::new(shell);
-        // Login shell so PATH / nvm / fnm from profile are available.
         cmd.arg("-l");
         cmd.cwd(cwd);
         cmd.env("TERM", "xterm-256color");

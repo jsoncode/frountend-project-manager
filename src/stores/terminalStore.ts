@@ -3,7 +3,7 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { create } from '../lib/createStore'
 import { isTauri } from '../lib/tauri'
 import type { TermSession } from '../lib/types'
-import { getTerminalPlainText, waitPtyReady, writeToTerminal } from '../lib/ptyHost'
+import { getTerminalPlainText, markPtyReady, waitPtyReady, writeHostToTerminal, writeToTerminal } from '../lib/ptyHost'
 import {
   detectIssueKind,
   trimLogTail,
@@ -95,6 +95,8 @@ type TerminalState = {
   runInSession: (terminalId: string, projectPath: string, command: string) => Promise<void>
   runScript: (projectPath: string, projectName: string, pm: string, script: string) => Promise<void>
   runRaw: (projectPath: string, projectName: string, command: string) => Promise<void>
+  /** Resolve when the session is no longer marked running (shell back at prompt). */
+  waitUntilIdle: (terminalId: string, timeoutMs?: number) => Promise<void>
   markConnected: (id: string, connected: boolean) => void
   markRunning: (id: string, running: boolean) => void
   markDirty: (id: string) => void
@@ -110,12 +112,9 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
 
   createSession: (projectPath, projectName) => {
     const id = newId()
-    const count =
-      get().sessions.filter((s) => isSameProject(s.projectPath, projectPath))
-        .length + 1
     const session: TermSession = {
       id,
-      title: `${projectName} #${count}`,
+      title: projectName,
       projectPath,
       projectName,
       connected: false,
@@ -244,7 +243,7 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
       await invoke('pty_write', { terminalId, data: `${cmd}\r` })
     } catch (e) {
       get().markRunning(terminalId, false)
-      writeToTerminal(terminalId, `\r\n\x1b[31mError: ${String(e)}\x1b[0m\r\n`)
+      writeHostToTerminal(terminalId, `\r\n\x1b[31mError: ${String(e)}\x1b[0m\r\n`)
     }
   },
 
@@ -260,6 +259,18 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
     await get().runInSession(id, projectPath, command)
   },
 
+  waitUntilIdle: async (terminalId, timeoutMs = 180_000) => {
+    const started = Date.now()
+    // Allow markRunning(true) from runInSession to land first.
+    await new Promise<void>((r) => window.setTimeout(r, 40))
+    while (Date.now() - started < timeoutMs) {
+      const session = get().sessions.find((s) => s.id === terminalId)
+      if (!session) return
+      if (session.connected && !session.running) return
+      await new Promise<void>((r) => window.setTimeout(r, 80))
+    }
+  },
+
   startListening: async () => {
     if (!isTauri()) {
       return () => undefined
@@ -268,6 +279,10 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
       const id = event.payload.terminalId
       const data = event.payload.data
       writeToTerminal(id, data)
+      // First interactive prompt → allow shortcut / runRaw to write commands.
+      if (looksLikeShellPrompt(data)) {
+        markPtyReady(id)
+      }
       const session = get().sessions.find((t) => t.id === id)
       if (session?.running && looksLikeShellPrompt(data)) {
         get().markRunning(id, false)
@@ -287,7 +302,7 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
         code == null
           ? '\r\n\x1b[90m[shell closed]\x1b[0m\r\n'
           : `\r\n\x1b[90m[shell exit ${code}]\x1b[0m\r\n`
-      writeToTerminal(id, msg)
+      writeHostToTerminal(id, msg)
     })
     return () => {
       unData()

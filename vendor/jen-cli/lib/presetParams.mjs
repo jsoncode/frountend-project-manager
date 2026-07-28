@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import { HUAWEI_NPM_REGISTRY } from "./jenkins.mjs";
+import { resolveJenDefaultsPath } from "./fpmPaths.mjs";
 
 export function parseSemverFromCandidate(v) {
 	const m = String(v).trim().match(/^v?(\d+)\.(\d+)\.(\d+)$/);
@@ -98,7 +99,7 @@ let cachedDefaults = null;
 
 export function loadJenDefaults() {
 	if (cachedDefaults) return cachedDefaults;
-	const p = process.env.FPM_JEN_CLI_DEFAULTS;
+	const p = resolveJenDefaultsPath();
 	if (p && fs.existsSync(p)) {
 		try {
 			const raw = JSON.parse(fs.readFileSync(p, "utf8"));

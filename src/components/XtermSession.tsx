@@ -253,6 +253,7 @@ export function XtermSession({ sessionId, cwd, active }: Props) {
     fit.fit()
 
     let disposed = false
+    let readyFallbackTimer: number | undefined
 
     // With a mouse selection, Ctrl+C / Cmd+C copies instead of sending interrupt (^C).
     term.attachCustomKeyEventHandler((ev) => {
@@ -275,6 +276,10 @@ export function XtermSession({ sessionId, cwd, active }: Props) {
       if (data.includes('\r') || data.includes('\n') || data === '\u0003') {
         useTerminalStore.getState().markDirty(sessionId)
       }
+      // Interactive Enter → treat as busy until the prompt heuristic clears it.
+      if (data === '\r' || data.endsWith('\r') || data.includes('\n')) {
+        useTerminalStore.getState().markRunning(sessionId, true)
+      }
       void invoke('pty_write', { terminalId: sessionId, data }).catch(() => undefined)
     })
 
@@ -292,7 +297,12 @@ export function XtermSession({ sessionId, cwd, active }: Props) {
           return
         }
         markConnected(sessionId, true)
-        markPtyReady(sessionId)
+        // Do NOT markPtyReady here — wait for the first interactive prompt
+        // (see terminalStore pty://data). Profiles / -Command may still be
+        // rewriting PATH; sending shortcut commands too early → "not found".
+        readyFallbackTimer = window.setTimeout(() => {
+          if (!disposed) markPtyReady(sessionId)
+        }, 8000)
       } catch (e) {
         term.writeln(`\x1b[31mFailed to start shell: ${String(e)}\x1b[0m`)
         markConnected(sessionId, false)
@@ -314,6 +324,7 @@ export function XtermSession({ sessionId, cwd, active }: Props) {
 
     return () => {
       disposed = true
+      if (readyFallbackTimer != null) window.clearTimeout(readyFallbackTimer)
       onData.dispose()
       fileLinks.dispose()
       host.removeEventListener('mouseup', onMouseSettle, true)

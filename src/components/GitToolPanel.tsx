@@ -8,8 +8,8 @@ import {
 import { invoke } from '@tauri-apps/api/core'
 import { useCallback, useState, type MouseEvent } from 'react'
 import { useI18n } from '../i18n/useI18n'
-import { writeToTerminal } from '../lib/ptyHost'
-import type { BranchItem, MergeStartResult, MergeStatus } from '../lib/types'
+import { writeHostToTerminal } from '../lib/ptyHost'
+import type { BranchItem, MergeStatus } from '../lib/types'
 import { useProjectStore } from '../stores/projectStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useTerminalStore } from '../stores/terminalStore'
@@ -47,6 +47,8 @@ export function GitToolPanel() {
   const deleteHistory = useSettingsStore((s) => s.deleteHistory)
   const runRaw = useTerminalStore((s) => s.runRaw)
   const ensureRunTarget = useTerminalStore((s) => s.ensureRunTarget)
+  const runInSession = useTerminalStore((s) => s.runInSession)
+  const waitUntilIdle = useTerminalStore((s) => s.waitUntilIdle)
   const [switchTarget, setSwitchTarget] = useState<string | null>(null)
   const [menu, setMenu] = useState<MenuState | null>(null)
   const [commitTarget, setCommitTarget] = useState<string | null>(null)
@@ -75,11 +77,18 @@ export function GitToolPanel() {
     void runRaw(selected.path, selected.folderName, command)
   }
 
+  /** Run a git command in the real PTY (native colors) and wait for the prompt. */
+  const runGitInTerm = async (command: string) => {
+    const id = ensureRunTarget(selected.path, selected.folderName)
+    await runInSession(id, selected.path, command)
+    await waitUntilIdle(id)
+  }
+
   const echoTerm = (text: string) => {
     const id = ensureRunTarget(selected.path, selected.folderName, {
       allowBusy: true,
     })
-    writeToTerminal(id, text)
+    writeHostToTerminal(id, text)
   }
 
   const checkUpdates = async () => {
@@ -100,29 +109,30 @@ export function GitToolPanel() {
     if (!n) return false
     return (git?.branches ?? []).some((b) => localName(b.name) === n)
   }
+
   const pullBranch = async (branch: BranchItem) => {
     const name = localName(branch.name)
     setPulling(true)
-    echoTerm(`\r\n\x1b[36m$ git pull/update ${name}\x1b[0m\r\n`)
     try {
-      const msg = await invoke<string>('git_pull_branch', {
-        path: selected.path,
-        branch: name,
-      })
-      echoTerm(`\x1b[32m${msg}\x1b[0m\r\n`)
+      const isCurrent =
+        !!git?.current &&
+        (git.current === name ||
+          git.current === branch.name ||
+          localName(git.current) === name)
+      // Real shell git — keeps native color / progress. Do not echo captured text.
+      const command = isCurrent
+        ? 'git pull --ff-only --prune; if (-not $?) { git pull --prune }'
+        : `git fetch origin ${JSON.stringify(`${name}:${name}`)}`
+      await runGitInTerm(command)
       await refreshGit()
-    } catch (e) {
-      const err = String(e)
-      if (err.includes('MERGE_CONFLICT:')) {
-        echoTerm(`\x1b[33m${t('merge.pullConflict')}\x1b[0m\r\n`)
-        await refreshGit()
-        const status = await invoke<MergeStatus>('git_merge_status', {
-          path: selected.path,
-        }).catch(() => null)
+      const status = await invoke<MergeStatus>('git_merge_status', {
+        path: selected.path,
+      }).catch(() => null)
+      if (status && (status.inProgress || status.conflictCount > 0)) {
         setMergeModal({ initial: status })
-      } else {
-        echoTerm(`\x1b[31m${err}\x1b[0m\r\n`)
       }
+    } catch (e) {
+      echoTerm(`\r\n\x1b[31m${String(e)}\x1b[0m\r\n`)
     } finally {
       setPulling(false)
     }
@@ -130,38 +140,29 @@ export function GitToolPanel() {
 
   const startMerge = async (ref: string) => {
     try {
-      const result = await invoke<MergeStartResult>('git_merge_start', {
-        path: selected.path,
-        gitRef: ref,
-      })
-      await refreshGit()
-      if (result.status === 'uptodate') {
-        echoTerm(`\r\n\x1b[32m$ git merge ${ref}\x1b[0m — ${t('merge.upToDate')}\r\n`)
-        return
-      }
-      // Always open the review modal (pending or conflicts) — never dump git
-      // merge banners into the interactive PTY (that garbles the prompt).
-      echoTerm(
-        `\r\n\x1b[36m$ git merge --no-commit ${ref}\x1b[0m — ${result.message}\r\n`,
+      await runGitInTerm(
+        `git merge --no-commit --no-ff ${JSON.stringify(ref)}`,
       )
-      setMergeModal({ initial: result.merge })
+      await refreshGit()
+      const status = await invoke<MergeStatus>('git_merge_status', {
+        path: selected.path,
+      }).catch(() => null)
+      if (status && (status.inProgress || status.conflictCount > 0)) {
+        setMergeModal({ initial: status })
+      }
     } catch (e) {
-      echoTerm(`\r\n\x1b[31m$ git merge ${ref}\x1b[0m — ${String(e)}\x1b[0m\r\n`)
+      echoTerm(`\r\n\x1b[31m${String(e)}\x1b[0m\r\n`)
       await refreshMergeStatus().catch(() => undefined)
     }
   }
 
   const abortMergeFromMenu = async () => {
     if (!window.confirm(t('merge.abortConfirm'))) return
-    echoTerm(`\r\n\x1b[36m$ git merge --abort\x1b[0m\r\n`)
     try {
-      const msg = await invoke<string>('git_merge_abort', {
-        path: selected.path,
-      })
-      echoTerm(`\x1b[32m${msg}\x1b[0m\r\n`)
+      await runGitInTerm('git merge --abort')
       await refreshGit()
     } catch (e) {
-      echoTerm(`\x1b[31m${String(e)}\x1b[0m\r\n`)
+      echoTerm(`\r\n\x1b[31m${String(e)}\x1b[0m\r\n`)
     }
   }
 
@@ -479,15 +480,11 @@ export function GitToolPanel() {
               onClick={() => {
                 setMenu(null)
                 void (async () => {
-                  echoTerm(`\r\n\x1b[36m$ git fetch --all --prune\x1b[0m\r\n`)
                   try {
-                    const msg = await invoke<string>('git_fetch', {
-                      path: selected.path,
-                    })
-                    echoTerm(`\x1b[32m${msg}\x1b[0m\r\n`)
+                    await runGitInTerm('git fetch --all --prune')
                     await refreshGit()
                   } catch (e) {
-                    echoTerm(`\x1b[31m${String(e)}\x1b[0m\r\n`)
+                    echoTerm(`\r\n\x1b[31m${String(e)}\x1b[0m\r\n`)
                   }
                 })()
               }}
