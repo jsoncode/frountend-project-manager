@@ -203,12 +203,14 @@
   justify-content: center;
 }
 
-.window-ctrl:hover {
+.window-ctrl:hover,
+.window-ctrl.is-hovered {
   background: rgba(255, 255, 255, 0.08);
   color: var(--text-bright);
 }
 
-.window-ctrl-close:hover {
+.window-ctrl-close:hover,
+.window-ctrl-close.is-hovered {
   background: #e81123;
   color: #fff;
 }

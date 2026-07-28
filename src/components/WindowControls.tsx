@@ -44,6 +44,7 @@ export function WindowControls() {
         </svg>
       </button>
       <button
+        id="titlebar-maximize"
         type="button"
         className="window-ctrl"
         title={maximized ? t('window.restore') : t('window.maximize')}

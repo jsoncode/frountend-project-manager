@@ -57,6 +57,7 @@
     "core:window:allow-toggle-maximize",
     "core:window:allow-start-dragging",
     "core:window:allow-is-maximized",
+    "snap-layout:default",
     "allow-delete-history",
     "allow-set-locale",
     "allow-pick-directory",

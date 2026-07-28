@@ -30,7 +30,8 @@
     "pinyin-pro": "^3.28.2",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "reicon-react": "^1.1.302"
+    "reicon-react": "^1.1.302",
+    "tauri-plugin-snap-layout": "^1.0.9"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.11.4",
