@@ -58,6 +58,11 @@ export function TopBar() {
         <SearchBox />
       </div>
       <div className="topbar-end">
+        <div
+          className="topbar-drag topbar-drag-trail"
+          onMouseDown={onDragMouseDown}
+          aria-hidden
+        />
         <button
           type="button"
           className="btn icon-only"

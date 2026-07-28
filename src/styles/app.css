@@ -175,10 +175,15 @@
   align-items: center;
   gap: 6px;
   min-width: 0;
+  width: 100%;
   flex: 0 0 auto;
   justify-content: flex-end;
   height: 100%;
   padding-left: 4px;
+}
+
+.topbar-drag-trail {
+  min-width: 0;
 }
 
 .window-controls {
