@@ -2553,6 +2553,58 @@ body.resizing-row * {
   margin-top: 8px;
 }
 
+.jen-cli-server-select-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.jen-cli-server-select-row .input-block {
+  flex: 1;
+  min-width: 0;
+}
+
+.jen-cli-server-gear {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.jen-cli-mode-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.jen-cli-json-editor {
+  width: 100%;
+  margin-top: 6px;
+  resize: vertical;
+  font-family: var(--mono, Consolas, 'Courier New', monospace);
+  font-size: 12px;
+  line-height: 1.45;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-0);
+  color: var(--text-bright);
+}
+
+.jen-cli-example-details {
+  margin-top: 10px;
+}
+
+.jen-cli-example-details summary {
+  cursor: pointer;
+  color: var(--cyan);
+  font-size: 12px;
+}
+
 .jen-cli-server-card {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -2568,6 +2620,27 @@ body.resizing-row * {
   grid-template-columns: 1fr 1fr;
   gap: 10px;
   margin-top: 8px;
+}
+
+.jen-cli-kv-head,
+.jen-cli-kv-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.jen-cli-kv-head {
+  margin-top: 8px;
+  margin-bottom: 4px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.jen-cli-kv-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .field-label {

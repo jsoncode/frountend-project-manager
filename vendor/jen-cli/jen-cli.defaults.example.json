@@ -5,18 +5,12 @@
     "intervalMs": 3000,
     "console": true
   },
-  "paramKeys": {
-    "branch": "branch",
-    "nodeVersion": "NodeVersion",
-    "installCommand": "INSTALL_COMMAND_ACTIVE",
-    "buildCommand": "BUILD_COMMAND_ACTIVE",
-    "project": "project"
-  },
+  "paramKeys": {},
   "paramDefaults": {
     "branch": "uat5",
-    "nodeVersion": "v24.12.0",
-    "installCommand": "pnpm i",
-    "buildCommand": "pnpm build:uat",
+    "NodeVersion": "v24.12.0",
+    "INSTALL_COMMAND_ACTIVE": "pnpm i",
+    "BUILD_COMMAND_ACTIVE": "pnpm build:uat",
     "project": ""
   },
   "presets": {
@@ -33,9 +27,9 @@
         "defaultJob": "system3_Front_docker3",
         "defaults": {
           "branch": "uat5",
-          "nodeVersion": "v24.12.0",
-          "installCommand": "pnpm i",
-          "buildCommand": "pnpm build:uat"
+          "NodeVersion": "v24.12.0",
+          "INSTALL_COMMAND_ACTIVE": "pnpm i",
+          "BUILD_COMMAND_ACTIVE": "pnpm build:uat"
         }
       },
       {
@@ -45,9 +39,9 @@
         "defaultJob": "pro_system3_Front_docker3",
         "defaults": {
           "branch": "master5",
-          "nodeVersion": "v24.12.0",
-          "installCommand": "pnpm i",
-          "buildCommand": "pnpm build:prod"
+          "NodeVersion": "v24.12.0",
+          "INSTALL_COMMAND_ACTIVE": "pnpm i",
+          "BUILD_COMMAND_ACTIVE": "pnpm build:prod"
         }
       }
     ]

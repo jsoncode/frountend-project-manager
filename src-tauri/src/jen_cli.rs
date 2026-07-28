@@ -1,15 +1,20 @@
 //! jen-cli integration: config files, resource shim dir, user PATH, pty env.
 
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::Mutex;
 use tauri::{AppHandle, Manager};
 
 const SERVERS_FILE: &str = "jenkins.config.json";
 const DEFAULTS_FILE: &str = "jen-cli.defaults.json";
 const PATH_FLAG_FILE: &str = "jen-cli.path-enabled.json";
+
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -31,6 +36,12 @@ pub struct JenCliState {
     pub node_version: Option<String>,
 }
 
+/// Cached node probe — settings open must not re-spawn every time.
+static NODE_PROBE: Mutex<Option<(bool, Option<String>)>> = Mutex::new(None);
+
+/// Cached Windows user Path (registry) for PTY env merge.
+static USER_PATH_CACHE: Lazy<Mutex<Option<String>>> = Lazy::new(|| Mutex::new(None));
+
 fn config_dir(app: &AppHandle) -> Result<PathBuf, String> {
     let dir = app
         .path()
@@ -40,31 +51,66 @@ fn config_dir(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(dir)
 }
 
-/// Resolve vendored jen-cli directory (dev: repo vendor/, prod: resource_dir).
-pub fn shim_dir(app: &AppHandle) -> Result<PathBuf, String> {
+/// Strip Windows `\\?\` / `\\?\UNC\` extended prefixes. Putting those in PATH
+/// makes cmd/PowerShell report "The system cannot find the path specified."
+fn normalize_fs_path(path: PathBuf) -> PathBuf {
+    #[cfg(windows)]
+    {
+        let s = path.to_string_lossy();
+        if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
+            return PathBuf::from(format!(r"\\{rest}"));
+        }
+        if let Some(rest) = s.strip_prefix(r"\\?\") {
+            return PathBuf::from(rest);
+        }
+    }
+    path
+}
+
+fn try_canonicalize(path: &Path) -> PathBuf {
+    fs::canonicalize(path)
+        .map(normalize_fs_path)
+        .unwrap_or_else(|_| normalize_fs_path(path.to_path_buf()))
+}
+
+fn is_jen_cli_root(dir: &Path) -> bool {
+    dir.join("bin").join("jen-cli.mjs").is_file()
+}
+
+/// Directory that should be prepended to PATH (Windows: `path/` with only .cmd/.ps1).
+fn path_inject_dir(root: &Path) -> PathBuf {
+    let win_path = root.join("path");
+    if cfg!(windows) && win_path.join("jen-cli.cmd").is_file() {
+        return try_canonicalize(&win_path);
+    }
+    try_canonicalize(root)
+}
+
+/// Resolve vendored jen-cli **root** (contains bin/ + lib/).
+pub fn cli_root(app: &AppHandle) -> Result<PathBuf, String> {
     if let Ok(res) = app.path().resource_dir() {
         for candidate in [
             res.join("jen-cli"),
             res.join("resources").join("jen-cli"),
             res.join("vendor").join("jen-cli"),
         ] {
-            if candidate.is_dir() && candidate.join("bin").join("jen-cli.mjs").is_file() {
-                return Ok(candidate);
+            if candidate.is_dir() && is_jen_cli_root(&candidate) {
+                return Ok(try_canonicalize(&candidate));
             }
         }
     }
 
     let dev = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../vendor/jen-cli");
-    if let Ok(canon) = fs::canonicalize(&dev) {
-        if canon.join("bin").join("jen-cli.mjs").is_file() {
-            return Ok(canon);
-        }
-    }
-    if dev.join("bin").join("jen-cli.mjs").is_file() {
-        return Ok(dev);
+    if is_jen_cli_root(&dev) {
+        return Ok(try_canonicalize(&dev));
     }
 
     Err("找不到内置 jen-cli 资源目录".into())
+}
+
+/// Resolve PATH shim directory (dev/prod).
+pub fn shim_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(path_inject_dir(&cli_root(app)?))
 }
 
 fn servers_path(app: &AppHandle) -> Result<PathBuf, String> {
@@ -93,7 +139,7 @@ fn write_json_file(path: &Path, value: &Value) -> Result<(), String> {
 }
 
 fn bundled_example(app: &AppHandle, name: &str) -> Result<String, String> {
-    let dir = shim_dir(app)?;
+    let dir = cli_root(app)?;
     let path = dir.join(name);
     fs::read_to_string(&path).map_err(|e| format!("读取示例失败 {}: {e}", path.display()))
 }
@@ -128,18 +174,12 @@ fn default_defaults_value(app: &AppHandle) -> Value {
                     "intervalMs": 3000,
                     "console": true
                 },
-                "paramKeys": {
-                    "branch": "branch",
-                    "nodeVersion": "NodeVersion",
-                    "installCommand": "INSTALL_COMMAND_ACTIVE",
-                    "buildCommand": "BUILD_COMMAND_ACTIVE",
-                    "project": "project"
-                },
+                "paramKeys": {},
                 "paramDefaults": {
                     "branch": "uat5",
-                    "nodeVersion": "v24.12.0",
-                    "installCommand": "pnpm i",
-                    "buildCommand": "pnpm build:uat",
+                    "NodeVersion": "v24.12.0",
+                    "INSTALL_COMMAND_ACTIVE": "pnpm i",
+                    "BUILD_COMMAND_ACTIVE": "pnpm build:uat",
                     "project": ""
                 },
                 "presets": { "rules": [] }
@@ -160,15 +200,36 @@ pub fn ensure_configs(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+fn git_no_window(cmd: &mut Command) {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+}
+
 pub fn detect_node() -> (bool, Option<String>) {
-    let output = Command::new("node").arg("-v").output();
-    match output {
+    if let Ok(guard) = NODE_PROBE.lock() {
+        if let Some(cached) = guard.as_ref() {
+            return cached.clone();
+        }
+    }
+
+    let mut cmd = Command::new("node");
+    cmd.arg("-v");
+    git_no_window(&mut cmd);
+    let result = match cmd.output() {
         Ok(o) if o.status.success() => {
             let v = String::from_utf8_lossy(&o.stdout).trim().to_string();
             (true, Some(v))
         }
         _ => (false, None),
+    };
+
+    if let Ok(mut guard) = NODE_PROBE.lock() {
+        *guard = Some(result.clone());
     }
+    result
 }
 
 fn read_path_enabled(app: &AppHandle) -> bool {
@@ -226,42 +287,87 @@ pub fn reset_servers_from_example(app: &AppHandle) -> Result<Value, String> {
     Ok(v)
 }
 
+#[cfg(windows)]
+fn cached_user_path() -> String {
+    let mut guard = USER_PATH_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    if guard.is_none() {
+        *guard = Some(user_path_get().unwrap_or_default());
+    }
+    guard.clone().unwrap_or_default()
+}
+
+/// Merge path fragments (later sources fill gaps; first wins for order).
+fn merge_path_parts(parts: &[String]) -> String {
+    let mut seen = std::collections::HashSet::new();
+    let mut out: Vec<String> = Vec::new();
+    for p in parts {
+        for seg in p.split(';') {
+            let t = seg.trim();
+            if t.is_empty() {
+                continue;
+            }
+            let key = t.to_lowercase();
+            if seen.insert(key) {
+                out.push(t.to_string());
+            }
+        }
+    }
+    out.join(";")
+}
+
 /// Prepend shim dir to PATH and set config env vars for a child process.
 pub fn apply_pty_env(app: &AppHandle, cmd: &mut portable_pty::CommandBuilder) {
     let _ = ensure_configs(app);
     if let Ok(shim) = shim_dir(app) {
-        let shim_s = shim.to_string_lossy();
+        let shim_s = normalize_fs_path(shim).to_string_lossy().into_owned();
         let path_key = if cfg!(windows) { "Path" } else { "PATH" };
-        // portable-pty reads env case-insensitively on Windows for some shells;
-        // set both common spellings.
-        let current = std::env::var_os("PATH")
-            .or_else(|| std::env::var_os("Path"))
-            .unwrap_or_default();
-        let mut new_path = shim_s.as_ref().to_string();
-        new_path.push(if cfg!(windows) { ';' } else { ':' });
-        new_path.push_str(&current.to_string_lossy());
-        cmd.env(path_key, &new_path);
+
         #[cfg(windows)]
-        cmd.env("PATH", &new_path);
+        let current = {
+            let process = std::env::var_os("PATH")
+                .or_else(|| std::env::var_os("Path"))
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            // Explorer-launched apps often miss User PATH (nvm node etc.).
+            merge_path_parts(&[shim_s.clone(), cached_user_path(), process])
+        };
+        #[cfg(not(windows))]
+        let current = {
+            let process = std::env::var_os("PATH")
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            format!("{shim_s}:{process}")
+        };
+
+        cmd.env(path_key, &current);
+        #[cfg(windows)]
+        cmd.env("PATH", &current);
     }
     if let Ok(p) = servers_path(app) {
-        cmd.env("JENKINS_CONFIG_PATH", p.to_string_lossy().as_ref());
+        cmd.env(
+            "JENKINS_CONFIG_PATH",
+            normalize_fs_path(p).to_string_lossy().as_ref(),
+        );
     }
     if let Ok(p) = defaults_path(app) {
-        cmd.env("FPM_JEN_CLI_DEFAULTS", p.to_string_lossy().as_ref());
+        cmd.env(
+            "FPM_JEN_CLI_DEFAULTS",
+            normalize_fs_path(p).to_string_lossy().as_ref(),
+        );
     }
 }
 
 #[cfg(windows)]
 fn user_path_get() -> Result<String, String> {
-    let output = Command::new("powershell.exe")
-        .args([
-            "-NoProfile",
-            "-Command",
-            "[Environment]::GetEnvironmentVariable('Path','User')",
-        ])
-        .output()
-        .map_err(|e| e.to_string())?;
+    let mut cmd = Command::new("powershell.exe");
+    cmd.args([
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "[Environment]::GetEnvironmentVariable('Path','User')",
+    ]);
+    git_no_window(&mut cmd);
+    let output = cmd.output().map_err(|e| e.to_string())?;
     if !output.status.success() {
         return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
     }
@@ -270,16 +376,16 @@ fn user_path_get() -> Result<String, String> {
 
 #[cfg(windows)]
 fn user_path_set(value: &str) -> Result<(), String> {
-    // Pass via env to avoid quoting hell.
-    let output = Command::new("powershell.exe")
-        .args([
-            "-NoProfile",
-            "-Command",
-            "[Environment]::SetEnvironmentVariable('Path', $env:FPM_NEW_USER_PATH, 'User')",
-        ])
-        .env("FPM_NEW_USER_PATH", value)
-        .output()
-        .map_err(|e| e.to_string())?;
+    let mut cmd = Command::new("powershell.exe");
+    cmd.args([
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "[Environment]::SetEnvironmentVariable('Path', $env:FPM_NEW_USER_PATH, 'User')",
+    ])
+    .env("FPM_NEW_USER_PATH", value);
+    git_no_window(&mut cmd);
+    let output = cmd.output().map_err(|e| e.to_string())?;
     if !output.status.success() {
         let err = String::from_utf8_lossy(&output.stderr).trim().to_string();
         return Err(if err.is_empty() {
@@ -288,15 +394,17 @@ fn user_path_set(value: &str) -> Result<(), String> {
             err
         });
     }
+    // Refresh cache so new PTYs see the change.
+    if let Ok(mut guard) = USER_PATH_CACHE.lock() {
+        *guard = Some(value.to_string());
+    }
     Ok(())
 }
 
 #[cfg(windows)]
 fn normalize_dir(p: &Path) -> String {
-    fs::canonicalize(p)
-        .unwrap_or_else(|_| p.to_path_buf())
+    try_canonicalize(p)
         .to_string_lossy()
-        .trim_start_matches(r"\\?\")
         .to_string()
 }
 
@@ -313,9 +421,16 @@ pub fn set_path_enabled(app: &AppHandle, enabled: bool) -> Result<(), String> {
             .filter(|s| !s.is_empty())
             .collect();
         let target_l = target.to_lowercase();
+        // Also strip legacy root shim if user enabled PATH before path/ subdir existed.
+        let legacy_root = cli_root(app)
+            .ok()
+            .map(|r| normalize_dir(&r).to_lowercase());
         let mut next: Vec<String> = parts
             .into_iter()
-            .filter(|p| p.to_lowercase() != target_l)
+            .filter(|p| {
+                let pl = p.to_lowercase();
+                pl != target_l && legacy_root.as_ref().map(|l| l != &pl).unwrap_or(true)
+            })
             .collect();
         if enabled {
             next.insert(0, target);
@@ -326,9 +441,17 @@ pub fn set_path_enabled(app: &AppHandle, enabled: bool) -> Result<(), String> {
     #[cfg(not(windows))]
     {
         let _ = (&shim, enabled);
-        // Non-Windows: skip permanent PATH; app terminal injection still works.
     }
 
     write_path_enabled(app, enabled)?;
     Ok(())
+}
+
+/// Warm caches used by settings / first PTY (node probe, user PATH).
+pub fn warmup_caches() {
+    let _ = detect_node();
+    #[cfg(windows)]
+    {
+        let _ = cached_user_path();
+    }
 }

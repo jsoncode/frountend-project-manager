@@ -83,18 +83,12 @@ const FALLBACK_DEFAULTS = {
 		intervalMs: 3000,
 		console: true
 	},
-	paramKeys: {
-		branch: "branch",
-		nodeVersion: "NodeVersion",
-		installCommand: "INSTALL_COMMAND_ACTIVE",
-		buildCommand: "BUILD_COMMAND_ACTIVE",
-		project: "project"
-	},
+	paramKeys: {},
 	paramDefaults: {
 		branch: "uat5",
-		nodeVersion: "v24.12.0",
-		installCommand: "pnpm i",
-		buildCommand: "pnpm build:uat",
+		NodeVersion: "v24.12.0",
+		INSTALL_COMMAND_ACTIVE: "pnpm i",
+		BUILD_COMMAND_ACTIVE: "pnpm build:uat",
 		project: ""
 	},
 	presets: { rules: [] }
@@ -111,11 +105,15 @@ export function loadJenDefaults() {
 			cachedDefaults = {
 				...FALLBACK_DEFAULTS,
 				...raw,
-				paramKeys: { ...FALLBACK_DEFAULTS.paramKeys, ...(raw.paramKeys || {}) },
-				paramDefaults: {
-					...FALLBACK_DEFAULTS.paramDefaults,
-					...(raw.paramDefaults || {})
-				},
+				// Respect explicit file contents (including empty {}) so UI deletions stick.
+				paramKeys:
+					raw.paramKeys != null && typeof raw.paramKeys === "object"
+						? { ...raw.paramKeys }
+						: { ...FALLBACK_DEFAULTS.paramKeys },
+				paramDefaults:
+					raw.paramDefaults != null && typeof raw.paramDefaults === "object"
+						? { ...raw.paramDefaults }
+						: { ...FALLBACK_DEFAULTS.paramDefaults },
 				cliDefaults: { ...FALLBACK_DEFAULTS.cliDefaults, ...(raw.cliDefaults || {}) },
 				presets: raw.presets || FALLBACK_DEFAULTS.presets
 			};
@@ -220,20 +218,42 @@ export function parseParams({ paramsCsv, paramKvs, serverAlias, jobName }) {
 
 	if (applyPresetDefaults) {
 		const roles = roleDefaultsFor(serverAlias, jobName);
-		const branch = parsed[kBranch] ?? roles.branch ?? "uat5";
+		// Prefer flattened Jenkins keys; fall back to legacy role names.
+		const pick = (...keys) => {
+			for (const k of keys) {
+				if (k != null && parsed[k] != null && String(parsed[k]).trim() !== "") return parsed[k];
+				if (k != null && roles[k] != null && String(roles[k]).trim() !== "") return roles[k];
+			}
+			return undefined;
+		};
+		const branch = pick(kBranch, "branch") ?? "uat5";
 		const prodBranches = new Set(["master", "master4", "master5"]);
 		const defaultBuild =
-			roles.buildCommand ||
+			pick(kBuild, "buildCommand", "BUILD_COMMAND_ACTIVE") ||
 			(prodBranches.has(String(branch)) ? "pnpm build:prod" : "pnpm build:uat");
 		merged = {
+			...roles,
 			[kBranch]: branch,
-			[kNode]: normalizeNodeVersion(parsed[kNode] ?? roles.nodeVersion ?? "v24.12.0"),
-			[kInstall]: parsed[kInstall] ?? roles.installCommand ?? "pnpm i",
-			[kBuild]: parsed[kBuild] ?? defaultBuild,
+			[kNode]: normalizeNodeVersion(
+				pick(kNode, "nodeVersion", "NodeVersion") ?? "v24.12.0",
+			),
+			[kInstall]:
+				pick(kInstall, "installCommand", "INSTALL_COMMAND_ACTIVE") ?? "pnpm i",
+			[kBuild]: defaultBuild,
 			...parsed
 		};
+		// Drop empty legacy role-only keys that aren't real Jenkins names when
+		// flattened keys already cover them (keep user-provided parsed keys).
+		for (const legacy of ["nodeVersion", "installCommand", "buildCommand"]) {
+			const mapped = paramKey(legacy);
+			if (mapped !== legacy && legacy in merged && mapped in merged) {
+				delete merged[legacy];
+			}
+		}
 	} else if (merged[kNode] != null) {
 		merged[kNode] = normalizeNodeVersion(merged[kNode]);
+	} else if (merged.NodeVersion != null) {
+		merged.NodeVersion = normalizeNodeVersion(merged.NodeVersion);
 	}
 
 	for (const [k, v] of Object.entries(merged)) {
