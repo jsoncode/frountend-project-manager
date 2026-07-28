@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
+use std::fs;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::OnceLock;
@@ -679,11 +680,15 @@ pub fn git_pull_branch(path: &str, branch: &str) -> Result<String, String> {
                 .map_err(|e| e.to_string())?;
             if !retry.status.success() {
                 let err = String::from_utf8_lossy(&retry.stderr).trim().to_string();
-                return Err(if err.is_empty() {
+                let err = if err.is_empty() {
                     String::from_utf8_lossy(&output.stderr).trim().to_string()
                 } else {
                     err
-                });
+                };
+                if merge_in_progress(path) {
+                    return Err(format!("MERGE_CONFLICT:{err}"));
+                }
+                return Err(err);
             }
             let msg = String::from_utf8_lossy(&retry.stdout).trim().to_string();
             return Ok(if msg.is_empty() {
@@ -722,4 +727,322 @@ pub fn git_pull_branch(path: &str, branch: &str) -> Result<String, String> {
     } else {
         format!("updated {local}: {stderr}")
     })
+}
+
+fn is_conflict_code(code: &str) -> bool {
+    matches!(code, "UU" | "AA" | "DD" | "AU" | "UA" | "DU" | "UD")
+        || (code.len() == 2 && code.contains('U'))
+}
+
+fn merge_head_path(path: &str) -> std::path::PathBuf {
+    std::path::Path::new(path).join(".git").join("MERGE_HEAD")
+}
+
+fn merge_in_progress(path: &str) -> bool {
+    merge_head_path(path).is_file()
+}
+
+fn read_merge_incoming(path: &str) -> Option<String> {
+    if !merge_in_progress(path) {
+        return None;
+    }
+    // Prefer a friendly ref name.
+    let named = git_command(path)
+        .args(["name-rev", "--name-only", "MERGE_HEAD"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .filter(|s| !s.is_empty())?;
+    Some(
+        named
+            .trim_start_matches("remotes/")
+            .trim_start_matches("origin/")
+            .to_string(),
+    )
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MergeFileEntry {
+    pub path: String,
+    pub code: String,
+    pub conflict: bool,
+    pub label: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MergeStatus {
+    pub in_progress: bool,
+    pub current: Option<String>,
+    pub incoming: Option<String>,
+    pub files: Vec<MergeFileEntry>,
+    pub conflict_count: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MergeStartResult {
+    /// "clean" | "conflicts"
+    pub status: String,
+    pub message: String,
+    pub merge: MergeStatus,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MergeFileSides {
+    pub ours: String,
+    pub theirs: String,
+    pub working: String,
+}
+
+pub fn git_merge_status(path: &str) -> Result<MergeStatus, String> {
+    require_git_repo(path)?;
+    let in_progress = merge_in_progress(path);
+    let current = current_branch_name(path);
+    let incoming = read_merge_incoming(path);
+    let status = git_status(path)?;
+    let files: Vec<MergeFileEntry> = status
+        .entries
+        .into_iter()
+        .map(|e| {
+            let conflict = is_conflict_code(&e.code);
+            MergeFileEntry {
+                path: e.path,
+                code: e.code,
+                conflict,
+                label: e.label,
+            }
+        })
+        .collect();
+    let conflict_count = files.iter().filter(|f| f.conflict).count() as u32;
+    Ok(MergeStatus {
+        in_progress,
+        current,
+        incoming,
+        files,
+        conflict_count,
+    })
+}
+
+pub fn git_merge_start(path: &str, git_ref: &str) -> Result<MergeStartResult, String> {
+    require_git_repo(path)?;
+    if merge_in_progress(path) {
+        let merge = git_merge_status(path)?;
+        return Ok(MergeStartResult {
+            status: "conflicts".into(),
+            message: "已有未完成的合并，请先继续或取消".into(),
+            merge,
+        });
+    }
+
+    let git_ref = git_ref.trim();
+    if git_ref.is_empty() {
+        return Err("合并目标为空".into());
+    }
+
+    let output = git_command(path)
+        .args(["merge", "--no-edit", git_ref])
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    let merge = git_merge_status(path)?;
+    if output.status.success() && !merge.in_progress {
+        let msg = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        return Ok(MergeStartResult {
+            status: "clean".into(),
+            message: if msg.is_empty() {
+                format!("merged {git_ref}")
+            } else {
+                msg
+            },
+            merge,
+        });
+    }
+
+    if merge.in_progress || merge.conflict_count > 0 {
+        let err = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Ok(MergeStartResult {
+            status: "conflicts".into(),
+            message: if err.is_empty() {
+                "合并产生冲突，请解决后完成合并".into()
+            } else {
+                err
+            },
+            merge,
+        });
+    }
+
+    let err = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    Err(if err.is_empty() {
+        format!("合并失败: {git_ref}")
+    } else {
+        err
+    })
+}
+
+pub fn git_merge_file_sides(path: &str, file: &str) -> Result<MergeFileSides, String> {
+    require_git_repo(path)?;
+    let file = file.trim().replace('\\', "/");
+    if file.is_empty() {
+        return Err("文件路径为空".into());
+    }
+
+    let ours = git_show_stage(path, 2, &file).unwrap_or_default();
+    let theirs = git_show_stage(path, 3, &file).unwrap_or_default();
+    let working_path = std::path::Path::new(path).join(&file);
+    let working = if working_path.is_file() {
+        fs::read_to_string(&working_path).unwrap_or_default()
+    } else {
+        String::new()
+    };
+
+    Ok(MergeFileSides {
+        ours,
+        theirs,
+        working,
+    })
+}
+
+fn git_show_stage(path: &str, stage: u8, file: &str) -> Result<String, String> {
+    let spec = format!(":{stage}:{file}");
+    let output = git_command(path)
+        .args(["show", &spec])
+        .output()
+        .map_err(|e| e.to_string())?;
+    if !output.status.success() {
+        let err = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(if err.is_empty() {
+            format!("无法读取 stage {stage}: {file}")
+        } else {
+            err
+        });
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+pub fn git_merge_resolve_ours_theirs(
+    path: &str,
+    file: &str,
+    ours: bool,
+) -> Result<MergeStatus, String> {
+    require_git_repo(path)?;
+    let file = file.trim().replace('\\', "/");
+    if file.is_empty() {
+        return Err("文件路径为空".into());
+    }
+    let which = if ours { "--ours" } else { "--theirs" };
+    let checkout = git_command(path)
+        .args(["checkout", which, "--", &file])
+        .output()
+        .map_err(|e| e.to_string())?;
+    if !checkout.status.success() {
+        let err = String::from_utf8_lossy(&checkout.stderr).trim().to_string();
+        return Err(if err.is_empty() {
+            format!("无法采用 {}", if ours { "本人" } else { "他人" })
+        } else {
+            err
+        });
+    }
+    let add = git_command(path)
+        .args(["add", "--", &file])
+        .output()
+        .map_err(|e| e.to_string())?;
+    if !add.status.success() {
+        let err = String::from_utf8_lossy(&add.stderr).trim().to_string();
+        return Err(if err.is_empty() {
+            format!("git add 失败: {file}")
+        } else {
+            err
+        });
+    }
+    git_merge_status(path)
+}
+
+pub fn git_merge_resolve_content(
+    path: &str,
+    file: &str,
+    content: &str,
+) -> Result<MergeStatus, String> {
+    require_git_repo(path)?;
+    let file = file.trim().replace('\\', "/");
+    if file.is_empty() {
+        return Err("文件路径为空".into());
+    }
+    let full = std::path::Path::new(path).join(&file);
+    if let Some(parent) = full.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    fs::write(&full, content).map_err(|e| e.to_string())?;
+    let add = git_command(path)
+        .args(["add", "--", &file])
+        .output()
+        .map_err(|e| e.to_string())?;
+    if !add.status.success() {
+        let err = String::from_utf8_lossy(&add.stderr).trim().to_string();
+        return Err(if err.is_empty() {
+            format!("git add 失败: {file}")
+        } else {
+            err
+        });
+    }
+    git_merge_status(path)
+}
+
+pub fn git_merge_abort(path: &str) -> Result<String, String> {
+    require_git_repo(path)?;
+    if !merge_in_progress(path) {
+        return Err("当前没有进行中的合并".into());
+    }
+    let output = git_command(path)
+        .args(["merge", "--abort"])
+        .output()
+        .map_err(|e| e.to_string())?;
+    if !output.status.success() {
+        let err = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(if err.is_empty() {
+            "取消合并失败".into()
+        } else {
+            err
+        });
+    }
+    Ok("merge aborted".into())
+}
+
+pub fn git_merge_commit(path: &str, message: Option<String>) -> Result<String, String> {
+    require_git_repo(path)?;
+    if !merge_in_progress(path) {
+        return Err("当前没有进行中的合并".into());
+    }
+    let status = git_merge_status(path)?;
+    if status.conflict_count > 0 {
+        return Err(format!(
+            "仍有 {} 个冲突文件未解决",
+            status.conflict_count
+        ));
+    }
+
+    let msg = message
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| {
+            let incoming = status.incoming.unwrap_or_else(|| "branch".into());
+            format!("Merge branch '{incoming}'")
+        });
+
+    let output = git_command(path)
+        .args(["commit", "-m", &msg])
+        .output()
+        .map_err(|e| e.to_string())?;
+    if !output.status.success() {
+        let err = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(if err.is_empty() {
+            "合并提交失败".into()
+        } else {
+            err
+        });
+    }
+    Ok(format!("merge committed: {msg}"))
 }

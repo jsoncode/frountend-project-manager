@@ -9,13 +9,14 @@ import { invoke } from '@tauri-apps/api/core'
 import { useCallback, useState, type MouseEvent } from 'react'
 import { useI18n } from '../i18n/useI18n'
 import { writeToTerminal } from '../lib/ptyHost'
-import type { BranchItem } from '../lib/types'
+import type { BranchItem, MergeStartResult, MergeStatus } from '../lib/types'
 import { useProjectStore } from '../stores/projectStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useTerminalStore } from '../stores/terminalStore'
 import { BranchSwitchModal } from './BranchSwitchModal'
 import { ContextMenuPortal } from './ContextMenuPortal'
 import { HistoryChips } from './HistoryChips'
+import { MergeConflictModal } from './MergeConflictModal'
 import { ModalShell } from './ModalShell'
 import { Tooltip } from './Tooltip'
 
@@ -38,7 +39,9 @@ type DeleteState = {
 export function GitToolPanel() {
   const selected = useProjectStore((s) => s.selected)
   const git = useProjectStore((s) => s.git)
+  const mergeStatus = useProjectStore((s) => s.mergeStatus)
   const refreshGit = useProjectStore((s) => s.refreshGit)
+  const refreshMergeStatus = useProjectStore((s) => s.refreshMergeStatus)
   const config = useSettingsStore((s) => s.config)
   const setHistoryPinned = useSettingsStore((s) => s.setHistoryPinned)
   const deleteHistory = useSettingsStore((s) => s.deleteHistory)
@@ -54,6 +57,9 @@ export function GitToolPanel() {
   const [branchError, setBranchError] = useState<string | null>(null)
   const [checking, setChecking] = useState(false)
   const [pulling, setPulling] = useState(false)
+  const [mergeModal, setMergeModal] = useState<{
+    initial: MergeStatus | null
+  } | null>(null)
   const { t } = useI18n()
 
   const branchHistory =
@@ -106,9 +112,53 @@ export function GitToolPanel() {
       echoTerm(`\x1b[32m${msg}\x1b[0m\r\n`)
       await refreshGit()
     } catch (e) {
-      echoTerm(`\x1b[31m${String(e)}\x1b[0m\r\n`)
+      const err = String(e)
+      if (err.includes('MERGE_CONFLICT:')) {
+        echoTerm(`\x1b[33m${t('merge.pullConflict')}\x1b[0m\r\n`)
+        await refreshGit()
+        const status = await invoke<MergeStatus>('git_merge_status', {
+          path: selected.path,
+        }).catch(() => null)
+        setMergeModal({ initial: status })
+      } else {
+        echoTerm(`\x1b[31m${err}\x1b[0m\r\n`)
+      }
     } finally {
       setPulling(false)
+    }
+  }
+
+  const startMerge = async (ref: string) => {
+    echoTerm(`\r\n\x1b[36m$ git merge ${ref}\x1b[0m\r\n`)
+    try {
+      const result = await invoke<MergeStartResult>('git_merge_start', {
+        path: selected.path,
+        gitRef: ref,
+      })
+      await refreshGit()
+      if (result.status === 'conflicts' || result.merge.inProgress) {
+        echoTerm(`\x1b[33m${result.message}\x1b[0m\r\n`)
+        setMergeModal({ initial: result.merge })
+      } else {
+        echoTerm(`\x1b[32m${result.message || t('merge.cleanOk')}\x1b[0m\r\n`)
+      }
+    } catch (e) {
+      echoTerm(`\x1b[31m${String(e)}\x1b[0m\r\n`)
+      await refreshMergeStatus().catch(() => undefined)
+    }
+  }
+
+  const abortMergeFromMenu = async () => {
+    if (!window.confirm(t('merge.abortConfirm'))) return
+    echoTerm(`\r\n\x1b[36m$ git merge --abort\x1b[0m\r\n`)
+    try {
+      const msg = await invoke<string>('git_merge_abort', {
+        path: selected.path,
+      })
+      echoTerm(`\x1b[32m${msg}\x1b[0m\r\n`)
+      await refreshGit()
+    } catch (e) {
+      echoTerm(`\x1b[31m${String(e)}\x1b[0m\r\n`)
     }
   }
 
@@ -238,6 +288,19 @@ export function GitToolPanel() {
             />
           </span>
           <span className="branch-name">{b.name}</span>
+          {isCurrent && mergeStatus?.inProgress && (
+            <Tooltip title={t('git.ctx.continueMerge')}>
+              <span
+                className="branch-badge merging"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setMergeModal({ initial: mergeStatus })
+                }}
+              >
+                {t('git.mergingBadge')}
+              </span>
+            </Tooltip>
+          )}
           {b.behind > 0 && (
             <Tooltip title={t('git.behindHint', { n: b.behind })}>
               <span className="branch-badge behind">
@@ -436,11 +499,35 @@ export function GitToolPanel() {
               onClick={() => {
                 const ref = menu.branch.name
                 setMenu(null)
-                runGit(`git merge ${JSON.stringify(ref)}`)
+                void startMerge(ref)
               }}
             >
               {t('git.ctx.mergeInto', { name: git.current })}
             </button>
+          )}
+          {mergeStatus?.inProgress && isMenuCurrent && (
+            <>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setMenu(null)
+                  setMergeModal({ initial: mergeStatus })
+                }}
+              >
+                {t('git.ctx.continueMerge')}
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setMenu(null)
+                  void abortMergeFromMenu()
+                }}
+              >
+                {t('git.ctx.abortMerge')}
+              </button>
+            </>
           )}
           {!menu.branch.isRemote && (
             <button
@@ -623,6 +710,17 @@ export function GitToolPanel() {
         <BranchSwitchModal
           branch={switchTarget}
           onClose={() => setSwitchTarget(null)}
+        />
+      )}
+
+      {mergeModal && (
+        <MergeConflictModal
+          projectPath={selected.path}
+          initial={mergeModal.initial}
+          onClose={() => setMergeModal(null)}
+          onDone={() => {
+            void refreshGit()
+          }}
         />
       )}
     </>

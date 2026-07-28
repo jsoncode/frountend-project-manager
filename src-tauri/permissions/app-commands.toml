@@ -54,6 +54,41 @@ description = "Pull/update a branch without requiring checkout"
 commands.allow = ["git_pull_branch"]
 
 [[permission]]
+identifier = "allow-git-merge-status"
+description = "Get in-progress merge status and conflict files"
+commands.allow = ["git_merge_status"]
+
+[[permission]]
+identifier = "allow-git-merge-start"
+description = "Start merging a ref into the current branch"
+commands.allow = ["git_merge_start"]
+
+[[permission]]
+identifier = "allow-git-merge-file-sides"
+description = "Read ours/theirs/working content for a merge file"
+commands.allow = ["git_merge_file_sides"]
+
+[[permission]]
+identifier = "allow-git-merge-resolve-ours-theirs"
+description = "Resolve a conflict file with ours or theirs"
+commands.allow = ["git_merge_resolve_ours_theirs"]
+
+[[permission]]
+identifier = "allow-git-merge-resolve-content"
+description = "Write resolved content and stage the file"
+commands.allow = ["git_merge_resolve_content"]
+
+[[permission]]
+identifier = "allow-git-merge-abort"
+description = "Abort an in-progress merge"
+commands.allow = ["git_merge_abort"]
+
+[[permission]]
+identifier = "allow-git-merge-commit"
+description = "Commit a completed merge"
+commands.allow = ["git_merge_commit"]
+
+[[permission]]
 identifier = "allow-list-env-files"
 description = "List env files"
 commands.allow = ["list_env_files"]

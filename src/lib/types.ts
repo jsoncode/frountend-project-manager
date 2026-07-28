@@ -74,6 +74,33 @@ export type GitStatus = {
   entries: GitStatusEntry[]
 }
 
+export type MergeFileEntry = {
+  path: string
+  code: string
+  conflict: boolean
+  label: string
+}
+
+export type MergeStatus = {
+  inProgress: boolean
+  current?: string | null
+  incoming?: string | null
+  files: MergeFileEntry[]
+  conflictCount: number
+}
+
+export type MergeStartResult = {
+  status: 'clean' | 'conflicts' | string
+  message: string
+  merge: MergeStatus
+}
+
+export type MergeFileSides = {
+  ours: string
+  theirs: string
+  working: string
+}
+
 export type EnvFileInfo = {
   name: string
   path: string

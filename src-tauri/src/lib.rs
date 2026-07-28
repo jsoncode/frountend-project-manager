@@ -276,6 +276,73 @@ async fn git_pull_branch(path: String, branch: String) -> Result<String, String>
 }
 
 #[tauri::command(async)]
+async fn git_merge_status(path: String) -> Result<git::MergeStatus, String> {
+    tauri::async_runtime::spawn_blocking(move || git::git_merge_status(&path))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command(async)]
+async fn git_merge_start(path: String, git_ref: String) -> Result<git::MergeStartResult, String> {
+    tauri::async_runtime::spawn_blocking(move || git::git_merge_start(&path, &git_ref))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command(async)]
+async fn git_merge_file_sides(
+    path: String,
+    file: String,
+) -> Result<git::MergeFileSides, String> {
+    tauri::async_runtime::spawn_blocking(move || git::git_merge_file_sides(&path, &file))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command(async)]
+async fn git_merge_resolve_ours_theirs(
+    path: String,
+    file: String,
+    ours: bool,
+) -> Result<git::MergeStatus, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        git::git_merge_resolve_ours_theirs(&path, &file, ours)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command(async)]
+async fn git_merge_resolve_content(
+    path: String,
+    file: String,
+    content: String,
+) -> Result<git::MergeStatus, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        git::git_merge_resolve_content(&path, &file, &content)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command(async)]
+async fn git_merge_abort(path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || git::git_merge_abort(&path))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command(async)]
+async fn git_merge_commit(
+    path: String,
+    message: Option<String>,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || git::git_merge_commit(&path, message))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command(async)]
 async fn list_env_files(path: String) -> Result<Vec<env_files::EnvFileInfo>, String> {
     tauri::async_runtime::spawn_blocking(move || env_files::list_env_files(&path))
         .await
@@ -729,6 +796,13 @@ pub fn run() {
             git_delete_branch,
             git_fetch,
             git_pull_branch,
+            git_merge_status,
+            git_merge_start,
+            git_merge_file_sides,
+            git_merge_resolve_ours_theirs,
+            git_merge_resolve_content,
+            git_merge_abort,
+            git_merge_commit,
             list_env_files,
             read_env_file,
             list_directory_entries,

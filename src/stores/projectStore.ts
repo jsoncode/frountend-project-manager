@@ -10,6 +10,7 @@ import type {
   EnvFileInfo,
   GitInfo,
   GitStatus,
+  MergeStatus,
   ProjectDetails,
   ProjectSummary,
 } from '../lib/types'
@@ -20,6 +21,7 @@ type ProjectState = {
   details: ProjectDetails | null
   git: GitInfo | null
   gitStatus: GitStatus | null
+  mergeStatus: MergeStatus | null
   gitDecorations: GitDecorationIndex
   envFiles: EnvFileInfo[]
   envEntries: EnvEntry[]
@@ -33,11 +35,13 @@ type ProjectState = {
   refresh: () => Promise<void>
   refreshGit: (opts?: { fetch?: boolean }) => Promise<void>
   refreshGitStatus: () => Promise<void>
+  refreshMergeStatus: () => Promise<void>
 }
 
 /** Ignore stale async results when the user switches projects quickly. */
 let selectSeq = 0
 let statusSeq = 0
+let mergeSeq = 0
 
 function applyGitStatus(
   projectPath: string | undefined,
@@ -57,6 +61,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   details: null,
   git: null,
   gitStatus: null,
+  mergeStatus: null,
   gitDecorations: EMPTY_GIT_DECORATIONS,
   envFiles: [],
   envEntries: [],
@@ -74,6 +79,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         details: null,
         git: null,
         gitStatus: null,
+        mergeStatus: null,
         gitDecorations: EMPTY_GIT_DECORATIONS,
         envFiles: [],
         envEntries: [],
@@ -92,6 +98,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       },
       git: null,
       gitStatus: null,
+      mergeStatus: null,
       gitDecorations: EMPTY_GIT_DECORATIONS,
       envFiles: [],
       envEntries: [],
@@ -103,11 +110,14 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     void useSettingsStore.getState().touchProjectAccess(project.path)
 
     try {
-      const [details, git, envFiles, gitStatus] = await Promise.all([
+      const [details, git, envFiles, gitStatus, mergeStatus] = await Promise.all([
         invoke<ProjectDetails>('scan_project', { path: project.path }),
         invoke<GitInfo | null>('git_branches', { path: project.path }),
         invoke<EnvFileInfo[]>('list_env_files', { path: project.path }),
         invoke<GitStatus>('git_status', { path: project.path }).catch(
+          () => null,
+        ),
+        invoke<MergeStatus>('git_merge_status', { path: project.path }).catch(
           () => null,
         ),
       ])
@@ -116,6 +126,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         details,
         git,
         envFiles,
+        mergeStatus,
         loading: false,
         ...applyGitStatus(project.path, gitStatus),
       })
@@ -148,7 +159,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         path: selected.path,
       })
       set({ git })
-      await get().refreshGitStatus()
+      await Promise.all([get().refreshGitStatus(), get().refreshMergeStatus()])
     } catch (e) {
       set({ error: String(e) })
     }
@@ -176,6 +187,25 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         gitStatus: null,
         gitDecorations: EMPTY_GIT_DECORATIONS,
       })
+    }
+  },
+  refreshMergeStatus: async () => {
+    const selected = get().selected
+    if (!selected) {
+      set({ mergeStatus: null })
+      return
+    }
+    const seq = ++mergeSeq
+    try {
+      const mergeStatus = await invoke<MergeStatus>('git_merge_status', {
+        path: selected.path,
+      })
+      if (seq !== mergeSeq) return
+      if (get().selected?.path !== selected.path) return
+      set({ mergeStatus })
+    } catch {
+      if (seq !== mergeSeq) return
+      set({ mergeStatus: null })
     }
   },
 }))
