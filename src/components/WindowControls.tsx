@@ -33,7 +33,7 @@ export function WindowControls() {
 
   return (
     <div className="window-controls">
-      <Tooltip title={t('window.minimize')}>
+      <Tooltip title={t('window.minimize')} placement="bottom">
         <button
           type="button"
           className="window-ctrl"
@@ -45,7 +45,7 @@ export function WindowControls() {
           </svg>
         </button>
       </Tooltip>
-      <Tooltip title={maximized ? t('window.restore') : t('window.maximize')}>
+      <Tooltip title={maximized ? t('window.restore') : t('window.maximize')} placement="bottom">
         <button
           id="titlebar-maximize"
           type="button"
@@ -77,7 +77,7 @@ export function WindowControls() {
           )}
         </button>
       </Tooltip>
-      <Tooltip title={t('window.close')}>
+      <Tooltip title={t('window.close')} placement="bottom">
         <button
           type="button"
           className="window-ctrl window-ctrl-close"

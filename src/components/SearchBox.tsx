@@ -111,7 +111,7 @@ export function SearchBox({ autofocus = false }: { autofocus?: boolean }) {
         autoComplete="off"
       />
       {search.length > 0 && (
-        <Tooltip title={t('top.searchClear')}>
+        <Tooltip title={t('top.searchClear')} placement="bottom">
           <button
             type="button"
             className="search-clear"
@@ -140,7 +140,7 @@ export function SearchBox({ autofocus = false }: { autofocus?: boolean }) {
               >
                 {item}
               </button>
-              <Tooltip title={t('top.searchHistoryDel')}>
+              <Tooltip title={t('top.searchHistoryDel')} placement="bottom">
                 <button
                   type="button"
                   className="search-suggest-del"

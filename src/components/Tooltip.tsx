@@ -46,6 +46,9 @@ function pickPlacement(
   tipH: number,
   preferred: TooltipPlacement,
 ): Exclude<TooltipPlacement, 'auto'> {
+  // Explicit placement from callers — do not flip away from the requested side.
+  if (preferred !== 'auto') return preferred
+
   const vw = window.innerWidth
   const vh = window.innerHeight
   const space = {
@@ -57,18 +60,6 @@ function pickPlacement(
 
   const fits = (p: Exclude<TooltipPlacement, 'auto'>) =>
     p === 'top' || p === 'bottom' ? space[p] >= tipH : space[p] >= tipW
-
-  if (preferred !== 'auto') {
-    if (fits(preferred)) return preferred
-    const flip: Record<Exclude<TooltipPlacement, 'auto'>, Exclude<TooltipPlacement, 'auto'>> = {
-      top: 'bottom',
-      bottom: 'top',
-      left: 'right',
-      right: 'left',
-    }
-    const alt = flip[preferred]
-    if (fits(alt)) return alt
-  }
 
   const order: Exclude<TooltipPlacement, 'auto'>[] = ['top', 'bottom', 'right', 'left']
   return (
@@ -111,14 +102,16 @@ function placeTooltip(
 }
 
 /**
- * Ant Design–like tooltip: portaled bubble with auto flip + viewport clamping.
+ * Portaled tooltip with auto flip + viewport clamping.
+ * Bubble is non-interactive (`pointer-events: none`) so it never steals
+ * clicks from UI underneath, and leaving the trigger always dismisses it.
  */
 export function Tooltip({
   title,
   children,
   placement = 'auto',
   mouseEnterDelay = 400,
-  mouseLeaveDelay = 80,
+  mouseLeaveDelay = 0,
   disabled = false,
   className = '',
   maxWidth = 360,
@@ -127,6 +120,8 @@ export function Tooltip({
   const tipRef = useRef<HTMLDivElement | null>(null)
   const showTimer = useRef(0)
   const hideTimer = useRef(0)
+  /** True while the pointer is over the trigger — guards delayed show. */
+  const hoveringRef = useRef(false)
   const tipId = useId()
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState<Pos | null>(null)
@@ -134,10 +129,25 @@ export function Tooltip({
   const clearTimers = useCallback(() => {
     window.clearTimeout(showTimer.current)
     window.clearTimeout(hideTimer.current)
+    showTimer.current = 0
+    hideTimer.current = 0
   }, [])
 
-  const hide = useCallback(() => {
+  const hideNow = useCallback(() => {
     clearTimers()
+    hoveringRef.current = false
+    setOpen(false)
+    setPos(null)
+  }, [clearTimers])
+
+  const hide = useCallback(() => {
+    hoveringRef.current = false
+    clearTimers()
+    if (mouseLeaveDelay <= 0) {
+      setOpen(false)
+      setPos(null)
+      return
+    }
     hideTimer.current = window.setTimeout(() => {
       setOpen(false)
       setPos(null)
@@ -146,8 +156,13 @@ export function Tooltip({
 
   const show = useCallback(() => {
     if (disabled || title == null || title === false || title === '') return
+    hoveringRef.current = true
     clearTimers()
-    showTimer.current = window.setTimeout(() => setOpen(true), mouseEnterDelay)
+    showTimer.current = window.setTimeout(() => {
+      // Mouse already left before the enter delay elapsed — do not show.
+      if (!hoveringRef.current) return
+      setOpen(true)
+    }, mouseEnterDelay)
   }, [clearTimers, disabled, mouseEnterDelay, title])
 
   useEffect(() => () => clearTimers(), [clearTimers])
@@ -165,14 +180,14 @@ export function Tooltip({
     }
 
     update()
-    const onScroll = () => hide()
+    const onScroll = () => hideNow()
     window.addEventListener('scroll', onScroll, true)
-    window.addEventListener('resize', hide)
+    window.addEventListener('resize', hideNow)
     return () => {
       window.removeEventListener('scroll', onScroll, true)
-      window.removeEventListener('resize', hide)
+      window.removeEventListener('resize', hideNow)
     }
-  }, [open, placement, title, hide])
+  }, [open, placement, title, hideNow])
 
   if (title == null || title === false || title === '') {
     return children
@@ -186,6 +201,7 @@ export function Tooltip({
     onMouseLeave?: (e: ReactMouseEvent) => void
     onFocus?: (e: ReactFocusEvent) => void
     onBlur?: (e: ReactFocusEvent) => void
+    onMouseDown?: (e: ReactMouseEvent) => void
     ref?: Ref<HTMLElement>
     disabled?: boolean
     'aria-describedby'?: string
@@ -211,6 +227,11 @@ export function Tooltip({
       childProps.onMouseLeave?.(e)
       hide()
     },
+    onMouseDown: (e: ReactMouseEvent) => {
+      childProps.onMouseDown?.(e)
+      // Clicking the trigger should not leave a floating tip over neighbors.
+      hideNow()
+    },
     onFocus: (e: ReactFocusEvent) => {
       childProps.onFocus?.(e)
       show()
@@ -229,6 +250,7 @@ export function Tooltip({
         className="ui-tooltip-trigger"
         onMouseEnter={show}
         onMouseLeave={hide}
+        onMouseDown={hideNow}
         onFocus={show}
         onBlur={hide}
       >
@@ -253,8 +275,6 @@ export function Tooltip({
             role="tooltip"
             className={`ui-tooltip ${pos ? `ui-tooltip-${pos.placement}` : ''} ${className}`.trim()}
             style={style}
-            onMouseEnter={clearTimers}
-            onMouseLeave={hide}
           >
             <div className="ui-tooltip-inner">{title}</div>
           </div>,

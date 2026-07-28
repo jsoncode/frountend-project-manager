@@ -36,7 +36,7 @@ export function AiTopBar() {
             ))
           )}
         </select>
-        <Tooltip title={t('ai.settings')}>
+        <Tooltip title={t('ai.settings')} placement="bottom">
           <button
             type="button"
             className="ai-btn ai-btn-sm ai-topbar-settings"

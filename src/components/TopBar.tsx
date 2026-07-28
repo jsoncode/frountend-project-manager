@@ -52,13 +52,13 @@ export function TopBar() {
   return (
     <header className="topbar titlebar" onMouseDown={onTitlebarMouseDown}>
       <div className="topbar-left">
-        <Tooltip title="FPM">
+        <Tooltip title="FPM" placement="bottom">
           <div className="brand" aria-label="FPM">
             <Atom className="ui-icon" size={16} color="currentColor" aria-hidden />
           </div>
         </Tooltip>
         <TitleFileMenu />
-        <Tooltip title={titlePath ?? undefined}>
+        <Tooltip title={titlePath ?? undefined} placement="bottom">
           <div className="topbar-path-wrap">
             <span className="topbar-path">{titleLabel}</span>
           </div>
@@ -68,7 +68,7 @@ export function TopBar() {
         <SearchBox />
       </div>
       <div className="topbar-end">
-        <Tooltip title={t('top.settings')}>
+        <Tooltip title={t('top.settings')} placement="bottom">
           <button
             type="button"
             className="btn icon-only"
@@ -78,7 +78,7 @@ export function TopBar() {
             <Settings className="ui-icon" size={16} color="currentColor" aria-hidden />
           </button>
         </Tooltip>
-        <Tooltip title={t('top.aiTitle')}>
+        <Tooltip title={t('top.aiTitle')} placement="bottom">
           <button
             type="button"
             className="btn primary btn-with-icon ai-launch-btn"

@@ -259,7 +259,7 @@ export function ToolWindow() {
               <aside key={id} className="tool-panel">
                 <div className="tool-panel-head">
                   <h2>{t(TOOL_LABEL[id])}</h2>
-                  <Tooltip title={t('tool.collapse')}>
+                  <Tooltip title={t('tool.collapse')} placement="left">
                     <button
                       type="button"
                       className="btn btn-sm tool-panel-close"
@@ -283,7 +283,7 @@ export function ToolWindow() {
         {TOOL_ORDER.map((id) => {
           const Icon = TOOL_ICON[id]
           return (
-            <Tooltip key={id} title={t(TOOL_LABEL[id])}>
+            <Tooltip key={id} title={t(TOOL_LABEL[id])} placement="left">
               <button
                 type="button"
                 className={`tool-strip-btn ${openTools.includes(id) ? 'active' : ''}`}

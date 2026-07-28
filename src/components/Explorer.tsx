@@ -367,7 +367,7 @@ export function Explorer() {
         const dirDirty = rel != null && Boolean(gitDecorations.dirs[rel])
         return (
           <div key={entry.path}>
-            <Tooltip title={entry.path}>
+            <Tooltip title={entry.path} placement="right">
               <button
                 type="button"
                 className={`explorer-row explorer-dir-row ${isSelected('dir', entry.path) ? 'active' : ''}${dirDirty ? ' git-changed' : ''}`}
@@ -421,7 +421,7 @@ export function Explorer() {
       const gitMark =
         rel != null ? gitDecorations.files[rel] ?? null : null
       return (
-        <Tooltip key={entry.path} title={entry.path}>
+        <Tooltip key={entry.path} title={entry.path} placement="right">
           <button
             type="button"
             className={`explorer-row explorer-file-row ${isSelected('file', entry.path) ? 'active' : ''}${gitMark ? ' git-changed' : ''}`}
@@ -501,7 +501,7 @@ export function Explorer() {
 
           return (
             <div key={ws} className="explorer-ws">
-              <Tooltip title={ws}>
+              <Tooltip title={ws} placement="right">
                 <button
                   type="button"
                   className={`explorer-row explorer-ws-row ${wsActive ? 'active' : ''}`}
@@ -561,7 +561,7 @@ export function Explorer() {
 
                   return (
                     <div key={p.path}>
-                      <Tooltip title={`${p.path}\n${projectSubtitle(p)}`}>
+                      <Tooltip title={`${p.path}\n${projectSubtitle(p)}`} placement="right">
                         <button
                           type="button"
                           ref={(node) => {
