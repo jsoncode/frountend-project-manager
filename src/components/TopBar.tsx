@@ -11,6 +11,10 @@ import { SearchBox } from './SearchBox'
 import { TitleFileMenu } from './TitleFileMenu'
 import { WindowControls } from './WindowControls'
 
+/** Interactive chrome — must not start a window drag. */
+const NO_DRAG_CLOSEST =
+  'button, input, a, select, textarea, label, .search-wrap, .title-menu, .window-controls'
+
 export function TopBar() {
   const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace)
   const selectedProject = useProjectStore((s) => s.selected)
@@ -27,9 +31,16 @@ export function TopBar() {
     void invoke('ai_open_chat_window', { feedText: null }).catch(() => undefined)
   }
 
-  const onDragMouseDown = (e: MouseEvent) => {
+  const onTitlebarMouseDown = (e: MouseEvent) => {
     if (!isTauri()) return
     if (e.button !== 0) return
+    const target = e.target
+    if (
+      target instanceof Element &&
+      target.closest(NO_DRAG_CLOSEST)
+    ) {
+      return
+    }
     if (e.detail === 2) {
       void getCurrentWindow().toggleMaximize()
       return
@@ -38,31 +49,20 @@ export function TopBar() {
   }
 
   return (
-    <header className="topbar titlebar">
+    <header className="topbar titlebar" onMouseDown={onTitlebarMouseDown}>
       <div className="topbar-left">
         <div className="brand" title="FPM" aria-label="FPM">
           <Atom className="ui-icon" size={16} color="currentColor" aria-hidden />
         </div>
         <TitleFileMenu />
-        <div
-          className="topbar-drag"
-          onMouseDown={onDragMouseDown}
-          title={titlePath ?? undefined}
-        >
-          <span className="topbar-path">
-            {titleLabel}
-          </span>
+        <div className="topbar-path-wrap" title={titlePath ?? undefined}>
+          <span className="topbar-path">{titleLabel}</span>
         </div>
       </div>
       <div className="topbar-center">
         <SearchBox />
       </div>
       <div className="topbar-end">
-        <div
-          className="topbar-drag topbar-drag-trail"
-          onMouseDown={onDragMouseDown}
-          aria-hidden
-        />
         <button
           type="button"
           className="btn icon-only"

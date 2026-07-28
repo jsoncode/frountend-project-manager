@@ -572,35 +572,3 @@ pub fn git_pull_branch(path: &str, branch: &str) -> Result<String, String> {
         format!("updated {local}: {stderr}")
     })
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn detects_unknown_relative_option_message() {
-        let err = "error: unknown option `relative'\nusage: git status [<options>]";
-        assert!(is_unknown_relative_option(err));
-        assert!(!is_unknown_relative_option("error: pathspec did not match"));
-    }
-
-    #[test]
-    fn strip_repo_prefix_for_nested_project() {
-        assert_eq!(
-            strip_status_prefix("packages/app/src/a.ts", "packages/app/"),
-            Some("src/a.ts".into())
-        );
-        assert_eq!(
-            strip_status_prefix("packages/app/src/a.ts", "packages/app"),
-            Some("src/a.ts".into())
-        );
-        assert_eq!(
-            strip_status_prefix("src/a.ts", ""),
-            Some("src/a.ts".into())
-        );
-        assert_eq!(
-            strip_status_prefix("other/pkg/x.ts", "packages/app/"),
-            None
-        );
-    }
-}

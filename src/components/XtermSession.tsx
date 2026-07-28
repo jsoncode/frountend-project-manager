@@ -129,13 +129,18 @@ export function XtermSession({ sessionId, cwd, active }: Props) {
       createFilePathLinkProvider(term, (event, path) => {
         event.preventDefault()
         event.stopPropagation()
-        setMenu({
-          x: event.clientX,
-          y: event.clientY,
-          hasSelection: false,
-          selection: '',
-          filePath: path,
-        })
+        if (event.button === 2 || event.ctrlKey || event.metaKey) {
+          setMenu({
+            x: event.clientX,
+            y: event.clientY,
+            hasSelection: false,
+            selection: '',
+            filePath: path,
+          })
+          return
+        }
+        // Primary click: open folder / reveal file in the system file manager.
+        void invoke('reveal_in_file_manager', { path }).catch(() => undefined)
       }),
     )
 
@@ -275,6 +280,13 @@ export function XtermSession({ sessionId, cwd, active }: Props) {
     setMenu(null)
   }
 
+  const revealFilePath = () => {
+    const path = menu?.filePath
+    if (!path) return
+    setMenu(null)
+    void invoke('reveal_in_file_manager', { path }).catch(() => undefined)
+  }
+
   const openFilePath = () => {
     const path = menu?.filePath
     if (!path) return
@@ -299,6 +311,9 @@ export function XtermSession({ sessionId, cwd, active }: Props) {
         <ContextMenuPortal x={menu.x} y={menu.y} onClose={closeMenu}>
           {menu.filePath ? (
             <>
+              <button type="button" role="menuitem" onClick={revealFilePath}>
+                {t('term.ctx.revealPath')}
+              </button>
               <button type="button" role="menuitem" onClick={copyFilePath}>
                 {t('term.ctx.copyPath')}
               </button>

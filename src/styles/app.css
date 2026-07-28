@@ -86,24 +86,24 @@
   margin-right: 2px;
 }
 
-.topbar-drag {
+.topbar-path-wrap {
   flex: 1 1 auto;
   min-width: 80px;
   height: 100%;
   display: flex;
   align-items: center;
-  cursor: default;
+  overflow: hidden;
 }
 
 .topbar-path {
   color: var(--cyan-soft);
   opacity: 0.85;
+  font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 100%;
   min-width: 0;
-  font-size: 12px;
   pointer-events: none;
 }
 
@@ -180,10 +180,6 @@
   justify-content: flex-end;
   height: 100%;
   padding-left: 4px;
-}
-
-.topbar-drag-trail {
-  min-width: 0;
 }
 
 .window-controls {
