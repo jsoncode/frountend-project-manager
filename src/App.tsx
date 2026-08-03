@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { AiSettingsModal } from './components/AiSettingsModal'
+import { ActionBar } from './components/ActionBar'
 import { DetailPane } from './components/DetailPane'
 import { ErrorLogModal } from './components/ErrorLogModal'
 import { NewWorkspaceModal } from './components/NewWorkspaceModal'
@@ -24,6 +25,7 @@ export default function App() {
   const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace)
   const startListening = useTerminalStore((s) => s.startListening)
   const explorerWidth = useLayoutStore((s) => s.explorerWidth)
+  const toolPanelWidth = useLayoutStore((s) => s.toolPanelWidth)
   const persist = useLayoutStore((s) => s.persist)
 
   useEffect(() => {
@@ -57,7 +59,7 @@ export default function App() {
       <div
         className="main"
         style={{
-          gridTemplateColumns: `${explorerWidth}px 4px minmax(0, 1fr)`,
+          gridTemplateColumns: `${explorerWidth}px 4px ${toolPanelWidth}px 4px minmax(0, 1fr)`,
         }}
       >
         <Sidebar />
@@ -66,6 +68,16 @@ export default function App() {
           onDrag={(d) => {
             const { explorerWidth, setExplorerWidth } = useLayoutStore.getState()
             setExplorerWidth(explorerWidth + d)
+          }}
+          onDragEnd={persist}
+        />
+        <ActionBar />
+        <ResizeHandle
+          orientation="vertical"
+          onDrag={(d) => {
+            const { toolPanelWidth, setToolPanelWidth } =
+              useLayoutStore.getState()
+            setToolPanelWidth(toolPanelWidth + d)
           }}
           onDragEnd={persist}
         />

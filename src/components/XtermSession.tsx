@@ -322,6 +322,29 @@ export function XtermSession({ sessionId, cwd, active }: Props) {
     })
     resizeObs.observe(host)
 
+    // Ctrl+wheel (Cmd+wheel on macOS) to zoom terminal font size.
+    const nav = navigator as Navigator & { userAgentData?: { platform?: string } }
+    const plat = (nav.userAgentData?.platform ?? navigator.platform ?? '').toLowerCase()
+    const isMac = plat.includes('mac') || plat.includes('iphone') || plat.includes('ipad')
+    const onWheelZoom = (e: WheelEvent) => {
+      const zoomKey = isMac ? e.metaKey : e.ctrlKey
+      if (!zoomKey) return
+      e.preventDefault()
+      const current = term.options.fontSize ?? 13
+      const delta = e.deltaY < 0 ? 1 : -1
+      const next = Math.min(32, Math.max(8, current + delta))
+      if (next === current) return
+      term.options.fontSize = next
+      fit.fit()
+      void invoke('pty_resize', {
+        terminalId: sessionId,
+        cols: term.cols,
+        rows: term.rows,
+      }).catch(() => undefined)
+    }
+    // Use { passive: false } so preventDefault works.
+    host.addEventListener('wheel', onWheelZoom, { passive: false })
+
     return () => {
       disposed = true
       if (readyFallbackTimer != null) window.clearTimeout(readyFallbackTimer)
@@ -330,6 +353,7 @@ export function XtermSession({ sessionId, cwd, active }: Props) {
       host.removeEventListener('mouseup', onMouseSettle, true)
       host.removeEventListener('mousemove', onMouseSettle, true)
       host.removeEventListener('mousedown', onPointerDown, true)
+      host.removeEventListener('wheel', onWheelZoom)
       resizeObs.disconnect()
       termRef.current = null
       unregisterPtyTerminal(sessionId)

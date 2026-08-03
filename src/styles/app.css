@@ -1325,6 +1325,128 @@ body.resizing-row * {
   padding-left: 0;
 }
 
+/* —— Action bar (right of explorer) —— */
+.action-bar {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  border-right: 1px solid var(--border-dim);
+  background: rgba(8, 12, 20, 0.78);
+  overflow: hidden;
+}
+
+.action-bar-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 6px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border-dim);
+}
+
+.action-bar-title {
+  margin: 0;
+  flex-shrink: 0;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  color: var(--cyan);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.action-bar-search {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.action-bar-search input {
+  width: 100%;
+  box-sizing: border-box;
+  height: 28px;
+  padding: 0 26px 0 8px;
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+
+.action-bar-search input::placeholder {
+  color: var(--text-dim);
+}
+
+.action-bar-search input:focus {
+  outline: none;
+  border-color: rgba(45, 212, 191, 0.45);
+}
+
+.action-bar-search-clear {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.action-bar-search-clear:hover {
+  color: var(--text-bright);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.action-bar-tabs {
+  display: flex;
+  flex-shrink: 0;
+  gap: 0;
+  padding: 0 6px;
+  border-bottom: 1px solid var(--border-dim);
+  overflow-x: auto;
+}
+
+.action-bar-tab {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 8px 4px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.action-bar-tab:hover {
+  color: var(--text-bright);
+}
+
+.action-bar-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.action-bar-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px 12px;
+}
+
 .tool-window {
   display: flex;
   flex-direction: row;
@@ -1904,6 +2026,33 @@ body.resizing-row * {
   display: flex;
   gap: 8px;
   margin-bottom: 8px;
+  align-items: center;
+}
+
+.git-uncommitted-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s;
+}
+
+.git-uncommitted-count.clean {
+  color: var(--ok);
+  background: rgba(34, 197, 94, 0.12);
+}
+
+.git-uncommitted-count.dirty {
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.12);
+}
+
+.git-uncommitted-count:hover {
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .branch-menu {

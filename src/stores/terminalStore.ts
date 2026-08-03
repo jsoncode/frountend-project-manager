@@ -11,6 +11,7 @@ import {
   type TermIssueKind,
 } from '../lib/termIssue'
 import { useSettingsStore } from './settingsStore'
+import { useProjectStore } from './projectStore'
 
 let seq = 1
 
@@ -45,6 +46,15 @@ type EnsureOpts = {
 /** Debounced buffer snapshot after an issue keyword appears. */
 const issueCaptureTimers = new Map<string, number>()
 const pendingIssueKind = new Map<string, TermIssueKind>()
+
+/** Track the last command sent to each session for git-refresh detection. */
+const lastCommandMap = new Map<string, string>()
+
+/** Check if a command string contains git operations. */
+function isGitCommand(cmd: string): boolean {
+  const trimmed = cmd.trim()
+  return /\bgit\s+(push|pull|fetch|commit|merge|rebase|checkout|switch|add|reset|stash|am|cherry-pick|branch)\b/i.test(trimmed)
+}
 
 function scheduleIssueCapture(
   terminalId: string,
@@ -239,6 +249,8 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
     try {
       await waitPtyReady(terminalId)
       get().markRunning(terminalId, true)
+      // Track last command for git-refresh detection
+      lastCommandMap.set(terminalId, cmd)
       // PowerShell / cmd both accept \r as Enter in ConPTY
       await invoke('pty_write', { terminalId, data: `${cmd}\r` })
     } catch (e) {
@@ -286,6 +298,23 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
       const session = get().sessions.find((t) => t.id === id)
       if (session?.running && looksLikeShellPrompt(data)) {
         get().markRunning(id, false)
+        // After any command finishes, refresh git file status (lightweight).
+        // If it was a git command, also refresh branch info (triggers fetch).
+        const store = useProjectStore.getState()
+        if (store.selected) {
+          setTimeout(() => {
+            void store.refreshGitStatus()
+          }, 300)
+          const lastCmd = lastCommandMap.get(id)
+          if (lastCmd) {
+            lastCommandMap.delete(id)
+            if (isGitCommand(lastCmd)) {
+              setTimeout(() => {
+                void store.refreshGit()
+              }, 300)
+            }
+          }
+        }
       }
       const kind = detectIssueKind(data)
       if (kind) {

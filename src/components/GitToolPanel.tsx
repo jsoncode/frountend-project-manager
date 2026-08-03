@@ -3,6 +3,7 @@ import {
   ArrowUp,
   BranchDown,
   CheckCircle,
+  Document,
   Refresh,
 } from 'reicon-react'
 import { invoke } from '@tauri-apps/api/core'
@@ -36,11 +37,13 @@ type DeleteState = {
   alsoLocal: boolean
 }
 
-export function GitToolPanel() {
+export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
   const selected = useProjectStore((s) => s.selected)
   const git = useProjectStore((s) => s.git)
+  const gitStatus = useProjectStore((s) => s.gitStatus)
   const mergeStatus = useProjectStore((s) => s.mergeStatus)
   const refreshGit = useProjectStore((s) => s.refreshGit)
+  const refreshGitStatus = useProjectStore((s) => s.refreshGitStatus)
   const refreshMergeStatus = useProjectStore((s) => s.refreshMergeStatus)
   const config = useSettingsStore((s) => s.config)
   const setHistoryPinned = useSettingsStore((s) => s.setHistoryPinned)
@@ -260,8 +263,11 @@ export function GitToolPanel() {
     !!menu && !!git?.current && localName(menu.branch.name) === git.current
 
   const branches = git?.branches ?? []
-  const localBranches = branches.filter((b) => !b.isRemote)
-  const remoteBranches = branches.filter((b) => b.isRemote)
+  const q = filterQuery.trim().toLowerCase()
+  const match = (text: string) => !q || text.toLowerCase().includes(q)
+  const localBranches = branches.filter((b) => !b.isRemote && match(b.name))
+  const remoteBranches = branches.filter((b) => b.isRemote && match(b.name))
+  const filteredBranchHistory = branchHistory.filter((h) => match(h.value))
   const createNameTaken = Boolean(
     createState?.name.trim() && isBranchNameTaken(createState.name),
   )
@@ -343,14 +349,33 @@ export function GitToolPanel() {
           />
           {checking ? t('git.checking') : t('git.checkUpdates')}
         </button>
+        {gitStatus && (
+          <Tooltip
+            title={
+              gitStatus.entries.length > 0
+                ? t('git.uncommittedTooltip', { n: gitStatus.entries.length })
+                : t('git.uncommittedZero')
+            }
+          >
+            <span
+              className={`git-uncommitted-count${gitStatus.clean ? ' clean' : ' dirty'}`}
+              onClick={() => void refreshGitStatus()}
+            >
+              <Document className="inline-icon" size={12} color="currentColor" aria-hidden />
+              {gitStatus.clean
+                ? t('git.uncommittedZero')
+                : t('git.uncommitted', { n: gitStatus.entries.length })}
+            </span>
+          </Tooltip>
+        )}
       </div>
       <p className="muted" style={{ margin: '0 0 8px' }}>
         {t('git.hint')}
       </p>
       <HistoryChips
         title={t('git.history')}
-        items={branchHistory}
-        emptyText={t('git.historyEmpty')}
+        items={filteredBranchHistory}
+        emptyText={q ? t('actionBar.noMatch') : t('git.historyEmpty')}
         onRun={(branch) => {
           if (git?.current !== branch) setSwitchTarget(branch)
         }}
@@ -367,7 +392,9 @@ export function GitToolPanel() {
           </div>
           <div className="branch-list">
             {localBranches.length === 0 ? (
-              <div className="muted">{t('git.branchesEmpty')}</div>
+              <div className="muted">
+                {q ? t('actionBar.noMatch') : t('git.branchesEmpty')}
+              </div>
             ) : (
               localBranches.map(renderBranch)
             )}
@@ -377,7 +404,9 @@ export function GitToolPanel() {
           </div>
           <div className="branch-list">
             {remoteBranches.length === 0 ? (
-              <div className="muted">{t('git.branchesEmpty')}</div>
+              <div className="muted">
+                {q ? t('actionBar.noMatch') : t('git.branchesEmpty')}
+              </div>
             ) : (
               remoteBranches.map(renderBranch)
             )}

@@ -2,7 +2,6 @@ import { EditorShell } from './EditorShell'
 import { ProjectHeader } from './ProjectHeader'
 import { ResizeHandle } from './ResizeHandle'
 import { TerminalPanel } from './TerminalPanel'
-import { ToolWindow } from './ToolWindow'
 import { useEditorStore } from '../stores/editorStore'
 import { useLayoutStore } from '../stores/layoutStore'
 import { useProjectStore } from '../stores/projectStore'
@@ -40,7 +39,6 @@ export function DetailPane() {
             fill={!hasOpenFiles}
           />
         </div>
-        <ToolWindow />
       </div>
     </section>
   )

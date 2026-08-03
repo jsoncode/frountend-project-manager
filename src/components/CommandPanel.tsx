@@ -6,8 +6,8 @@ import { useTerminalStore } from '../stores/terminalStore'
 import { HistoryChips } from './HistoryChips'
 import { Tooltip } from './Tooltip'
 
-/** npm/pnpm/yarn scripts — shown inside the right tool panel. */
-export function CommandPanel() {
+/** npm/pnpm/yarn scripts — shown inside the action bar. */
+export function CommandPanel({ filterQuery = '' }: { filterQuery?: string }) {
   const selected = useProjectStore((s) => s.selected)
   const details = useProjectStore((s) => s.details)
   const runScript = useTerminalStore((s) => s.runScript)
@@ -21,10 +21,15 @@ export function CommandPanel() {
     return <div className="muted">{t('cmd.selectProject')}</div>
   }
 
+  const q = filterQuery.trim().toLowerCase()
+  const match = (text: string) => !q || text.toLowerCase().includes(q)
+
   // Keep package.json scripts key order (do not re-sort).
-  const scripts = Object.keys(details.summary.scripts)
+  const scripts = Object.keys(details.summary.scripts).filter(match)
   const pm = details.packageManager
-  const history = config?.commandHistory?.[selected.path] ?? []
+  const history = (config?.commandHistory?.[selected.path] ?? []).filter((h) =>
+    match(h.value),
+  )
 
   return (
     <div className="command-panel-side">
@@ -47,14 +52,16 @@ export function CommandPanel() {
           </Tooltip>
         ))}
         {scripts.length === 0 && (
-          <span className="muted">{t('cmd.noScripts')}</span>
+          <span className="muted">
+            {q ? t('actionBar.noMatch') : t('cmd.noScripts')}
+          </span>
         )}
       </div>
 
       <HistoryChips
         title={t('cmd.history')}
         items={history}
-        emptyText={t('cmd.historyEmpty')}
+        emptyText={q ? t('actionBar.noMatch') : t('cmd.historyEmpty')}
         onRun={(cmd) => {
           void useSettingsStore.getState().touchCommandHistory(selected.path, cmd)
           void runRaw(selected.path, selected.folderName, cmd)
