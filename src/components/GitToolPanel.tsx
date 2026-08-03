@@ -3,7 +3,6 @@ import {
   ArrowUp,
   BranchDown,
   CheckCircle,
-  Document,
   Refresh,
 } from 'reicon-react'
 import { invoke } from '@tauri-apps/api/core'
@@ -40,10 +39,8 @@ type DeleteState = {
 export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
   const selected = useProjectStore((s) => s.selected)
   const git = useProjectStore((s) => s.git)
-  const gitStatus = useProjectStore((s) => s.gitStatus)
   const mergeStatus = useProjectStore((s) => s.mergeStatus)
   const refreshGit = useProjectStore((s) => s.refreshGit)
-  const refreshGitStatus = useProjectStore((s) => s.refreshGitStatus)
   const refreshMergeStatus = useProjectStore((s) => s.refreshMergeStatus)
   const config = useSettingsStore((s) => s.config)
   const setHistoryPinned = useSettingsStore((s) => s.setHistoryPinned)
@@ -267,7 +264,9 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
   const match = (text: string) => !q || text.toLowerCase().includes(q)
   const localBranches = branches.filter((b) => !b.isRemote && match(b.name))
   const remoteBranches = branches.filter((b) => b.isRemote && match(b.name))
-  const filteredBranchHistory = branchHistory.filter((h) => match(h.value))
+  const filteredBranchHistory = [...branchHistory]
+    .filter((h) => match(h.value))
+    .sort((a, b) => a.value.localeCompare(b.value, undefined, { sensitivity: 'base' }))
   const createNameTaken = Boolean(
     createState?.name.trim() && isBranchNameTaken(createState.name),
   )
@@ -349,29 +348,7 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
           />
           {checking ? t('git.checking') : t('git.checkUpdates')}
         </button>
-        {gitStatus && (
-          <Tooltip
-            title={
-              gitStatus.entries.length > 0
-                ? t('git.uncommittedTooltip', { n: gitStatus.entries.length })
-                : t('git.uncommittedZero')
-            }
-          >
-            <span
-              className={`git-uncommitted-count${gitStatus.clean ? ' clean' : ' dirty'}`}
-              onClick={() => void refreshGitStatus()}
-            >
-              <Document className="inline-icon" size={12} color="currentColor" aria-hidden />
-              {gitStatus.clean
-                ? t('git.uncommittedZero')
-                : t('git.uncommitted', { n: gitStatus.entries.length })}
-            </span>
-          </Tooltip>
-        )}
       </div>
-      <p className="muted" style={{ margin: '0 0 8px' }}>
-        {t('git.hint')}
-      </p>
       <HistoryChips
         title={t('git.history')}
         items={filteredBranchHistory}

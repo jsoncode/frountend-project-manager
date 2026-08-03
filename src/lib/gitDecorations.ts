@@ -6,8 +6,8 @@ export type GitFileMark = 'M' | 'U' | 'A' | 'D' | 'R' | 'C'
 export type GitDecorationIndex = {
   /** project-relative path (lowercase, `/`) → mark */
   files: Record<string, GitFileMark>
-  /** project-relative dir paths that contain changes (incl. `''` for project root) */
-  dirs: Record<string, true>
+  /** project-relative dir paths → count of changed files within (incl. `''` for project root) */
+  dirs: Record<string, number>
 }
 
 export function normalizeFsPath(path: string): string {
@@ -57,7 +57,7 @@ export function buildGitDecorationIndex(
   entries: GitStatusEntry[],
 ): GitDecorationIndex {
   const files: Record<string, GitFileMark> = {}
-  const dirs: Record<string, true> = {}
+  const dirs: Record<string, number> = {}
 
   for (const e of entries) {
     if (!e.path) continue
@@ -74,9 +74,10 @@ export function buildGitDecorationIndex(
 
     // Parent segments: test/a.html → test, and '' (project root)
     const parts = rel.split('/')
-    dirs[''] = true
+    dirs[''] = (dirs[''] ?? 0) + 1
     for (let i = 0; i < parts.length - 1; i++) {
-      dirs[parts.slice(0, i + 1).join('/')] = true
+      const key = parts.slice(0, i + 1).join('/')
+      dirs[key] = (dirs[key] ?? 0) + 1
     }
   }
 

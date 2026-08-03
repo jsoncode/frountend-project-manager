@@ -32,6 +32,16 @@ const EDITOR_FONT =
 /** Show source-preview minimap when the editor pane is at least this wide. */
 const MINIMAP_WIDTH_PX = 1000
 
+/** Delay before preloading imports after opening / switching a file. */
+const PRELOAD_DELAY_MS = 800
+
+/**
+ * Files that have already been preloaded (imports resolved into Monaco models).
+ * Avoids redundant disk reads + model creation + TS worker re-validation on
+ * every subsequent file switch.
+ */
+const preloadedFiles = new Set<string>()
+
 function minimapOptions(enabled: boolean): monaco.editor.IEditorMinimapOptions {
   return {
     enabled,
@@ -72,9 +82,8 @@ function remasureWhenFontsReady(editor: monaco.editor.IStandaloneCodeEditor) {
 }
 
 /**
- * Thin Monaco host. Model is keyed by path. Parent state mirrors edits via
- * onChange, but we do NOT write parent `value` back into the model on each
- * keystroke (that restores a stale cursor and looks one character behind).
+ * Thin Monaco host. A single editor instance is kept alive; switching files
+ * only swaps the text model — no destroy / recreate cycle.
  */
 export function MonacoEditor({
   path,
@@ -94,6 +103,7 @@ export function MonacoEditor({
   const aliasesRef = useRef<PathAlias[]>([])
   const preloadTimer = useRef<number | null>(null)
   const tRef = useRef(t)
+  const lastPushedValueRef = useRef('')
   pathRef.current = path
   onChangeRef.current = onChange
   onSaveRef.current = onSave
@@ -101,10 +111,13 @@ export function MonacoEditor({
   tRef.current = t
 
   const schedulePreload = (fromFile: string, source: string) => {
+    const key = fromFile.toLowerCase()
+    if (preloadedFiles.has(key)) return
     if (preloadTimer.current != null) {
       window.clearTimeout(preloadTimer.current)
     }
     preloadTimer.current = window.setTimeout(() => {
+      preloadedFiles.add(key)
       const aliases = aliasesRef.current
       if (!aliases.length && !projectPath) return
       void preloadImportsForFile(
@@ -114,7 +127,7 @@ export function MonacoEditor({
         source,
         aliases,
       )
-    }, 120)
+    }, PRELOAD_DELAY_MS)
   }
 
   // Keep nav context + compiler paths fresh; then preload imports for open file.
@@ -145,6 +158,7 @@ export function MonacoEditor({
     })
   }, [projectPath, onOpenFile])
 
+  // --- Editor lifecycle: create ONCE on mount, dispose on unmount ---
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
@@ -158,12 +172,10 @@ export function MonacoEditor({
     let model = monaco.editor.getModel(uri)
     if (!model) {
       model = monaco.editor.createModel(text, language, uri)
-    } else {
-      monaco.editor.setModelLanguage(model, language)
-      if (model.getValue() !== text) {
-        model.setValue(text)
-      }
+    } else if (model.getValue() !== text) {
+      model.setValue(text)
     }
+    lastPushedValueRef.current = text
 
     const initialWide = el.clientWidth >= MINIMAP_WIDTH_PX
     const editor = monaco.editor.create(el, {
@@ -206,21 +218,15 @@ export function MonacoEditor({
     })
     resizeObserver.observe(el)
 
-    // Resolve imports ASAP so sibling modules (./AiTopBar.tsx) sync into the
-    // TS worker before / as diagnostics refresh.
-    void preloadImportsForFile(
-      monaco,
-      projectPath,
-      path,
-      text,
-      aliasesRef.current,
-    )
+    // Deferred preload only — avoids blocking the UI on file open.
     schedulePreload(path, text)
 
     const sub = editor.onDidChangeModelContent(() => {
       const next = editor.getValue()
       onChangeRef.current(next)
-      schedulePreload(pathRef.current, next)
+      // NOTE: intentionally no schedulePreload here — preloading on every
+      // keystroke is the #1 perf killer (reads dozens of files from disk,
+      // creates models, triggers TS worker). Preload runs only on file switch.
     })
 
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
@@ -259,9 +265,60 @@ export function MonacoEditor({
       editor.dispose()
       editorRef.current = null
     }
-    // Intentionally only depend on path: `value` is applied when opening a file.
+    // Editor is created once on mount. Path/value changes are handled below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // --- Model switching: when path changes, swap the model instead of
+  //     destroying and recreating the entire editor. ---
+  useEffect(() => {
+    const editor = editorRef.current
+    if (!editor) return
+
+    const uri = monaco.Uri.file(path)
+    let model = monaco.editor.getModel(uri)
+    const language = languageFromPath(path)
+    const text = normalizeEol(value)
+
+    if (!model) {
+      // First time opening this file — create with whatever we have.
+      model = monaco.editor.createModel(text, language, uri)
+    } else if (text) {
+      // Model exists and we have real content (doc already loaded).
+      monaco.editor.setModelLanguage(model, language)
+      if (model.getValue() !== text) {
+        model.setValue(text)
+      }
+    }
+    // When text is '' (doc still loading) and model exists with cached
+    // content, we intentionally keep the cached content. The value sync
+    // effect will update when the real content arrives.
+
+    // Skip setModel if this model is already active — avoids redundant TS
+    // semantic validation which is the main cause of lag on tab switch.
+    if (editor.getModel() !== model) {
+      editor.setModel(model)
+    }
+    lastPushedValueRef.current = text
+    // Deferred preload — avoids blocking UI on tab switch.
+    schedulePreload(path, text || model.getValue())
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path])
+
+  // --- Sync external value changes (e.g. file loaded from disk) into the
+  //     current model.  Skips when the value matches what we last pushed in,
+  //     so user keystrokes (which round-trip via onChange) are not overwritten.
+  useEffect(() => {
+    const editor = editorRef.current
+    if (!editor) return
+    const text = normalizeEol(value)
+    if (text === lastPushedValueRef.current) return
+    lastPushedValueRef.current = text
+    const model = editor.getModel()
+    if (model && model.getValue() !== text) {
+      model.setValue(text)
+    }
+  }, [value])
 
   return <div className="monaco-host" ref={containerRef} />
 }

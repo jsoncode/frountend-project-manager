@@ -132,6 +132,7 @@ export function EditorShell() {
       })
   }, [activeTab, setDocLoading, setDocReady, setDocError])
 
+  // No active tab → show placeholder (editor not mounted).
   if (!activeTab) {
     let hint = t('editor.shellEmpty')
     if (selection?.kind === 'dir') {
@@ -149,40 +150,8 @@ export function EditorShell() {
     )
   }
 
-  if (!activeDoc || activeDoc.status === 'loading') {
-    return (
-      <div className="editor-shell">
-        <div className="editor-shell-body">
-          <div className="editor-shell-placeholder muted">
-            {t('editor.loading')}
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  if (activeDoc.status === 'error') {
-    return (
-      <div className="editor-shell">
-        <div className="editor-shell-body">
-          <div className="editor-shell-placeholder">
-            <div className="editor-error">{t('editor.openFailed')}</div>
-            <div className="muted" style={{ marginTop: 8 }}>
-              {activeDoc.error}
-            </div>
-            <button
-              type="button"
-              className="btn btn-sm"
-              style={{ marginTop: 12 }}
-              onClick={retryLoad}
-            >
-              {t('editor.retry')}
-            </button>
-          </div>
-        </div>
-      </div>
-    )
-  }
+  // Error state (and no previous editor to show) → inline error.
+  const showError = activeDoc?.status === 'error'
 
   return (
     <div className="editor-shell">
@@ -193,11 +162,35 @@ export function EditorShell() {
         <MonacoEditor
           path={activeTab.path}
           projectPath={activeTab.projectPath}
-          value={activeDoc.value}
+          value={activeDoc?.status === 'ready' ? activeDoc.value : ''}
           onChange={(value) => setDocValue(activeTab.path, value)}
           onSave={() => void save()}
           onOpenFile={openImportTarget}
         />
+        {/* Loading overlay — keeps editor mounted underneath */}
+        {(!activeDoc || activeDoc.status === 'loading') && (
+          <div className="editor-shell-overlay">
+            <span className="muted">{t('editor.loading')}</span>
+          </div>
+        )}
+        {showError && (
+          <div className="editor-shell-overlay">
+            <div className="editor-shell-placeholder">
+              <div className="editor-error">{t('editor.openFailed')}</div>
+              <div className="muted" style={{ marginTop: 8 }}>
+                {activeDoc.error}
+              </div>
+              <button
+                type="button"
+                className="btn btn-sm"
+                style={{ marginTop: 12 }}
+                onClick={retryLoad}
+              >
+                {t('editor.retry')}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

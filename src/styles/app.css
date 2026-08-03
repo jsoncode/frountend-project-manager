@@ -1135,6 +1135,17 @@ body.resizing-row * {
   position: relative;
 }
 
+.editor-shell-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(22, 22, 26, 0.85);
+  z-index: 5;
+  backdrop-filter: blur(2px);
+}
+
 .monaco-host {
   position: absolute;
   inset: 0;
@@ -1318,6 +1329,21 @@ body.resizing-row * {
   border-radius: 50%;
   background: var(--git-modified);
   box-shadow: 0 0 0 1px rgba(226, 192, 141, 0.25);
+}
+
+.git-dir-count {
+  flex-shrink: 0;
+  margin-left: auto;
+  font-size: 10px;
+  min-width: 16px;
+  height: 16px;
+  line-height: 16px;
+  text-align: center;
+  border-radius: 8px;
+  padding: 0 4px;
+  background: rgba(226, 192, 141, 0.18);
+  color: var(--git-modified);
+  font-weight: 500;
 }
 
 .detail-header .git-file-mark {
@@ -1869,53 +1895,67 @@ body.resizing-row * {
 
 .history-chips {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .history-chip {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  max-width: 100%;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: rgba(8, 20, 36, 0.7);
+  width: 100%;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
   overflow: hidden;
 }
 
+.history-chip:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
 .history-chip.pinned {
-  border-color: #fbbf24;
+  background: rgba(251, 191, 36, 0.06);
 }
 
 .history-chip-main {
   border: none;
   background: transparent;
   color: var(--cyan-soft);
-  padding: 2px 8px;
+  padding: 4px 6px;
   font-size: 13px;
   cursor: pointer;
-  max-width: 180px;
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-align: left;
+  border-radius: 4px;
+}
+
+.history-chip-main:hover {
+  color: var(--cyan);
 }
 
 .history-chip-icon {
   border: none;
-  border-left: 1px solid var(--border-dim);
   background: transparent;
   color: var(--text);
-  padding: 2px 6px;
+  opacity: 0.5;
+  padding: 4px 4px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1;
+  border-radius: 3px;
+  flex-shrink: 0;
 }
 
 .history-chip-icon:hover {
+  opacity: 1;
   color: var(--cyan);
 }
 
 .history-chip-icon.danger:hover {
+  opacity: 1;
   color: var(--danger);
 }
 
@@ -2027,32 +2067,6 @@ body.resizing-row * {
   gap: 8px;
   margin-bottom: 8px;
   align-items: center;
-}
-
-.git-uncommitted-count {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 10px;
-  cursor: pointer;
-  user-select: none;
-  transition: background 0.15s;
-}
-
-.git-uncommitted-count.clean {
-  color: var(--ok);
-  background: rgba(34, 197, 94, 0.12);
-}
-
-.git-uncommitted-count.dirty {
-  color: #fbbf24;
-  background: rgba(251, 191, 36, 0.12);
-}
-
-.git-uncommitted-count:hover {
-  background: rgba(255, 255, 255, 0.08);
 }
 
 .branch-menu {

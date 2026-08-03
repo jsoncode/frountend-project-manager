@@ -14,7 +14,6 @@ export default defineConfig({
   },
   optimizeDeps: {
     include: ['monaco-editor'],
-    exclude: ['tauri-plugin-snap-layout'],
   },
   worker: {
     format: 'es',

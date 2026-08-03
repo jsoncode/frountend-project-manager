@@ -364,7 +364,8 @@ export function Explorer() {
       if (entry.isDir) {
         const id = `dir:${entry.path}`
         const open = expanded.has(id)
-        const dirDirty = rel != null && Boolean(gitDecorations.dirs[rel])
+        const dirChangeCount = rel != null ? (gitDecorations.dirs[rel] ?? 0) : 0
+        const dirDirty = dirChangeCount > 0
         return (
           <div key={entry.path}>
             <Tooltip title={entry.path} placement="right">
@@ -410,7 +411,7 @@ export function Explorer() {
               />
               <span className="explorer-label">{entry.name}</span>
               {dirDirty ? (
-                <span className="git-dir-dot" aria-hidden />
+                <span className="git-dir-count" aria-hidden>{dirChangeCount}</span>
               ) : null}
             </button>
             </Tooltip>
@@ -557,7 +558,13 @@ export function Explorer() {
                     selectedProject != null &&
                     normalizeFsPath(selectedProject.path) ===
                       normalizeFsPath(p.path) &&
-                    Boolean(gitDecorations.dirs[''])
+                    (gitDecorations.dirs[''] ?? 0) > 0
+                  const projChangeCount =
+                    selectedProject != null &&
+                    normalizeFsPath(selectedProject.path) ===
+                      normalizeFsPath(p.path)
+                      ? (gitDecorations.dirs[''] ?? 0)
+                      : 0
 
                   return (
                     <div key={p.path}>
@@ -607,7 +614,7 @@ export function Explorer() {
                         />
                         <span className="explorer-label">{p.folderName}</span>
                         {projGitDirty ? (
-                          <span className="git-dir-dot" aria-hidden />
+                          <span className="git-dir-count" aria-hidden>{projChangeCount}</span>
                         ) : null}
                       </button>
                       </Tooltip>
