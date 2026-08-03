@@ -11,6 +11,7 @@ import { ResizeHandle } from './components/ResizeHandle'
 import { SettingsModal } from './components/SettingsModal'
 import { TopBar } from './components/TopBar'
 import { useLayoutStore } from './stores/layoutStore'
+import { useSessionStore, initSessionAutoSave } from './stores/sessionStore'
 import { useSettingsStore } from './stores/settingsStore'
 import { useTerminalStore } from './stores/terminalStore'
 import { useWorkspaceStore } from './stores/workspaceStore'
@@ -32,7 +33,9 @@ export default function App() {
     void (async () => {
       await useLayoutStore.getState().hydrate()
       await useWorkspaceStore.getState().hydrateCache()
+      await useSessionStore.getState().hydrate()
       await load()
+      initSessionAutoSave()
     })()
   }, [load])
 

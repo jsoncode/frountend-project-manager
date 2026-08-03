@@ -2,7 +2,6 @@ import {
   ArrowDown,
   ArrowUp,
   BranchDown,
-  CheckCircle,
   Refresh,
 } from 'reicon-react'
 import { invoke } from '@tauri-apps/api/core'
@@ -14,6 +13,7 @@ import { useProjectStore } from '../stores/projectStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useTerminalStore } from '../stores/terminalStore'
 import { BranchSwitchModal } from './BranchSwitchModal'
+import { CommitModal } from './CommitModal'
 import { ContextMenuPortal } from './ContextMenuPortal'
 import { HistoryChips } from './HistoryChips'
 import { MergeConflictModal } from './MergeConflictModal'
@@ -52,7 +52,6 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
   const [switchTarget, setSwitchTarget] = useState<string | null>(null)
   const [menu, setMenu] = useState<MenuState | null>(null)
   const [commitTarget, setCommitTarget] = useState<string | null>(null)
-  const [commitMsg, setCommitMsg] = useState('')
   const [createState, setCreateState] = useState<CreateState | null>(null)
   const [deleteState, setDeleteState] = useState<DeleteState | null>(null)
   const [branchBusy, setBranchBusy] = useState(false)
@@ -170,20 +169,6 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
     e.preventDefault()
     e.stopPropagation()
     setMenu({ x: e.clientX, y: e.clientY, branch })
-  }
-
-  const doCommit = () => {
-    const msg = commitMsg.trim()
-    if (!msg || !commitTarget) return
-    const branch = commitTarget
-    setCommitTarget(null)
-    setCommitMsg('')
-    const quoted = JSON.stringify(msg)
-    const cmds =
-      git?.current === branch || branch.startsWith('origin/')
-        ? `git add -A; if ($?) { git commit -m ${quoted} }`
-        : `git switch ${JSON.stringify(localName(branch))}; if ($?) { git add -A }; if ($?) { git commit -m ${quoted} }`
-    runGit(cmds)
   }
 
   const doCreateBranch = async () => {
@@ -571,31 +556,17 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
       )}
 
       {commitTarget && (
-        <ModalShell title={t('git.commitTitle')} onClose={() => setCommitTarget(null)}>
-          <p className="muted">{t('git.commitHint', { name: commitTarget })}</p>
-          <textarea
-            className="git-commit-input"
-            rows={4}
-            value={commitMsg}
-            onChange={(e) => setCommitMsg(e.target.value)}
-            placeholder={t('git.commitPlaceholder')}
-            autoFocus
-          />
-          <div className="modal-actions">
-            <button type="button" className="btn" onClick={() => setCommitTarget(null)}>
-              {t('branch.cancel')}
-            </button>
-            <button
-              type="button"
-              className="btn primary btn-with-icon"
-              disabled={!commitMsg.trim()}
-              onClick={doCommit}
-            >
-              <CheckCircle className="ui-icon" size={14} color="currentColor" aria-hidden />
-              {t('git.ctx.commit')}
-            </button>
-          </div>
-        </ModalShell>
+        <CommitModal
+          projectPath={selected.path}
+          projectName={selected.folderName}
+          branch={commitTarget}
+          showPush
+          onClose={() => setCommitTarget(null)}
+          onDone={() => {
+            setCommitTarget(null)
+            void refreshGit()
+          }}
+        />
       )}
 
       {createState && (

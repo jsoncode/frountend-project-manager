@@ -142,6 +142,49 @@ fn save_layout(layout: LayoutSnapshot) -> Result<(), String> {
     db::kv_set_json("layout", &layout)
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SessionSnapshot {
+    #[serde(default)]
+    active_workspace: Option<String>,
+    #[serde(default)]
+    expanded: Vec<String>,
+    #[serde(default)]
+    selected_project_path: Option<String>,
+    #[serde(default)]
+    editor_tabs: Vec<EditorTabSnapshot>,
+    #[serde(default)]
+    editor_active_path: Option<String>,
+    #[serde(default)]
+    terminal_sessions: Vec<TerminalSessionSnapshot>,
+    #[serde(default)]
+    terminal_active_project: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct EditorTabSnapshot {
+    path: String,
+    project_path: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TerminalSessionSnapshot {
+    project_path: String,
+    project_name: String,
+}
+
+#[tauri::command]
+fn load_session() -> Result<Option<SessionSnapshot>, String> {
+    db::kv_get_json("session")
+}
+
+#[tauri::command]
+fn save_session(session: SessionSnapshot) -> Result<(), String> {
+    db::kv_set_json("session", &session)
+}
+
 #[tauri::command]
 fn load_project_cache() -> Result<std::collections::HashMap<String, serde_json::Value>, String> {
     let rows = db::project_cache_all()?;
@@ -295,6 +338,16 @@ async fn git_merge_file_sides(
     file: String,
 ) -> Result<git::MergeFileSides, String> {
     tauri::async_runtime::spawn_blocking(move || git::git_merge_file_sides(&path, &file))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command(async)]
+async fn git_diff_head(
+    path: String,
+    file: String,
+) -> Result<git::DiffHeadResult, String> {
+    tauri::async_runtime::spawn_blocking(move || git::git_diff_head(&path, &file))
         .await
         .map_err(|e| e.to_string())?
 }
@@ -793,6 +846,8 @@ pub fn run() {
             ai_delete_message,
             load_layout,
             save_layout,
+            load_session,
+            save_session,
             load_project_cache,
             save_project_cache,
             drop_project_cache,
@@ -813,6 +868,7 @@ pub fn run() {
             git_merge_status,
             git_merge_start,
             git_merge_file_sides,
+            git_diff_head,
             git_merge_resolve_ours_theirs,
             git_merge_resolve_content,
             git_merge_abort,

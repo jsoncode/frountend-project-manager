@@ -1034,6 +1034,41 @@ fn git_show_stage(path: &str, stage: u8, file: &str) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct DiffHeadResult {
+    pub head: String,
+    pub working: String,
+}
+
+pub fn git_diff_head(path: &str, file: &str) -> Result<DiffHeadResult, String> {
+    require_git_repo(path)?;
+    let file = file.trim().replace('\\', "/");
+    if file.is_empty() {
+        return Err("文件路径为空".into());
+    }
+    let spec = format!("HEAD:{file}");
+    let head = git_command(path)
+        .args(["show", &spec])
+        .output()
+        .map_err(|e| e.to_string())
+        .and_then(|output| {
+            if !output.status.success() {
+                // File might be untracked (new file) — return empty HEAD
+                Ok(String::new())
+            } else {
+                Ok(String::from_utf8_lossy(&output.stdout).to_string())
+            }
+        })?;
+    let working_path = std::path::Path::new(path).join(&file);
+    let working = if working_path.is_file() {
+        fs::read_to_string(&working_path).unwrap_or_default()
+    } else {
+        // File deleted in working tree
+        String::new()
+    };
+    Ok(DiffHeadResult { head, working })
+}
+
 pub fn git_merge_resolve_ours_theirs(
     path: &str,
     file: &str,

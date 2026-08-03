@@ -19,6 +19,7 @@ import { useI18n } from '../i18n/useI18n'
 import {
   normalizeFsPath,
   toProjectRelative,
+  unquoteGitPath,
 } from '../lib/gitDecorations'
 import { projectMatchesQuery, projectSubtitle } from '../lib/projectSearch'
 import type { ProjectSummary } from '../lib/types'
@@ -30,7 +31,9 @@ import { useExplorerStore } from '../stores/explorerStore'
 import { useProjectStore } from '../stores/projectStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useWorkspaceStore } from '../stores/workspaceStore'
+import { CommitModal } from './CommitModal'
 import { ContextMenuPortal } from './ContextMenuPortal'
+import { FileDiffModal } from './FileDiffModal'
 import { ModalShell } from './ModalShell'
 import { OpenWithMenu } from './OpenWithMenu'
 import { Tooltip } from './Tooltip'
@@ -44,7 +47,7 @@ type DirEntry = {
 type MenuState =
   | { kind: 'workspace'; path: string; x: number; y: number }
   | { kind: 'project'; path: string; x: number; y: number }
-  | { kind: 'entry'; path: string; x: number; y: number }
+  | { kind: 'entry'; path: string; projectPath: string; isDir: boolean; x: number; y: number }
 
 function sortProjects(list: ProjectSummary[]) {
   return [...list].sort((a, b) =>
@@ -76,58 +79,54 @@ export function Explorer() {
 
   const selection = useExplorerStore((s) => s.selection)
   const setSelection = useExplorerStore((s) => s.setSelection)
+  const expanded = useExplorerStore((s) => s.expanded)
+  const setExpanded = useExplorerStore((s) => s.setExpanded)
+  const toggleExpanded = useExplorerStore((s) => s.toggleExpanded)
 
   const { t } = useI18n()
 
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
   const [dirCache, setDirCache] = useState<Record<string, DirEntry[]>>({})
   const [dirLoading, setDirLoading] = useState<Set<string>>(() => new Set())
   const dirCacheRef = useRef<Record<string, DirEntry[]>>({})
   const dirInflight = useRef(new Set<string>())
   const [pendingRemove, setPendingRemove] = useState<string | null>(null)
   const [menu, setMenu] = useState<MenuState | null>(null)
+  const [commitEntry, setCommitEntry] = useState<{ path: string; projectPath: string } | null>(null)
+  const [diffFile, setDiffFile] = useState<{ filePath: string; projectPath: string } | null>(null)
+  const [diffDirList, setDiffDirList] = useState<{ dirPath: string; projectPath: string; files: { absPath: string; relPath: string; label: string }[] } | null>(null)
   const rowRefs = useRef(new Map<string, HTMLButtonElement>())
 
   const q = search.trim()
   const searching = q.length > 0
 
   /** Keep only directory expands (multi-open allowed). */
-  const keepDirExpands = (prev: Set<string>) => {
-    const next = new Set<string>()
-    for (const id of prev) {
-      if (id.startsWith('dir:')) next.add(id)
-    }
-    return next
-  }
+  const keepDirExpands = (prev: string[]) => prev.filter((id) => id.startsWith('dir:'))
 
   /** Accordion: at most one workspace expanded. */
   const expandOnlyWorkspace = useCallback((ws: string) => {
     const wsId = `ws:${ws}`
-    setExpanded((prev) => {
+    setExpanded((prev: string[]) => {
       const next = keepDirExpands(prev)
-      next.add(wsId)
+      if (!next.includes(wsId)) next.push(wsId)
       return next
     })
-  }, [])
+  }, [setExpanded])
 
   /** Accordion: at most one workspace + one project expanded. */
   const expandOnlyProject = useCallback((workspace: string, projectPath: string) => {
-    setExpanded((prev) => {
+    setExpanded((prev: string[]) => {
       const next = keepDirExpands(prev)
-      next.add(`ws:${workspace}`)
-      next.add(`proj:${projectPath}`)
+      const wsId = `ws:${workspace}`
+      const projId = `proj:${projectPath}`
+      if (!next.includes(wsId)) next.push(wsId)
+      if (!next.includes(projId)) next.push(projId)
       return next
     })
-  }, [])
+  }, [setExpanded])
 
   const toggleDirExpanded = useCallback((id: string) => {
-    setExpanded((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }, [])
+    toggleExpanded(id)
+  }, [toggleExpanded])
 
   const loadDir = useCallback(async (path: string, force = false) => {
     if (!force && dirCacheRef.current[path] !== undefined) return
@@ -153,25 +152,33 @@ export function Explorer() {
     }
   }, [])
 
+  // Track expanded in a ref so the auto-expand effect doesn't re-fire on every collapse.
+  const expandedRef = useRef(expanded)
+  expandedRef.current = expanded
+
   useEffect(() => {
     if (!activeWorkspace || searching) return
-    expandOnlyWorkspace(activeWorkspace)
+    // Only auto-expand if not already expanded
+    if (!expandedRef.current.includes(`ws:${activeWorkspace}`)) {
+      expandOnlyWorkspace(activeWorkspace)
+    }
   }, [activeWorkspace, searching, expandOnlyWorkspace])
 
   useEffect(() => {
     if (!searching) return
     // Search may surface matches across workspaces — expand all hits.
-    setExpanded((prev) => {
-      const next = new Set(prev)
+    setExpanded((prev: string[]) => {
+      const next = [...prev]
       for (const ws of workspaces) {
         const list = projectCache[ws] ?? []
         if (list.some((p) => projectMatchesQuery(p, q))) {
-          next.add(`ws:${ws}`)
+          const wsId = `ws:${ws}`
+          if (!next.includes(wsId)) next.push(wsId)
         }
       }
       return next
     })
-  }, [searching, q, workspaces, projectCache])
+  }, [searching, q, workspaces, projectCache, setExpanded])
 
   const confirmRemove = async () => {
     if (!config || !pendingRemove) return
@@ -211,15 +218,11 @@ export function Explorer() {
 
   const onToggleWorkspace = (ws: string) => {
     const id = `ws:${ws}`
-    const willOpen = !expanded.has(id)
+    const willOpen = !expanded.includes(id)
     if (willOpen) {
       expandOnlyWorkspace(ws)
     } else {
-      setExpanded((prev) => {
-        const next = new Set(prev)
-        next.delete(id)
-        return next
-      })
+      setExpanded((prev: string[]) => prev.filter((x) => x !== id))
     }
     setActiveWorkspace(ws)
     setSelection({ kind: 'workspace', path: ws })
@@ -228,7 +231,7 @@ export function Explorer() {
 
   const onToggleProject = (p: ProjectSummary, workspace: string) => {
     const id = `proj:${p.path}`
-    const willOpen = !expanded.has(id)
+    const willOpen = !expanded.includes(id)
     const fromSearch = searching
     if (workspace && workspace !== activeWorkspace) {
       setActiveWorkspace(workspace)
@@ -247,11 +250,7 @@ export function Explorer() {
       expandOnlyProject(workspace, p.path)
       void loadDir(p.path, true)
     } else if (!fromSearch) {
-      setExpanded((prev) => {
-        const next = new Set(prev)
-        next.delete(id)
-        return next
-      })
+      setExpanded((prev: string[]) => prev.filter((x) => x !== id))
     } else {
       expandOnlyProject(workspace, p.path)
       void loadDir(p.path, true)
@@ -285,7 +284,7 @@ export function Explorer() {
   ) => {
     e?.stopPropagation()
     const id = `dir:${entry.path}`
-    const willOpen = !expanded.has(id)
+    const willOpen = !expanded.includes(id)
     toggleDirExpanded(id)
     setSelection({ kind: 'dir', path: entry.path, projectPath })
     ensureProjectContext(projectPath)
@@ -321,6 +320,15 @@ export function Explorer() {
       /* ignore */
     }
     setMenu(null)
+  }
+
+  /** Find the folder name for a project path (for CommitModal). */
+  const findProjectName = (projectPath: string): string => {
+    for (const list of Object.values(projectCache)) {
+      const hit = list.find((p) => p.path === projectPath)
+      if (hit) return hit.folderName
+    }
+    return projectPath
   }
 
   const isSelected = (kind: string, path: string) => {
@@ -363,7 +371,7 @@ export function Explorer() {
         : null
       if (entry.isDir) {
         const id = `dir:${entry.path}`
-        const open = expanded.has(id)
+        const open = expanded.includes(id)
         const dirChangeCount = rel != null ? (gitDecorations.dirs[rel] ?? 0) : 0
         const dirDirty = dirChangeCount > 0
         return (
@@ -385,6 +393,8 @@ export function Explorer() {
                   setMenu({
                     kind: 'entry',
                     path: entry.path,
+                    projectPath,
+                    isDir: true,
                     x: e.clientX,
                     y: e.clientY,
                   })
@@ -439,6 +449,8 @@ export function Explorer() {
               setMenu({
                 kind: 'entry',
                 path: entry.path,
+                projectPath,
+                isDir: false,
                 x: e.clientX,
                 y: e.clientY,
               })
@@ -495,7 +507,7 @@ export function Explorer() {
             ? allProjects.filter((p) => projectMatchesQuery(p, q))
             : allProjects
           if (searching && projects.length === 0) return null
-          const wsOpen = searching || expanded.has(wsId)
+          const wsOpen = searching || expanded.includes(wsId)
           const wsActive =
             isSelected('workspace', ws) ||
             (!selection && activeWorkspace === ws)
@@ -550,7 +562,7 @@ export function Explorer() {
               {wsOpen &&
                 projects.map((p) => {
                   const projId = `proj:${p.path}`
-                  const projOpen = expanded.has(projId)
+                  const projOpen = expanded.includes(projId)
                   const projActive =
                     isSelected('project', p.path) ||
                     selectedProject?.path === p.path
@@ -710,7 +722,96 @@ export function Explorer() {
           >
             {t('open.inFileManager')}
           </button>
+          <div className="branch-menu-sep" />
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setCommitEntry({ path: menu.path, projectPath: menu.projectPath })
+              setMenu(null)
+            }}
+          >
+            {t('explorer.commitChanges')}
+          </button>
+          <div className="branch-menu-sep" />
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setMenu(null)
+              if (menu.isDir) {
+                // Directory: collect changed files within this dir
+                const dirRel = normalizeFsPath(toProjectRelative(menu.path, menu.projectPath) ?? '')
+                const gs = useProjectStore.getState().gitStatus
+                const entries = gs?.entries ?? []
+                const files = entries
+                  .map((e) => {
+                    const rel = unquoteGitPath(e.path).replace(/^\/+/, '')
+                    return { rel, label: e.label, absPath: menu.projectPath + '/' + rel }
+                  })
+                  .filter((f) => dirRel === '' || f.rel.startsWith(dirRel + '/') || f.rel === dirRel)
+                  .map((f) => ({ absPath: f.absPath, relPath: f.rel, label: f.label }))
+                setDiffDirList({ dirPath: menu.path, projectPath: menu.projectPath, files })
+              } else {
+                // File: open diff directly
+                setDiffFile({ filePath: menu.path, projectPath: menu.projectPath })
+              }
+            }}
+          >
+            {t('explorer.viewChanges')}
+          </button>
         </ContextMenuPortal>
+      )}
+
+      {commitEntry && (
+        <CommitModal
+          projectPath={commitEntry.projectPath}
+          projectName={findProjectName(commitEntry.projectPath)}
+          branch={selectedProject?.path === commitEntry.projectPath ? (useProjectStore.getState().git?.current ?? 'HEAD') : 'HEAD'}
+          paths={[commitEntry.path]}
+          onClose={() => setCommitEntry(null)}
+          onDone={() => {
+            setCommitEntry(null)
+            if (selectedProject) void useProjectStore.getState().refreshGitStatus()
+          }}
+        />
+      )}
+
+      {diffFile && (
+        <FileDiffModal
+          projectPath={diffFile.projectPath}
+          filePath={diffFile.filePath}
+          onClose={() => setDiffFile(null)}
+        />
+      )}
+
+      {diffDirList && (
+        <ModalShell
+          title={t('explorer.changedFiles', { count: diffDirList.files.length })}
+          onClose={() => setDiffDirList(null)}
+        >
+          {diffDirList.files.length === 0 ? (
+            <p className="muted">{t('explorer.noChanges')}</p>
+          ) : (
+            <div className="explorer-diff-list">
+              {diffDirList.files.map((f) => (
+                <button
+                  key={f.absPath}
+                  type="button"
+                  className="explorer-diff-list-item"
+                  onClick={() => {
+                    setDiffFile({ filePath: f.absPath, projectPath: diffDirList.projectPath })
+                    setDiffDirList(null)
+                  }}
+                >
+                  <Document className="ui-icon" size={14} color="currentColor" aria-hidden />
+                  <span className="explorer-diff-list-path" title={f.absPath}>{f.relPath}</span>
+                  <span className="explorer-diff-list-label muted">{f.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </ModalShell>
       )}
 
       {pendingRemove && (

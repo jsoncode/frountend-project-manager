@@ -1410,6 +1410,12 @@ body.resizing-row * {
   border-color: rgba(45, 212, 191, 0.45);
 }
 
+/* Hide native clear button — we use a custom one */
+.action-bar-search input[type="search"]::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  display: none;
+}
+
 .action-bar-search-clear {
   position: absolute;
   right: 4px;
@@ -3052,5 +3058,63 @@ body.resizing-row * {
   .merge-diff-editor {
     min-height: 180px;
   }
+}
+
+/* File Diff Modal */
+.file-diff-modal.modal-wide {
+  width: min(1400px, 96vw);
+  height: min(90vh, 800px);
+  display: flex;
+  flex-direction: column;
+}
+
+.file-diff-modal > div:last-child {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Explorer diff file list */
+.explorer-diff-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: min(400px, 50vh);
+  overflow: auto;
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-sm);
+  padding: 4px;
+}
+
+.explorer-diff-list-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-main);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+
+.explorer-diff-list-item:hover {
+  background: var(--bg-hover);
+}
+
+.explorer-diff-list-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, monospace;
+}
+
+.explorer-diff-list-label {
+  flex-shrink: 0;
+  font-size: 12px;
 }
 
