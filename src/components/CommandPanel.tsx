@@ -27,9 +27,9 @@ export function CommandPanel({ filterQuery = '' }: { filterQuery?: string }) {
   // Keep package.json scripts key order (do not re-sort).
   const scripts = Object.keys(details.summary.scripts).filter(match)
   const pm = details.packageManager
-  const history = (config?.commandHistory?.[selected.path] ?? []).filter((h) =>
-    match(h.value),
-  )
+  const history = (config?.commandHistory?.[selected.path] ?? [])
+    .filter((h) => match(h.value))
+    .sort((a, b) => a.value.localeCompare(b.value))
 
   return (
     <div className="command-panel-side">
@@ -63,8 +63,9 @@ export function CommandPanel({ filterQuery = '' }: { filterQuery?: string }) {
         items={history}
         emptyText={q ? t('actionBar.noMatch') : t('cmd.historyEmpty')}
         onRun={(cmd) => {
+          const full = pm === 'npm' ? `npm run ${cmd}` : `${pm} ${cmd}`
           void useSettingsStore.getState().touchCommandHistory(selected.path, cmd)
-          void runRaw(selected.path, selected.folderName, cmd)
+          void runRaw(selected.path, selected.folderName, full)
         }}
         onTogglePin={(value, pinned) =>
           void setHistoryPinned(selected.path, 'command', value, pinned)

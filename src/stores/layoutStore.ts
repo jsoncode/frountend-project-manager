@@ -2,9 +2,9 @@ import { invoke } from '@tauri-apps/api/core'
 import { create } from '../lib/createStore'
 
 /** Action bar tabs (「信息」已移除). */
-export type SideTool = 'git' | 'ide' | 'cmd' | 'env'
+export type SideTool = 'git' | 'cmd' | 'env'
 
-export const TOOL_ORDER: SideTool[] = ['git', 'ide', 'cmd', 'env']
+export const TOOL_ORDER: SideTool[] = ['git', 'cmd', 'env']
 
 type LayoutPersist = {
   explorerWidth: number
@@ -44,7 +44,7 @@ function num(v: unknown, fallback: number) {
 }
 
 function isSideTool(v: unknown): v is SideTool {
-  return v === 'git' || v === 'ide' || v === 'cmd' || v === 'env'
+  return v === 'git' || v === 'cmd' || v === 'env'
 }
 
 function normalizeActiveTool(v: unknown): SideTool {

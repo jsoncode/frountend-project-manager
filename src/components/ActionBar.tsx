@@ -1,26 +1,20 @@
-import { FolderOpen, Settings, X } from 'reicon-react'
-import { invoke } from '@tauri-apps/api/core'
+import { X } from 'reicon-react'
 import { useMemo, useState, type ReactNode } from 'react'
 import { useI18n } from '../i18n/useI18n'
-import { showErrorLog } from '../stores/errorLogStore'
 import {
   TOOL_ORDER,
   useLayoutStore,
   type SideTool,
 } from '../stores/layoutStore'
 import { useProjectStore } from '../stores/projectStore'
-import { useSettingsStore } from '../stores/settingsStore'
 import { CommandPanel } from './CommandPanel'
 import { GitToolPanel } from './GitToolPanel'
-import { IdeIcon } from './IdeIcon'
-import { Tooltip } from './Tooltip'
 
 const TOOL_LABEL: Record<
   SideTool,
-  'tool.git' | 'tool.cmd' | 'tool.env' | 'tool.ide'
+  'tool.git' | 'tool.cmd' | 'tool.env'
 > = {
   git: 'tool.git',
-  ide: 'tool.ide',
   cmd: 'tool.cmd',
   env: 'tool.env',
 }
@@ -40,8 +34,6 @@ export function ActionBar() {
   const revealEnv = useProjectStore((s) => s.revealEnv)
   const loadEnvEntries = useProjectStore((s) => s.loadEnvEntries)
   const setRevealEnv = useProjectStore((s) => s.setRevealEnv)
-  const config = useSettingsStore((s) => s.config)
-  const setIdeModalOpen = useSettingsStore((s) => s.setIdeModalOpen)
   const openTools = useLayoutStore((s) => s.openTools)
   const setActiveTool = useLayoutStore((s) => s.setActiveTool)
   const persist = useLayoutStore((s) => s.persist)
@@ -49,13 +41,7 @@ export function ActionBar() {
   const { t } = useI18n()
 
   const active: SideTool = openTools[0] ?? 'cmd'
-  const ides = (config?.ides ?? []).filter((i) => i.enabled)
   const q = query.trim()
-
-  const filteredIdes = useMemo(
-    () => ides.filter((ide) => matchesQuery(ide.name, q)),
-    [ides, q],
-  )
 
   const filteredEnvFiles = useMemo(
     () => envFiles.filter((f) => matchesQuery(f.name, q)),
@@ -70,26 +56,8 @@ export function ActionBar() {
     [envEntries, q],
   )
 
-  const openIde = async (ideId: string) => {
-    if (!selected) return
-    try {
-      await invoke('open_in_ide', { ideId, projectPath: selected.path })
-    } catch (e) {
-      showErrorLog(e)
-    }
-  }
-
-  const revealSelected = async () => {
-    if (!selected) return
-    try {
-      await invoke('reveal_in_file_manager', { path: selected.path })
-    } catch (e) {
-      showErrorLog(e)
-    }
-  }
-
   const renderBody = (): ReactNode => {
-    if (!selected && active !== 'ide' && active !== 'cmd') {
+    if (!selected && active !== 'cmd') {
       return <div className="muted">{t('tool.needProject')}</div>
     }
 
@@ -102,7 +70,7 @@ export function ActionBar() {
       }
       return (
         <>
-          <div className="script-tags" style={{ marginBottom: 8 }}>
+          <div className="script-tags" style={{ marginBottom: 8, flexDirection: 'column', alignItems: 'stretch' }}>
             {filteredEnvFiles.map((f) => (
               <button
                 key={f.path}
@@ -147,83 +115,6 @@ export function ActionBar() {
               ) : null}
             </>
           )}
-        </>
-      )
-    }
-
-    if (active === 'ide') {
-      const showFm =
-        !q ||
-        matchesQuery(t('open.inFileManager'), q) ||
-        matchesQuery('file', q)
-      return (
-        <>
-          <p className="muted" style={{ margin: '0 0 10px' }}>
-            {selected ? t('tool.ideHint') : t('top.ideNeedProject')}
-          </p>
-          <div className="ide-open-list">
-            {showFm ? (
-              <Tooltip
-                title={
-                  selected ? t('open.inFileManager') : t('top.ideNeedProject')
-                }
-              >
-                <button
-                  type="button"
-                  className="ide-open-item"
-                  disabled={!selected}
-                  onClick={() => void revealSelected()}
-                >
-                  <span className="ide-open-folder" aria-hidden>
-                    <FolderOpen size={18} color="currentColor" />
-                  </span>
-                  <span className="ide-open-name">
-                    {t('open.inFileManager')}
-                  </span>
-                </button>
-              </Tooltip>
-            ) : null}
-            {filteredIdes.map((ide) => (
-              <Tooltip
-                key={ide.id}
-                title={
-                  selected
-                    ? t('top.openInIde', { name: ide.name })
-                    : t('top.ideNeedProject')
-                }
-              >
-                <button
-                  type="button"
-                  className="ide-open-item"
-                  disabled={!selected}
-                  onClick={() => void openIde(ide.id)}
-                >
-                  <IdeIcon iconPath={ide.iconPath} name={ide.name} size={22} />
-                  <span className="ide-open-name">{ide.name}</span>
-                </button>
-              </Tooltip>
-            ))}
-            {filteredIdes.length === 0 && ides.length === 0 && (
-              <div className="muted">{t('top.noIde')}</div>
-            )}
-            {filteredIdes.length === 0 && ides.length > 0 && q && (
-              <div className="muted">{t('actionBar.noMatch')}</div>
-            )}
-          </div>
-          <button
-            type="button"
-            className="btn btn-sm btn-with-icon"
-            style={{ marginTop: 12 }}
-            onClick={() => setIdeModalOpen(true)}
-          >
-            <Settings
-              className="ui-icon"
-              size={14}
-              color="currentColor"
-              aria-hidden
-            />
-            {t('settings.openIde')}
-          </button>
         </>
       )
     }

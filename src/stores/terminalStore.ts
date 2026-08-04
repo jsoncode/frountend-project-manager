@@ -262,7 +262,7 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
   runScript: async (projectPath, projectName, pm, script) => {
     // npm 必须 `run`；pnpm / yarn / bun 可省略
     const command = pm === 'npm' ? `npm run ${script}` : `${pm} ${script}`
-    void useSettingsStore.getState().touchCommandHistory(projectPath, command)
+    void useSettingsStore.getState().touchCommandHistory(projectPath, script)
     await get().runRaw(projectPath, projectName, command)
   },
 
