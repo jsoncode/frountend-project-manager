@@ -1238,6 +1238,11 @@ body.resizing-row * {
   color: var(--text-bright);
 }
 
+.explorer-row.context-target {
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--text-bright);
+}
+
 .explorer-row:focus,
 .explorer-row:focus-visible {
   outline: none;

@@ -12,7 +12,6 @@ import {
   useEffect,
   useRef,
   useState,
-  type MouseEvent,
   type ReactNode,
 } from 'react'
 import { useI18n } from '../i18n/useI18n'
@@ -21,7 +20,7 @@ import {
   toProjectRelative,
   unquoteGitPath,
 } from '../lib/gitDecorations'
-import { projectMatchesQuery, projectSubtitle } from '../lib/projectSearch'
+import { projectMatchesQuery } from '../lib/projectSearch'
 import type { ProjectSummary } from '../lib/types'
 import {
   findWorkspaceForPath,
@@ -95,6 +94,24 @@ export function Explorer() {
   const [diffFile, setDiffFile] = useState<{ filePath: string; projectPath: string } | null>(null)
   const [diffDirList, setDiffDirList] = useState<{ dirPath: string; projectPath: string; files: { absPath: string; relPath: string; label: string }[] } | null>(null)
   const rowRefs = useRef(new Map<string, HTMLButtonElement>())
+
+  // Debounce click vs dblclick for workspace/project/dir toggle
+  const toggleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const togglePathRef = useRef('')
+
+  const debouncedToggle = useCallback((id: string, action: () => void) => {
+    if (toggleTimerRef.current) clearTimeout(toggleTimerRef.current)
+    if (togglePathRef.current === id) {
+      togglePathRef.current = ''
+      return
+    }
+    togglePathRef.current = id
+    toggleTimerRef.current = setTimeout(() => {
+      toggleTimerRef.current = null
+      togglePathRef.current = ''
+      action()
+    }, 250)
+  }, [])
 
   const q = search.trim()
   const searching = q.length > 0
@@ -192,31 +209,8 @@ export function Explorer() {
     setPendingRemove(null)
   }
 
-  const selectProjectRow = (p: ProjectSummary, workspace: string) => {
-    const fromSearch = searching
-    if (workspace && workspace !== activeWorkspace) {
-      setActiveWorkspace(workspace)
-    }
-    void selectProject(p)
-    setSelection({ kind: 'project', path: p.path, workspace })
-    if (fromSearch) {
-      void touchSearchHistory(p.folderName)
-      setSearch('')
-      window.setTimeout(() => {
-        const el = rowRefs.current.get(`proj:${p.path}`)
-        el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      }, 50)
-    }
-  }
-
-  /** Select + expand (e.g. context menu). */
-  const openProject = (p: ProjectSummary, workspace: string) => {
-    selectProjectRow(p, workspace)
-    expandOnlyProject(workspace, p.path)
-    void loadDir(p.path, true)
-  }
-
   const onToggleWorkspace = (ws: string) => {
+    setMenu(null)
     const id = `ws:${ws}`
     const willOpen = !expanded.includes(id)
     if (willOpen) {
@@ -230,6 +224,7 @@ export function Explorer() {
   }
 
   const onToggleProject = (p: ProjectSummary, workspace: string) => {
+    setMenu(null)
     const id = `proj:${p.path}`
     const willOpen = !expanded.includes(id)
     const fromSearch = searching
@@ -277,21 +272,8 @@ export function Explorer() {
     if (selectedProject?.path !== owner.path) void selectProject(owner)
   }
 
-  const onToggleDir = (
-    entry: DirEntry,
-    projectPath: string,
-    e?: MouseEvent,
-  ) => {
-    e?.stopPropagation()
-    const id = `dir:${entry.path}`
-    const willOpen = !expanded.includes(id)
-    toggleDirExpanded(id)
-    setSelection({ kind: 'dir', path: entry.path, projectPath })
-    ensureProjectContext(projectPath)
-    if (willOpen) void loadDir(entry.path, true)
-  }
-
   const onSelectFile = (entry: DirEntry, projectPath: string) => {
+    setMenu(null)
     setSelection({ kind: 'file', path: entry.path, projectPath })
     const owner = findProject(projectPath)
     if (owner) {
@@ -336,6 +318,8 @@ export function Explorer() {
     return selection.kind === kind && selection.path === path
   }
 
+  const isContextTarget = (path: string) => menu?.path === path
+
   const renderEntries = (
     parentPath: string,
     projectPath: string,
@@ -379,17 +363,23 @@ export function Explorer() {
             <Tooltip title={entry.path} placement="right">
               <button
                 type="button"
-                className={`explorer-row explorer-dir-row ${isSelected('dir', entry.path) ? 'active' : ''}${dirDirty ? ' git-changed' : ''}`}
+                className={`explorer-row explorer-dir-row ${isSelected('dir', entry.path) ? 'active' : ''}${dirDirty ? ' git-changed' : ''}${isContextTarget(entry.path) ? ' context-target' : ''}`}
                 style={{ paddingLeft: 10 + depth * 10 }}
-                onClick={(e) => onToggleDir(entry, projectPath, e)}
+                onClick={(e) => {
+                  if (e.button !== 0) return
+                  setMenu(null)
+                  debouncedToggle(`dir:${entry.path}`, () => {
+                    const id = `dir:${entry.path}`
+                    const willOpen = !expanded.includes(id)
+                    toggleDirExpanded(id)
+                    setSelection({ kind: 'dir', path: entry.path, projectPath })
+                    ensureProjectContext(projectPath)
+                    if (willOpen) void loadDir(entry.path, true)
+                  })
+                }}
                 onContextMenu={(e) => {
                   e.preventDefault()
                   e.stopPropagation()
-                  setSelection({
-                    kind: 'dir',
-                    path: entry.path,
-                    projectPath,
-                  })
                   setMenu({
                     kind: 'entry',
                     path: entry.path,
@@ -402,8 +392,6 @@ export function Explorer() {
               >
               <span
                 className="explorer-twist"
-                onClick={(e) => onToggleDir(entry, projectPath, e)}
-                onDoubleClick={(e) => e.stopPropagation()}
                 aria-hidden
               >
                 {open ? (
@@ -435,17 +423,12 @@ export function Explorer() {
         <Tooltip key={entry.path} title={entry.path} placement="right">
           <button
             type="button"
-            className={`explorer-row explorer-file-row ${isSelected('file', entry.path) ? 'active' : ''}${gitMark ? ' git-changed' : ''}`}
+            className={`explorer-row explorer-file-row ${isSelected('file', entry.path) ? 'active' : ''}${gitMark ? ' git-changed' : ''}${isContextTarget(entry.path) ? ' context-target' : ''}`}
             style={{ paddingLeft: 10 + depth * 10 }}
-            onClick={() => onSelectFile(entry, projectPath)}
+            onClick={(e) => { if (e.button === 0) onSelectFile(entry, projectPath) }}
             onContextMenu={(e) => {
               e.preventDefault()
               e.stopPropagation()
-              setSelection({
-                kind: 'file',
-                path: entry.path,
-                projectPath,
-              })
               setMenu({
                 kind: 'entry',
                 path: entry.path,
@@ -514,12 +497,14 @@ export function Explorer() {
 
           return (
             <div key={ws} className="explorer-ws">
-              <Tooltip title={ws} placement="right">
-                <button
+              <button
                   type="button"
-                  className={`explorer-row explorer-ws-row ${wsActive ? 'active' : ''}`}
+                  className={`explorer-row explorer-ws-row ${wsActive ? 'active' : ''}${isContextTarget(ws) ? ' context-target' : ''}`}
                   style={{ paddingLeft: 10 }}
-                  onClick={() => onToggleWorkspace(ws)}
+                  onClick={(e) => {
+                    if (e.button !== 0) return
+                    debouncedToggle(`ws:${ws}`, () => onToggleWorkspace(ws))
+                  }}
                   onContextMenu={(e) => {
                     e.preventDefault()
                     e.stopPropagation()
@@ -533,11 +518,6 @@ export function Explorer() {
                 >
                 <span
                   className="explorer-twist"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onToggleWorkspace(ws)
-                  }}
-                  onDoubleClick={(e) => e.stopPropagation()}
                   aria-hidden
                 >
                   {wsOpen ? (
@@ -557,7 +537,6 @@ export function Explorer() {
                   {shortWorkspaceName(ws)}
                 </span>
               </button>
-              </Tooltip>
 
               {wsOpen &&
                 projects.map((p) => {
@@ -580,20 +559,21 @@ export function Explorer() {
 
                   return (
                     <div key={p.path}>
-                      <Tooltip title={`${p.path}\n${projectSubtitle(p)}`} placement="right">
-                        <button
+                      <button
                           type="button"
                           ref={(node) => {
                             if (node) rowRefs.current.set(projId, node)
                             else rowRefs.current.delete(projId)
                           }}
-                          className={`explorer-row explorer-project-row ${projActive ? 'active' : ''}${projGitDirty ? ' git-changed' : ''}`}
+                          className={`explorer-row explorer-project-row ${projActive ? 'active' : ''}${projGitDirty ? ' git-changed' : ''}${isContextTarget(p.path) ? ' context-target' : ''}`}
                           style={{ paddingLeft: 20 }}
-                          onClick={() => onToggleProject(p, ws)}
+                          onClick={(e) => {
+                            if (e.button !== 0) return
+                            debouncedToggle(`proj:${p.path}`, () => onToggleProject(p, ws))
+                          }}
                           onContextMenu={(e) => {
                             e.preventDefault()
                             e.stopPropagation()
-                            openProject(p, ws)
                             setMenu({
                               kind: 'project',
                               path: p.path,
@@ -604,11 +584,6 @@ export function Explorer() {
                         >
                         <span
                           className="explorer-twist"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            onToggleProject(p, ws)
-                          }}
-                          onDoubleClick={(e) => e.stopPropagation()}
                           aria-hidden
                         >
                           {projOpen ? (
@@ -629,7 +604,6 @@ export function Explorer() {
                           <span className="git-dir-count" aria-hidden>{projChangeCount}</span>
                         ) : null}
                       </button>
-                      </Tooltip>
                       {projOpen ? renderEntries(p.path, p.path, 2) : null}
                     </div>
                   )
