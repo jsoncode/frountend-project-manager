@@ -1,18 +1,24 @@
 import {
+  Add,
   ArrowDown,
+  ArrowRight,
   ArrowUp,
   BranchDown,
+  CheckCircle,
+  Document,
+  Pen,
   Refresh,
+  Star,
+  Trash,
 } from 'reicon-react'
 import { invoke } from '@tauri-apps/api/core'
 import { useCallback, useState, type MouseEvent } from 'react'
 import { useI18n } from '../i18n/useI18n'
 import { writeHostToTerminal } from '../lib/ptyHost'
-import type { BranchItem, MergeStatus } from '../lib/types'
+import type { BranchItem, GitStatus, MergeStatus } from '../lib/types'
 import { useProjectStore } from '../stores/projectStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useTerminalStore } from '../stores/terminalStore'
-import { BranchSwitchModal } from './BranchSwitchModal'
 import { CommitModal } from './CommitModal'
 import { ContextMenuPortal } from './ContextMenuPortal'
 import { HistoryChips } from './HistoryChips'
@@ -24,6 +30,12 @@ type MenuState = {
   x: number
   y: number
   branch: BranchItem
+}
+
+type HistoryMenuState = {
+  x: number
+  y: number
+  value: string
 }
 
 type CreateState = {
@@ -49,13 +61,18 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
   const ensureRunTarget = useTerminalStore((s) => s.ensureRunTarget)
   const runInSession = useTerminalStore((s) => s.runInSession)
   const waitUntilIdle = useTerminalStore((s) => s.waitUntilIdle)
-  const [switchTarget, setSwitchTarget] = useState<string | null>(null)
+  const [switchingBranch, setSwitchingBranch] = useState<string | null>(null)
+  const [dirtyConfirm, setDirtyConfirm] = useState<{
+    branch: string
+    status: GitStatus
+  } | null>(null)
+  const [branchBusy, setBranchBusy] = useState(false)
+  const [branchError, setBranchError] = useState<string | null>(null)
   const [menu, setMenu] = useState<MenuState | null>(null)
+  const [historyMenu, setHistoryMenu] = useState<HistoryMenuState | null>(null)
   const [commitTarget, setCommitTarget] = useState<string | null>(null)
   const [createState, setCreateState] = useState<CreateState | null>(null)
   const [deleteState, setDeleteState] = useState<DeleteState | null>(null)
-  const [branchBusy, setBranchBusy] = useState(false)
-  const [branchError, setBranchError] = useState<string | null>(null)
   const [checking, setChecking] = useState(false)
   const [pulling, setPulling] = useState(false)
   const [mergeModal, setMergeModal] = useState<{
@@ -67,6 +84,12 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
     selected && config ? (config.branchHistory?.[selected.path] ?? []) : []
 
   const closeMenu = useCallback(() => setMenu(null), [])
+  const closeHistoryMenu = useCallback(() => setHistoryMenu(null), [])
+
+  /** Set of branch names that are favorited (pinned in history). */
+  const favNames = new Set(
+    branchHistory.filter((h) => h.pinned).map((h) => h.value),
+  )
 
   if (!selected) {
     return <div className="muted">{t('tool.needProject')}</div>
@@ -102,6 +125,11 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
 
   const localName = (name: string) =>
     name.replace(/^remotes\//, '').replace(/^origin\//, '')
+
+  const isFav = (branchName: string) => {
+    if (favNames.has(branchName)) return true
+    return favNames.has(localName(branchName))
+  }
 
   const isBranchNameTaken = (name: string) => {
     const n = name.trim()
@@ -256,30 +284,97 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
     createState?.name.trim() && isBranchNameTaken(createState.name),
   )
 
+  const handleBranchSwitch = async (branchName: string) => {
+    if (switchingBranch || !selected) return
+    setSwitchingBranch(branchName)
+    try {
+      const s = await invoke<GitStatus>('git_status', {
+        path: selected.path,
+      })
+      if (s.clean) {
+        await invoke<string>('git_checkout', {
+          path: selected.path,
+          branch: branchName,
+        })
+        await useSettingsStore
+          .getState()
+          .touchBranchHistory(selected.path, branchName)
+        await refreshGit()
+      } else {
+        setDirtyConfirm({ branch: branchName, status: s })
+      }
+    } catch (e) {
+      echoTerm(`\r\n\x1b[31m${String(e)}\x1b[0m\r\n`)
+    } finally {
+      setSwitchingBranch(null)
+    }
+  }
+
+  const doDirtySwitch = async () => {
+    if (!dirtyConfirm || !selected) return
+    setSwitchingBranch(dirtyConfirm.branch)
+    try {
+      await invoke<string>('git_checkout', {
+        path: selected.path,
+        branch: dirtyConfirm.branch,
+      })
+      await useSettingsStore
+        .getState()
+        .touchBranchHistory(selected.path, dirtyConfirm.branch)
+      await refreshGit()
+    } catch (e) {
+      echoTerm(`\r\n\x1b[31m${String(e)}\x1b[0m\r\n`)
+    } finally {
+      setSwitchingBranch(null)
+      setDirtyConfirm(null)
+    }
+  }
+
   const renderBranch = (b: BranchItem) => {
     const isCurrent = !b.isRemote && git?.current === b.name
+    const isSwitching = switchingBranch === b.name
+    const isDisabled = !!switchingBranch && !isSwitching
+    const fav = isFav(b.name)
     return (
       <Tooltip
         key={b.name}
         title={
-          isCurrent
-            ? t('git.current')
-            : `${t('git.dblclick')} · ${t('git.contextHint')}`
+          isSwitching
+            ? t('branch.switching')
+            : isCurrent
+              ? t('git.current')
+              : `${t('git.dblclick')} · ${t('git.contextHint')}`
         }
       >
         <div
-          className={`branch-item ${isCurrent ? 'current' : ''} clickable`}
+          className={`branch-item ${isCurrent ? 'current' : ''} ${isSwitching ? 'switching' : ''} ${isDisabled ? 'disabled' : 'clickable'} ${fav ? 'favorited' : ''}`}
           onDoubleClick={() => {
-            if (!isCurrent) setSwitchTarget(b.name)
+            if (!isCurrent && !isDisabled) void handleBranchSwitch(b.name)
           }}
-          onContextMenu={(e) => onContext(e, b)}
+          onContextMenu={(e) => {
+            if (!isDisabled) onContext(e, b)
+          }}
         >
           <span className="branch-mark" aria-hidden>
-            <BranchDown
-              size={12}
-              color="currentColor"
-              weight={isCurrent ? 'Filled' : 'Outline'}
-            />
+            {isSwitching ? (
+              <Refresh
+                className="ui-icon is-spinning"
+                size={12}
+                color="currentColor"
+              />
+            ) : fav ? (
+              <Star
+                size={12}
+                color="currentColor"
+                weight="Filled"
+              />
+            ) : (
+              <BranchDown
+                size={12}
+                color="currentColor"
+                weight={isCurrent ? 'Filled' : 'Outline'}
+              />
+            )}
           </span>
           <span className="branch-name">{b.name}</span>
           {isCurrent && mergeStatus?.inProgress && (
@@ -338,13 +433,15 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
         title={t('git.history')}
         items={filteredBranchHistory}
         emptyText={q ? t('actionBar.noMatch') : t('git.historyEmpty')}
-        onRun={(branch) => {
-          if (git?.current !== branch) setSwitchTarget(branch)
+        currentValue={git?.current ?? undefined}
+        onDoubleClick={(branch) => {
+          if (git?.current !== branch) void handleBranchSwitch(branch)
         }}
-        onTogglePin={(value, pinned) =>
-          void setHistoryPinned(selected.path, 'branch', value, pinned)
-        }
-        onDelete={(value) => void deleteHistory(selected.path, 'branch', value)}
+        onContext={(e, value) => {
+          e.preventDefault()
+          e.stopPropagation()
+          setHistoryMenu({ x: e.clientX, y: e.clientY, value })
+        }}
       />
       {!git && <div className="muted">{t('git.notRepo')}</div>}
       {git && (
@@ -383,10 +480,11 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
               type="button"
               role="menuitem"
               onClick={() => {
-                setSwitchTarget(menu.branch.name)
                 setMenu(null)
+                void handleBranchSwitch(menu.branch.name)
               }}
             >
+              <ArrowRight size={14} color="currentColor" />
               {t('git.ctx.checkout')}
             </button>
           )}
@@ -402,35 +500,8 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
               setMenu(null)
             }}
           >
-            {t('git.ctx.newBranch')}
-          </button>
-          {!isMenuCurrent && (
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setDeleteState({
-                  branch: menu.branch,
-                  alsoLocal: false,
-                })
-                setBranchError(null)
-                setMenu(null)
-              }}
-            >
-              {t('git.ctx.deleteBranch')}
-            </button>
-          )}
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              void navigator.clipboard
-                .writeText(menu.branch.name)
-                .catch(() => undefined)
-              setMenu(null)
-            }}
-          >
-            {t('git.ctx.copyName')}
+            <Add size={14} color="currentColor" />
+            {t('git.ctx.newBranchFrom', { name: localName(menu.branch.name) })}
           </button>
           <div className="branch-menu-sep" />
           <button
@@ -443,6 +514,7 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
               void pullBranch(target)
             }}
           >
+            <ArrowDown size={14} color="currentColor" />
             {isMenuCurrent || (menu.branch.isRemote && sameLocalAsCurrent)
               ? t('git.ctx.pull')
               : t('git.ctx.pullOther')}
@@ -461,6 +533,7 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
                 setMenu(null)
               }}
             >
+              <ArrowUp size={14} color="currentColor" />
               {t('git.ctx.push')}
             </button>
           )}
@@ -480,6 +553,7 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
                 })()
               }}
             >
+              <Refresh size={14} color="currentColor" />
               {t('git.ctx.fetch')}
             </button>
           )}
@@ -493,6 +567,7 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
                 void startMerge(ref)
               }}
             >
+              <BranchDown size={14} color="currentColor" />
               {t('git.ctx.mergeInto', { name: git.current })}
             </button>
           )}
@@ -529,6 +604,7 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
                 setMenu(null)
               }}
             >
+              <Pen size={14} color="currentColor" />
               {t('git.ctx.commit')}
             </button>
           )}
@@ -540,17 +616,133 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
               setMenu(null)
             }}
           >
+            <CheckCircle size={14} color="currentColor" />
             {t('git.ctx.status')}
           </button>
           <button
             type="button"
             role="menuitem"
             onClick={() => {
-              runGit('git log --oneline -10')
+              const branch = menu.branch.name
+              runGit(`git log --format="%h %s (%ar)" -10 ${branch}`)
               setMenu(null)
             }}
           >
+            <Document size={14} color="currentColor" />
             {t('git.ctx.log')}
+          </button>
+          <div className="branch-menu-sep" />
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              void navigator.clipboard
+                .writeText(menu.branch.name)
+                .catch(() => undefined)
+              setMenu(null)
+            }}
+          >
+            <Document size={14} color="currentColor" />
+            {t('git.ctx.copyName')}
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="favorite"
+            onClick={() => {
+              const name = localName(menu.branch.name)
+              const pinned = favNames.has(name)
+              void setHistoryPinned(selected.path, 'branch', name, !pinned)
+              setMenu(null)
+            }}
+          >
+            <Star size={14} color="currentColor" weight={isFav(menu.branch.name) ? 'Filled' : 'Outline'} />
+            {isFav(menu.branch.name) ? t('git.ctx.unfavorite') : t('git.ctx.favorite')}
+          </button>
+          {!isMenuCurrent && (
+            <button
+              type="button"
+              role="menuitem"
+              className="danger"
+              onClick={() => {
+                setDeleteState({
+                  branch: menu.branch,
+                  alsoLocal: false,
+                })
+                setBranchError(null)
+                setMenu(null)
+              }}
+            >
+              <Trash size={14} color="currentColor" />
+              {t('git.ctx.deleteBranch')}
+            </button>
+          )}
+        </ContextMenuPortal>
+      )}
+
+      {historyMenu && (
+        <ContextMenuPortal
+          x={historyMenu.x}
+          y={historyMenu.y}
+          onClose={closeHistoryMenu}
+        >
+          {git?.current !== historyMenu.value && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                void handleBranchSwitch(historyMenu.value)
+                setHistoryMenu(null)
+              }}
+            >
+              <ArrowRight size={14} color="currentColor" />
+              {t('git.ctx.checkout')}
+            </button>
+          )}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              const pinned = favNames.has(historyMenu.value)
+              void setHistoryPinned(
+                selected.path,
+                'branch',
+                historyMenu.value,
+                !pinned,
+              )
+              setHistoryMenu(null)
+            }}
+          >
+            <Star size={14} color="currentColor" weight={favNames.has(historyMenu.value) ? 'Filled' : 'Outline'} />
+            {favNames.has(historyMenu.value)
+              ? t('git.ctx.unfavorite')
+              : t('git.ctx.favorite')}
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              void navigator.clipboard
+                .writeText(historyMenu.value)
+                .catch(() => undefined)
+              setHistoryMenu(null)
+            }}
+          >
+            <Document size={14} color="currentColor" />
+            {t('git.ctx.copyName')}
+          </button>
+          <div className="branch-menu-sep" />
+          <button
+            type="button"
+            role="menuitem"
+            className="danger"
+            onClick={() => {
+              void deleteHistory(selected.path, 'branch', historyMenu.value)
+              setHistoryMenu(null)
+            }}
+          >
+            <Trash size={14} color="currentColor" />
+            {t('history.delete')}
           </button>
         </ContextMenuPortal>
       )}
@@ -683,11 +875,69 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
         </ModalShell>
       )}
 
-      {switchTarget && (
-        <BranchSwitchModal
-          branch={switchTarget}
-          onClose={() => setSwitchTarget(null)}
-        />
+      {dirtyConfirm && (
+        <ModalShell
+          title={t('branch.confirmTitle')}
+          onClose={() => setDirtyConfirm(null)}
+          closeOnEsc={false}
+          className="branch-modal"
+        >
+          <p className="branch-switch-path">
+            <span className="muted">{t('branch.from')}</span>{' '}
+            <strong>{dirtyConfirm.status.current ?? '—'}</strong>{' '}
+            <span className="muted inline-icon" aria-hidden>
+              <ArrowRight size={14} color="currentColor" />
+            </span>{' '}
+            <strong className="cyan-text">{dirtyConfirm.branch}</strong>
+          </p>
+          <div className="status-banner dirty">
+            <div className="status-title">
+              {t('branch.dirtyTitle', {
+                count: dirtyConfirm.status.entries.length,
+              })}
+            </div>
+            <div className="muted" style={{ marginBottom: 8 }}>
+              {t('branch.dirtyDesc')}
+            </div>
+            <div className="dirty-list">
+              {dirtyConfirm.status.entries.map((e) => (
+                <div
+                  key={`${e.code}-${e.path}`}
+                  className="dirty-item"
+                >
+                  <span className="dirty-code">{e.label}</span>
+                  <span className="dirty-path">{e.path}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="modal-actions">
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setDirtyConfirm(null)}
+              disabled={!!switchingBranch}
+            >
+              {t('branch.cancel')}
+            </button>
+            <button
+              type="button"
+              className="btn primary btn-with-icon"
+              disabled={!!switchingBranch}
+              onClick={() => void doDirtySwitch()}
+            >
+              <CheckCircle
+                className="ui-icon"
+                size={14}
+                color="currentColor"
+                aria-hidden
+              />
+              {switchingBranch
+                ? t('branch.switching')
+                : t('branch.confirm')}
+            </button>
+          </div>
+        </ModalShell>
       )}
 
       {mergeModal && (

@@ -13,8 +13,6 @@ export function CommandPanel({ filterQuery = '' }: { filterQuery?: string }) {
   const runScript = useTerminalStore((s) => s.runScript)
   const runRaw = useTerminalStore((s) => s.runRaw)
   const config = useSettingsStore((s) => s.config)
-  const setHistoryPinned = useSettingsStore((s) => s.setHistoryPinned)
-  const deleteHistory = useSettingsStore((s) => s.deleteHistory)
   const { t } = useI18n()
 
   if (!selected || !details) {
@@ -67,10 +65,6 @@ export function CommandPanel({ filterQuery = '' }: { filterQuery?: string }) {
           void useSettingsStore.getState().touchCommandHistory(selected.path, cmd)
           void runRaw(selected.path, selected.folderName, full)
         }}
-        onTogglePin={(value, pinned) =>
-          void setHistoryPinned(selected.path, 'command', value, pinned)
-        }
-        onDelete={(value) => void deleteHistory(selected.path, 'command', value)}
       />
     </div>
   )

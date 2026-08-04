@@ -1,24 +1,52 @@
-import { Star, Trash } from 'reicon-react'
+import type { MouseEvent } from 'react'
 import type { HistoryItem } from '../lib/types'
 import { useI18n } from '../i18n/useI18n'
 import { Tooltip } from './Tooltip'
+
+/** Pad number with leading zero. */
+const pad = (n: number) => String(n).padStart(2, '0')
+
+/** Format timestamp for display: today→HH:mm, this year→M/D, older→YYYY/M/D. */
+function formatRelativeDate(ts: number): string {
+  const d = new Date(ts)
+  const now = new Date()
+  if (d.getFullYear() === now.getFullYear()) {
+    if (
+      d.getMonth() === now.getMonth() &&
+      d.getDate() === now.getDate()
+    ) {
+      return `${pad(d.getHours())}:${pad(d.getMinutes())}`
+    }
+    return `${d.getMonth() + 1}/${d.getDate()}`
+  }
+  return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`
+}
+
+/** Format timestamp as full datetime for tooltip. */
+function formatFullDate(ts: number): string {
+  const d = new Date(ts)
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
 
 type Props = {
   title: string
   items: HistoryItem[]
   emptyText?: string
-  onRun: (value: string) => void
-  onTogglePin: (value: string, pinned: boolean) => void
-  onDelete: (value: string) => void
+  /** Highlight the chip matching this value as "current". */
+  currentValue?: string
+  onRun?: (value: string) => void
+  onDoubleClick?: (value: string) => void
+  onContext?: (e: MouseEvent, value: string) => void
 }
 
 export function HistoryChips({
   title,
   items,
   emptyText,
+  currentValue,
   onRun,
-  onTogglePin,
-  onDelete,
+  onDoubleClick,
+  onContext,
 }: Props) {
   const { t } = useI18n()
   const pinned = items.filter((i) => i.pinned)
@@ -38,9 +66,10 @@ export function HistoryChips({
               <HistoryChip
                 key={`p-${item.value}`}
                 item={item}
+                isCurrent={item.value === currentValue}
                 onRun={onRun}
-                onTogglePin={onTogglePin}
-                onDelete={onDelete}
+                onDoubleClick={onDoubleClick}
+                onContext={onContext}
               />
             ))}
           </div>
@@ -54,9 +83,10 @@ export function HistoryChips({
               <HistoryChip
                 key={`r-${item.value}`}
                 item={item}
+                isCurrent={item.value === currentValue}
                 onRun={onRun}
-                onTogglePin={onTogglePin}
-                onDelete={onDelete}
+                onDoubleClick={onDoubleClick}
+                onContext={onContext}
               />
             ))}
           </div>
@@ -68,52 +98,53 @@ export function HistoryChips({
 
 function HistoryChip({
   item,
+  isCurrent,
   onRun,
-  onTogglePin,
-  onDelete,
+  onDoubleClick,
+  onContext,
 }: {
   item: HistoryItem
-  onRun: (value: string) => void
-  onTogglePin: (value: string, pinned: boolean) => void
-  onDelete: (value: string) => void
+  isCurrent: boolean
+  onRun?: (value: string) => void
+  onDoubleClick?: (value: string) => void
+  onContext?: (e: MouseEvent, value: string) => void
 }) {
   const { t } = useI18n()
+  const dateLabel = formatRelativeDate(item.lastUsedAt)
+  const fullLabel = formatFullDate(item.lastUsedAt)
+  const main = (
+    <span className="history-chip-name">{item.value}</span>
+  )
+  const date = (
+    <span className="history-chip-date muted">{dateLabel}</span>
+  )
+  const handleDoubleClick = () => {
+    if (onDoubleClick) onDoubleClick(item.value)
+  }
   return (
-    <span className={`history-chip ${item.pinned ? 'pinned' : ''}`}>
+    <span
+      className={`history-chip ${item.pinned ? 'pinned' : ''} ${isCurrent ? 'current' : ''} ${onDoubleClick ? 'dbl-clickable' : ''}`}
+      onContextMenu={(e) => onContext?.(e, item.value)}
+      onDoubleClick={handleDoubleClick}
+    >
       <Tooltip
-        title={`${item.value} · ${t('history.usedTimes', { count: item.count })}`}
+        title={`${item.value} · ${t('history.usedTimes', { count: item.count })} · ${fullLabel}`}
       >
-        <button
-          type="button"
-          className="history-chip-main"
-          onClick={() => onRun(item.value)}
-        >
-          {item.value}
-        </button>
-      </Tooltip>
-      <Tooltip title={item.pinned ? t('history.unpin') : t('history.pin')}>
-        <button
-          type="button"
-          className="history-chip-icon"
-          onClick={() => onTogglePin(item.value, !item.pinned)}
-        >
-          <Star
-            className="ui-icon"
-            size={12}
-            color="currentColor"
-            weight={item.pinned ? 'Filled' : 'Outline'}
-            aria-hidden
-          />
-        </button>
-      </Tooltip>
-      <Tooltip title={t('history.delete')}>
-        <button
-          type="button"
-          className="history-chip-icon danger"
-          onClick={() => onDelete(item.value)}
-        >
-          <Trash className="ui-icon" size={12} color="currentColor" aria-hidden />
-        </button>
+        {onRun ? (
+          <button
+            type="button"
+            className="history-chip-main"
+            onClick={() => onRun(item.value)}
+          >
+            {main}
+            {date}
+          </button>
+        ) : (
+          <span className="history-chip-main">
+            {main}
+            {date}
+          </span>
+        )}
       </Tooltip>
     </span>
   )

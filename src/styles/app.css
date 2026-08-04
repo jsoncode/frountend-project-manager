@@ -1920,6 +1920,10 @@ body.resizing-row * {
   overflow: hidden;
 }
 
+.history-chip.dbl-clickable {
+  cursor: pointer;
+}
+
 .history-chip:hover {
   background: rgba(255, 255, 255, 0.04);
 }
@@ -1931,20 +1935,58 @@ body.resizing-row * {
 .history-chip-main {
   border: none;
   background: transparent;
-  color: var(--cyan-soft);
+  color: var(--text);
   padding: 4px 6px;
   font-size: 13px;
-  cursor: pointer;
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   text-align: left;
   border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.history-chip-main:hover {
+button.history-chip-main {
+  cursor: pointer;
+}
+
+button.history-chip-main:hover {
   color: var(--cyan);
+}
+
+.history-chip.current .history-chip-main {
+  color: var(--cyan-soft);
+}
+
+.history-chip.current button.history-chip-main:hover {
+  color: var(--cyan);
+}
+
+.history-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.history-chip-date {
+  flex-shrink: 0;
+  font-size: 12px;
+  opacity: 0.6;
+  margin-left: auto;
+}
+
+.branch-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.branch-menu button svg {
+  flex-shrink: 0;
 }
 
 .history-chip-icon {
@@ -2040,8 +2082,26 @@ body.resizing-row * {
   background: rgba(34, 211, 238, 0.08);
 }
 
+.branch-item.switching {
+  opacity: 0.85;
+  color: var(--cyan-soft);
+}
+
+.branch-item.disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
 .branch-mark {
   flex-shrink: 0;
+}
+
+.branch-item.favorited .branch-mark {
+  color: var(--warn);
+}
+
+.branch-item.favorited.current .branch-mark {
+  color: var(--warn);
 }
 
 .branch-name {
@@ -2121,6 +2181,24 @@ body.resizing-row * {
 .branch-menu button:disabled:hover {
   background: transparent;
   color: var(--text-bright);
+}
+
+.branch-menu button.danger {
+  color: var(--danger);
+}
+
+.branch-menu button.danger:hover {
+  background: rgba(251, 113, 133, 0.12);
+  color: var(--danger);
+}
+
+.branch-menu button.favorite {
+  color: var(--warn);
+}
+
+.branch-menu button.favorite:hover {
+  background: rgba(251, 191, 36, 0.12);
+  color: var(--warn);
 }
 
 .branch-menu-sep {
