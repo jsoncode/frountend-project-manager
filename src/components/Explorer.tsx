@@ -904,6 +904,13 @@ export function Explorer() {
                 try {
                   await projRunGitInTerm(menu.path, 'git pull --ff-only --prune; if (-not $?) { git pull --prune }')
                 } catch { /* ignore */ }
+                // Check for merge conflicts after pull
+                try {
+                  const status = await invoke<import('../lib/types').MergeStatus>('git_merge_status', { path: menu.path }).catch(() => null)
+                  if (status?.inProgress) {
+                    useProjectStore.getState().refreshMergeStatus()
+                  }
+                } catch { /* ignore */ }
               })()
             }}
           >

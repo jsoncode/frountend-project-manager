@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { create } from '../lib/createStore'
 import { isTauri } from '../lib/tauri'
 import type { AppConfig, EditorThemeId, IdeConfig } from '../lib/types'
+import { useWorkspaceStore } from './workspaceStore'
 
 type HistoryKind = 'command' | 'branch' | 'search'
 
@@ -235,6 +236,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
   clearProjectCache: async () => {
     await invoke('clear_all_project_cache')
+    useWorkspaceStore.setState({ projectStatuses: {} })
     await get().load()
   },
   clearAiConversations: async () => {

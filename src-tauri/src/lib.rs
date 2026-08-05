@@ -211,6 +211,8 @@ fn drop_project_cache(workspace: String) -> Result<(), String> {
 #[tauri::command]
 fn clear_all_project_cache(app: AppHandle) -> Result<(), String> {
     db::project_cache_clear_all()?;
+    // Also clear persisted project statuses.
+    let _ = db::kv_set("project_statuses", "{}");
     // Also clear history data stored in AppConfig (kv table).
     let mut cfg = config::load_or_default(&app)?;
     cfg.command_history.clear();
@@ -219,6 +221,16 @@ fn clear_all_project_cache(app: AppHandle) -> Result<(), String> {
     cfg.search_history.clear();
     config::save(&app, &cfg)?;
     Ok(())
+}
+
+#[tauri::command]
+fn load_project_statuses() -> Result<Option<serde_json::Value>, String> {
+    db::kv_get_json("project_statuses")
+}
+
+#[tauri::command]
+fn save_project_statuses(data: serde_json::Value) -> Result<(), String> {
+    db::kv_set_json("project_statuses", &data)
 }
 
 #[tauri::command]
@@ -882,6 +894,8 @@ pub fn run() {
             drop_project_cache,
             clear_all_project_cache,
             clear_all_ai_conversations,
+            load_project_statuses,
+            save_project_statuses,
             ai_open_chat_window,
             ai_take_pending_feed,
             ai_chat_start,

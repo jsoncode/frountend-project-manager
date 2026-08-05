@@ -60,6 +60,15 @@ async function scanWorkspace(workspace: string): Promise<ProjectSummary[]> {
   return invoke<ProjectSummary[]>('list_projects', { workspace })
 }
 
+/** Debounced helper to persist projectStatuses to SQLite. */
+let persistTimer: ReturnType<typeof setTimeout> | null = null
+function persistStatusesDebounced(statuses: Record<string, ProjectStatusSummary>) {
+  if (persistTimer) clearTimeout(persistTimer)
+  persistTimer = setTimeout(() => {
+    void invoke('save_project_statuses', { data: statuses }).catch(() => {})
+  }, 500)
+}
+
 function persistCache(workspace: string, projects: ProjectSummary[]) {
   void invoke('save_project_cache', { workspace, projects }).catch(() => {})
 }
@@ -102,9 +111,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   },
   hydrateCache: async () => {
     try {
-      const remote = await invoke<Record<string, ProjectSummary[]>>(
-        'load_project_cache',
-      )
+      const [remote, cachedStatuses] = await Promise.all([
+        invoke<Record<string, ProjectSummary[]>>('load_project_cache'),
+        invoke<Record<string, ProjectStatusSummary> | null>('load_project_statuses'),
+      ])
       set((s) => {
         const projectCache = { ...remote }
         const active = s.activeWorkspace
@@ -113,6 +123,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
           projects:
             active && projectCache[active] ? projectCache[active]! : s.projects,
           hydrated: true,
+          ...(cachedStatuses ? { projectStatuses: cachedStatuses } : {}),
         }
       })
     } catch {
@@ -263,6 +274,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       }
       return { projectCache, projectStatuses }
     })
+    persistStatusesDebounced(get().projectStatuses)
     void invoke('drop_project_cache', { workspace: path }).catch(() => {})
   },
   scanAllProjectStatuses: async (workspace) => {
@@ -315,6 +327,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         for (const [path, summary] of results) {
           projectStatuses[path] = summary
         }
+        persistStatusesDebounced(projectStatuses)
         return { projectStatuses, scanningStatuses: false, scanningProjects: new Set() }
       })
     } catch {
@@ -325,15 +338,16 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     set((s) => {
       const existing = s.projectStatuses[projectPath]
       if (!existing) {
-        // Only store if we already have a slot (don't create orphan entries)
-        return { projectStatuses: { ...s.projectStatuses, [projectPath]: patch as ProjectStatusSummary } }
+        const next = { ...s.projectStatuses, [projectPath]: patch as ProjectStatusSummary }
+        persistStatusesDebounced(next)
+        return { projectStatuses: next }
       }
-      return {
-        projectStatuses: {
-          ...s.projectStatuses,
-          [projectPath]: { ...existing, ...patch },
-        },
+      const next = {
+        ...s.projectStatuses,
+        [projectPath]: { ...existing, ...patch },
       }
+      persistStatusesDebounced(next)
+      return { projectStatuses: next }
     })
   },
 }))

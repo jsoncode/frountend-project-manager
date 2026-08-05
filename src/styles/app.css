@@ -1316,7 +1316,7 @@ body.resizing-row * {
 .explorer-row.explorer-project-row.active.git-changed .explorer-label,
 .explorer-row.explorer-project-row.active.git-changed .explorer-icon,
 .explorer-row.explorer-project-row.active.git-changed .explorer-twist {
-  color: var(--git-modified);
+  color: var(--accent);
 }
 
 .git-file-mark {
@@ -3691,5 +3691,85 @@ button.history-chip-main:hover {
   .merge-editor-pane:last-child {
     border-bottom: none;
   }
+}
+
+/* ── Merge conflict line highlighting ── */
+.merge-conflict-line {
+  background: rgba(251, 191, 36, 0.08) !important;
+}
+
+.merge-conflict-gutter {
+  background: rgba(251, 191, 36, 0.5);
+  border-left: 3px solid #fbbf24;
+  margin-left: 4px;
+}
+
+.merge-conflict-marker-line {
+  background: rgba(251, 191, 36, 0.15) !important;
+  font-weight: 600;
+}
+
+/* ── Per-hunk floating widget ── */
+.merge-hunk-widget {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: rgba(30, 30, 30, 0.92);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  z-index: 10;
+  backdrop-filter: blur(4px);
+}
+
+.merge-hunk-widget-label {
+  font-size: 10px;
+  color: var(--muted, #858585);
+  margin-right: 4px;
+  white-space: nowrap;
+}
+
+.merge-hunk-btn {
+  font-size: 11px !important;
+  padding: 1px 6px !important;
+  line-height: 16px !important;
+  min-height: 20px !important;
+  border-radius: 3px !important;
+}
+
+.merge-hunk-btn.ours {
+  color: var(--git-modified, #e2c08d);
+  border-color: rgba(226, 192, 141, 0.4);
+}
+
+.merge-hunk-btn.theirs {
+  color: var(--cyan-soft, #5eead4);
+  border-color: rgba(94, 234, 212, 0.4);
+}
+
+.merge-hunk-btn.both {
+  color: var(--ok, #34d399);
+  border-color: rgba(52, 211, 153, 0.4);
+}
+
+.merge-hunk-btn:hover {
+  filter: brightness(1.2);
+}
+
+/* Result pane emphasis */
+.merge-editor-pane-result {
+  border-left: 2px solid rgba(251, 191, 36, 0.3);
+  border-right: 2px solid rgba(251, 191, 36, 0.3);
+}
+
+/* Toolbar separator */
+.merge-editor-toolbar-sep {
+  display: inline-block;
+  width: 1px;
+  height: 16px;
+  background: var(--border-dim);
+  margin: 0 4px;
+  vertical-align: middle;
 }
 

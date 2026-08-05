@@ -311,6 +311,8 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
             if (isGitCommand(lastCmd)) {
               setTimeout(() => {
                 void store.refreshGit()
+                // Also check for merge conflicts (e.g. after git pull)
+                void store.refreshMergeStatus()
               }, 300)
             }
           }

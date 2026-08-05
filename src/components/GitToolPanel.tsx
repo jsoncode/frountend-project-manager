@@ -12,7 +12,7 @@ import {
   Trash,
 } from 'reicon-react'
 import { invoke } from '@tauri-apps/api/core'
-import { useCallback, useState, type MouseEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react'
 import { useI18n } from '../i18n/useI18n'
 import { writeHostToTerminal } from '../lib/ptyHost'
 import type { BranchItem, GitStatus, MergeStatus } from '../lib/types'
@@ -80,6 +80,17 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
     initial: MergeStatus | null
   } | null>(null)
   const { t } = useI18n()
+
+  // Auto-show merge modal when mergeStatus is updated externally (e.g. from terminal listener after pull)
+  const autoMergeShownRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!mergeStatus?.inProgress || !selected) return
+    // Only auto-show once per merge session (avoid re-triggering on every refresh)
+    const key = `${selected.path}:${mergeStatus.current ?? ''}:${mergeStatus.incoming ?? ''}`
+    if (autoMergeShownRef.current === key) return
+    autoMergeShownRef.current = key
+    setMergeModal({ initial: mergeStatus })
+  }, [mergeStatus?.inProgress, mergeStatus?.conflictCount, selected?.path])
 
   const branchHistory =
     selected && config ? (config.branchHistory?.[selected.path] ?? []) : []
@@ -153,15 +164,24 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
         ? 'git pull --ff-only --prune; if (-not $?) { git pull --prune }'
         : `git fetch origin ${JSON.stringify(`${name}:${name}`)}`
       await runGitInTerm(command)
+    } catch (e) {
+      echoTerm(`\r\n\x1b[31m${String(e)}\x1b[0m\r\n`)
+    }
+    // Always check for merge conflicts after pull, even if the command threw.
+    try {
       await refreshGit()
+    } catch {
+      /* ignore refresh errors */
+    }
+    try {
       const status = await invoke<MergeStatus>('git_merge_status', {
         path: selected.path,
       }).catch(() => null)
       if (status && (status.inProgress || status.conflictCount > 0)) {
         setMergeModal({ initial: status })
       }
-    } catch (e) {
-      echoTerm(`\r\n\x1b[31m${String(e)}\x1b[0m\r\n`)
+    } catch {
+      /* ignore */
     } finally {
       setPulling(false)
     }
