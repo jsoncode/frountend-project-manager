@@ -76,6 +76,22 @@ export function AiModelEditorModal({ initial, onClose, onSave }: Props) {
       onClose={onClose}
       nested
       className="ai-model-editor-modal"
+      footer={
+        <div className="modal-actions">
+          <button type="button" className="ai-btn" onClick={onClose}>
+            {t('settings.close')}
+          </button>
+          <button
+            type="button"
+            className="ai-btn ai-btn-primary btn-with-icon"
+            disabled={saving}
+            onClick={() => void save()}
+          >
+            <Save className="ui-icon" size={14} color="currentColor" aria-hidden />
+            {t('ai.save')}
+          </button>
+        </div>
+      }
     >
       <p className="muted" style={{ marginTop: 0 }}>
         {t('ai.settingsHint')}
@@ -165,20 +181,6 @@ export function AiModelEditorModal({ initial, onClose, onSave }: Props) {
         </label>
       </div>
       {error ? <p className="ai-settings-error">{error}</p> : null}
-      <div className="modal-actions">
-        <button type="button" className="ai-btn" onClick={onClose}>
-          {t('settings.close')}
-        </button>
-        <button
-          type="button"
-          className="ai-btn ai-btn-primary btn-with-icon"
-          disabled={saving}
-          onClick={() => void save()}
-        >
-          <Save className="ui-icon" size={14} color="currentColor" aria-hidden />
-          {t('ai.save')}
-        </button>
-      </div>
     </ModalShell>
   )
 }

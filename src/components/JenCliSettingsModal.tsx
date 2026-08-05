@@ -293,6 +293,29 @@ function JenCliServersManageModal({
       nested
       className="jen-cli-servers-modal"
       closeOnEsc={!saving}
+      footer={
+        <div className="modal-actions">
+          <button
+            type="button"
+            className="btn"
+            disabled={saving}
+            onClick={() => void resetExample()}
+          >
+            {t('jenCli.resetExample')}
+          </button>
+          <button type="button" className="btn" disabled={saving} onClick={onClose}>
+            {t('branch.cancel')}
+          </button>
+          <button
+            type="button"
+            className="btn primary"
+            disabled={saving}
+            onClick={() => void save()}
+          >
+            {saving ? t('jenCli.saving') : t('jenCli.saveServers')}
+          </button>
+        </div>
+      }
     >
       <p className="muted" style={{ marginTop: 0 }}>
         {t('jenCli.serversHint')}
@@ -438,28 +461,6 @@ function JenCliServersManageModal({
       <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
         {t('jenCli.configPath', { path: configPath })}
       </p>
-
-      <div className="modal-actions">
-        <button
-          type="button"
-          className="btn"
-          disabled={saving}
-          onClick={() => void resetExample()}
-        >
-          {t('jenCli.resetExample')}
-        </button>
-        <button type="button" className="btn" disabled={saving} onClick={onClose}>
-          {t('branch.cancel')}
-        </button>
-        <button
-          type="button"
-          className="btn primary"
-          disabled={saving}
-          onClick={() => void save()}
-        >
-          {saving ? t('jenCli.saving') : t('jenCli.saveServers')}
-        </button>
-      </div>
     </ModalShell>
   )
 }
@@ -806,13 +807,15 @@ export function JenCliSettingsModal({ inline, onClosePanel }: JenCliSettingsModa
             </section>
           </>
         )}
-
-        <div className="modal-actions">
-          <button type="button" className="btn" onClick={handleClose}>
-            {t('settings.close')}
-          </button>
-        </div>
     </>
+  )
+
+  const contentFooter = (
+    <div className="modal-actions">
+      <button type="button" className="btn" onClick={handleClose}>
+        {t('settings.close')}
+      </button>
+    </div>
   )
 
   if (inline) {
@@ -820,6 +823,7 @@ export function JenCliSettingsModal({ inline, onClosePanel }: JenCliSettingsModa
       <>
         <div className="settings-inline-panel">
           {content}
+          {contentFooter}
         </div>
         {serversOpen && state && (
           <JenCliServersManageModal
@@ -842,6 +846,7 @@ export function JenCliSettingsModal({ inline, onClosePanel }: JenCliSettingsModa
         wide
         elevated
         className="jen-cli-settings-modal"
+        footer={contentFooter}
       >
         {content}
       </ModalShell>

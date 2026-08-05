@@ -2552,13 +2552,15 @@ button.history-chip-main:hover {
 .modal {
   width: min(720px, 92vw);
   max-height: 80vh;
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: rgba(14, 20, 34, 0.94);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-float), inset 0 1px 0 rgba(255, 255, 255, 0.06);
   backdrop-filter: blur(var(--blur-heavy));
   -webkit-backdrop-filter: blur(var(--blur-heavy));
-  padding: 16px;
+  padding: 0;
   border-radius: var(--radius-lg);
 }
 
@@ -2571,7 +2573,8 @@ button.history-chip-main:hover {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 12px;
+  padding: 16px 16px 12px;
+  flex-shrink: 0;
 }
 
 .modal-header h3 {
@@ -2616,6 +2619,19 @@ button.history-chip-main:hover {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  height: 80vh;
+}
+
+.settings-modal-root .modal-body {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+
+.settings-modal-root .settings-layout {
+  flex: 1;
+  min-height: 0;
 }
 
 .settings-layout {
@@ -2736,6 +2752,23 @@ button.history-chip-main:hover {
   padding: 12px 14px;
   font-size: 12px;
   color: var(--fg-dim, #667788);
+}
+
+.modal-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 16px 16px;
+}
+
+.modal-footer {
+  flex-shrink: 0;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-dim);
+}
+
+.modal-footer .modal-actions {
+  margin: 0;
 }
 
 /* --- Content area --- */
@@ -3446,11 +3479,15 @@ button.history-chip-main:hover {
 .file-diff-modal.modal-wide {
   width: min(1400px, 96vw);
   height: min(90vh, 800px);
-  display: flex;
-  flex-direction: column;
 }
 
-.file-diff-modal > div:last-child {
+.file-diff-modal .modal-body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.file-diff-modal .modal-body > div {
   flex: 1;
   min-height: 0;
 }
@@ -3521,8 +3558,12 @@ button.history-chip-main:hover {
 .merge-editor-modal.modal-wide {
   width: min(1600px, 98vw);
   max-height: 92vh;
+}
+
+.merge-editor-modal .modal-body {
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .merge-editor-panes {

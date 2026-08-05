@@ -118,6 +118,22 @@ export function BranchSwitchModal({ branch, onClose }: Props) {
       onClose={onClose}
       closeOnEsc={false}
       className="branch-modal"
+      footer={
+        <div className="modal-actions">
+          <button type="button" className="btn" onClick={onClose} disabled={switching}>
+            {t('branch.cancel')}
+          </button>
+          <button
+            type="button"
+            className="btn primary btn-with-icon"
+            disabled={switching || !selected}
+            onClick={() => void doSwitch()}
+          >
+            <CheckCircle className="ui-icon" size={14} color="currentColor" aria-hidden />
+            {switching ? t('branch.switching') : t('branch.confirm')}
+          </button>
+        </div>
+      }
     >
       <p className="branch-switch-path">
         <span className="muted">{t('branch.from')}</span>{' '}
@@ -152,21 +168,6 @@ export function BranchSwitchModal({ branch, onClose }: Props) {
           {error}
         </div>
       )}
-
-      <div className="modal-actions">
-        <button type="button" className="btn" onClick={onClose} disabled={switching}>
-          {t('branch.cancel')}
-        </button>
-        <button
-          type="button"
-          className="btn primary btn-with-icon"
-          disabled={switching || !selected}
-          onClick={() => void doSwitch()}
-        >
-          <CheckCircle className="ui-icon" size={14} color="currentColor" aria-hidden />
-          {switching ? t('branch.switching') : t('branch.confirm')}
-        </button>
-      </div>
     </ModalShell>
   )
 }

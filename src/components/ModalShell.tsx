@@ -9,6 +9,8 @@ type Props = {
   children: ReactNode
   className?: string
   wide?: boolean
+  /** Optional fixed footer rendered below the scrollable body. */
+  footer?: ReactNode
   /** Stack above another open modal (e.g. settings → AI models). */
   elevated?: boolean
   /** Stack above an already elevated modal (e.g. model list → editor). */
@@ -27,6 +29,7 @@ export function ModalShell({
   children,
   className = '',
   wide,
+  footer,
   elevated,
   nested,
   closeOnEsc = true,
@@ -62,7 +65,14 @@ export function ModalShell({
             </button>
           </Tooltip>
         </div>
-        {children}
+        <div className="modal-body">
+          {children}
+        </div>
+        {footer && (
+          <div className="modal-footer">
+            {footer}
+          </div>
+        )}
       </div>
     </div>
   )

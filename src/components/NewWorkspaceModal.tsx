@@ -43,6 +43,26 @@ export function NewWorkspaceModal() {
       onClose={() => {
         if (!busy) close()
       }}
+      footer={
+        <div className="modal-actions">
+          <button
+            type="button"
+            className="btn"
+            disabled={busy}
+            onClick={close}
+          >
+            {t('branch.cancel')}
+          </button>
+          <button
+            type="button"
+            className="btn primary"
+            disabled={busy || !newName.trim()}
+            onClick={() => void confirmCreate()}
+          >
+            {t('menu.newWorkspaceNext')}
+          </button>
+        </div>
+      }
     >
       <p className="muted">{t('menu.newWorkspaceHint')}</p>
       <input
@@ -56,24 +76,6 @@ export function NewWorkspaceModal() {
         }}
         disabled={busy}
       />
-      <div className="modal-actions">
-        <button
-          type="button"
-          className="btn"
-          disabled={busy}
-          onClick={close}
-        >
-          {t('branch.cancel')}
-        </button>
-        <button
-          type="button"
-          className="btn primary"
-          disabled={busy || !newName.trim()}
-          onClick={() => void confirmCreate()}
-        >
-          {t('menu.newWorkspaceNext')}
-        </button>
-      </div>
     </ModalShell>
   )
 }

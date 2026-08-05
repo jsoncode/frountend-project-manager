@@ -174,14 +174,15 @@ export function AiModelSettingsModal({ onClose, inline }: Props) {
       )}
 
       {error ? <p className="ai-settings-error">{error}</p> : null}
-      {!inline && (
-        <div className="modal-actions">
-          <button type="button" className="ai-btn" onClick={onClose}>
-            {t('settings.close')}
-          </button>
-        </div>
-      )}
     </>
+  )
+
+  const modalFooter = (
+    <div className="modal-actions">
+      <button type="button" className="ai-btn" onClick={onClose}>
+        {t('settings.close')}
+      </button>
+    </div>
   )
 
   if (inline) {
@@ -206,6 +207,26 @@ export function AiModelSettingsModal({ onClose, inline }: Props) {
             onClose={() => setPendingDelete(null)}
             nested
             closeOnEsc={false}
+            footer={
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="ai-btn"
+                  onClick={() => setPendingDelete(null)}
+                >
+                  {t('branch.cancel')}
+                </button>
+                <button
+                  type="button"
+                  className="ai-btn ai-btn-danger btn-with-icon"
+                  disabled={busy}
+                  onClick={() => void removeModel(pendingDelete)}
+                >
+                  <Trash className="ui-icon" size={14} color="currentColor" aria-hidden />
+                  {t('ai.deleteModel')}
+                </button>
+              </div>
+            }
           >
             <p className="muted">
               {t('ai.deleteModelConfirm', {
@@ -215,24 +236,6 @@ export function AiModelSettingsModal({ onClose, inline }: Props) {
                   '—',
               })}
             </p>
-            <div className="modal-actions">
-              <button
-                type="button"
-                className="ai-btn"
-                onClick={() => setPendingDelete(null)}
-              >
-                {t('branch.cancel')}
-              </button>
-              <button
-                type="button"
-                className="ai-btn ai-btn-danger btn-with-icon"
-                disabled={busy}
-                onClick={() => void removeModel(pendingDelete)}
-              >
-                <Trash className="ui-icon" size={14} color="currentColor" aria-hidden />
-                {t('ai.deleteModel')}
-              </button>
-            </div>
           </ModalShell>
         ) : null}
       </>
@@ -246,6 +249,7 @@ export function AiModelSettingsModal({ onClose, inline }: Props) {
         onClose={onClose}
         elevated
         className="ai-settings-modal"
+        footer={modalFooter}
       >
         {content}
       </ModalShell>
@@ -267,6 +271,26 @@ export function AiModelSettingsModal({ onClose, inline }: Props) {
           onClose={() => setPendingDelete(null)}
           nested
           closeOnEsc={false}
+          footer={
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="ai-btn"
+                onClick={() => setPendingDelete(null)}
+              >
+                {t('branch.cancel')}
+              </button>
+              <button
+                type="button"
+                className="ai-btn ai-btn-danger btn-with-icon"
+                disabled={busy}
+                onClick={() => void removeModel(pendingDelete)}
+              >
+                <Trash className="ui-icon" size={14} color="currentColor" aria-hidden />
+                {t('ai.deleteModel')}
+              </button>
+            </div>
+          }
         >
           <p className="muted">
             {t('ai.deleteModelConfirm', {
@@ -276,24 +300,6 @@ export function AiModelSettingsModal({ onClose, inline }: Props) {
                 '—',
             })}
           </p>
-          <div className="modal-actions">
-            <button
-              type="button"
-              className="ai-btn"
-              onClick={() => setPendingDelete(null)}
-            >
-              {t('branch.cancel')}
-            </button>
-            <button
-              type="button"
-              className="ai-btn ai-btn-danger btn-with-icon"
-              disabled={busy}
-              onClick={() => void removeModel(pendingDelete)}
-            >
-              <Trash className="ui-icon" size={14} color="currentColor" aria-hidden />
-              {t('ai.deleteModel')}
-            </button>
-          </div>
         </ModalShell>
       ) : null}
     </>

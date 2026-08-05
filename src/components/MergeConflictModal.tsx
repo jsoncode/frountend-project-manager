@@ -145,6 +145,26 @@ export function MergeConflictModal({
         wide
         className="merge-conflict-modal"
         closeOnEsc={!busy}
+        footer={status ? (
+          <div className="modal-actions merge-footer">
+            <button
+              type="button"
+              className="btn"
+              disabled={busy}
+              onClick={() => void abortMerge()}
+            >
+              {t('merge.abort')}
+            </button>
+            <button
+              type="button"
+              className="btn primary"
+              disabled={busy || (status.conflictCount ?? 0) > 0 || !status.inProgress}
+              onClick={() => setConfirmCommit(true)}
+            >
+              {t('merge.finish')}
+            </button>
+          </div>
+        ) : undefined}
       >
         {error && <div className="status-banner dirty">{error}</div>}
         {!status && !error && (
@@ -213,24 +233,6 @@ export function MergeConflictModal({
                 {t('merge.openDiff')}
               </button>
             </div>
-            <div className="modal-actions merge-footer">
-              <button
-                type="button"
-                className="btn"
-                disabled={busy}
-                onClick={() => void abortMerge()}
-              >
-                {t('merge.abort')}
-              </button>
-              <button
-                type="button"
-                className="btn primary"
-                disabled={busy || (status.conflictCount ?? 0) > 0 || !status.inProgress}
-                onClick={() => setConfirmCommit(true)}
-              >
-                {t('merge.finish')}
-              </button>
-            </div>
           </>
         )}
       </ModalShell>
@@ -253,6 +255,26 @@ export function MergeConflictModal({
           onClose={() => setConfirmCommit(false)}
           elevated
           closeOnEsc={!busy}
+          footer={
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="btn"
+                disabled={busy}
+                onClick={() => setConfirmCommit(false)}
+              >
+                {t('branch.cancel')}
+              </button>
+              <button
+                type="button"
+                className="btn primary"
+                disabled={busy}
+                onClick={() => void finishMerge()}
+              >
+                {busy ? t('merge.finishing') : t('merge.finish')}
+              </button>
+            </div>
+          }
         >
           <p className="muted">{t('merge.finishHint')}</p>
           <textarea
@@ -262,24 +284,6 @@ export function MergeConflictModal({
             onChange={(e) => setCommitMsg(e.target.value)}
             disabled={busy}
           />
-          <div className="modal-actions">
-            <button
-              type="button"
-              className="btn"
-              disabled={busy}
-              onClick={() => setConfirmCommit(false)}
-            >
-              {t('branch.cancel')}
-            </button>
-            <button
-              type="button"
-              className="btn primary"
-              disabled={busy}
-              onClick={() => void finishMerge()}
-            >
-              {busy ? t('merge.finishing') : t('merge.finish')}
-            </button>
-          </div>
         </ModalShell>
       )}
     </>

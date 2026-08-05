@@ -193,18 +193,34 @@ export function MergeDiffModal({ projectPath, file, onClose, onSaved }: Props) {
       elevated
       className="merge-diff-modal"
       closeOnEsc={!busy}
+      footer={
+        <div className="modal-actions">
+          {binary ? (
+            <button type="button" className="btn" onClick={onClose}>
+              {t('branch.cancel')}
+            </button>
+          ) : (
+            <>
+              <button type="button" className="btn" disabled={busy} onClick={tryClose}>
+                {t('branch.cancel')}
+              </button>
+              <button
+                type="button"
+                className="btn primary"
+                disabled={busy}
+                onClick={() => void save()}
+              >
+                {busy ? t('merge.saving') : t('merge.saveResolved')}
+              </button>
+            </>
+          )}
+        </div>
+      }
     >
       {error && <div className="status-banner dirty">{error}</div>}
       {loading && <div className="muted">{t('merge.loading')}</div>}
       {binary && (
-        <>
-          <div className="muted">{t('merge.binaryHint')}</div>
-          <div className="modal-actions">
-            <button type="button" className="btn" onClick={onClose}>
-              {t('branch.cancel')}
-            </button>
-          </div>
-        </>
+        <div className="muted">{t('merge.binaryHint')}</div>
       )}
       {!loading && !binary && (
         <>
@@ -250,19 +266,6 @@ export function MergeDiffModal({ projectPath, file, onClose, onSaved }: Props) {
               <div className="merge-diff-label">{t('merge.paneResult')}</div>
               <div className="merge-diff-editor" ref={resultRef} />
             </div>
-          </div>
-          <div className="modal-actions">
-            <button type="button" className="btn" disabled={busy} onClick={tryClose}>
-              {t('branch.cancel')}
-            </button>
-            <button
-              type="button"
-              className="btn primary"
-              disabled={busy}
-              onClick={() => void save()}
-            >
-              {busy ? t('merge.saving') : t('merge.saveResolved')}
-            </button>
           </div>
         </>
       )}

@@ -206,18 +206,39 @@ export function MergeEditorModal({
       elevated
       className="merge-editor-modal"
       closeOnEsc={!busy}
+      footer={
+        <div className="modal-actions">
+          {binary ? (
+            <button type="button" className="btn" onClick={onClose}>
+              {t('branch.cancel')}
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="btn"
+                disabled={busy}
+                onClick={tryClose}
+              >
+                {t('branch.cancel')}
+              </button>
+              <button
+                type="button"
+                className="btn primary"
+                disabled={busy}
+                onClick={() => void save()}
+              >
+                {busy ? t('merge.saving') : t('merge.saveResolved')}
+              </button>
+            </>
+          )}
+        </div>
+      }
     >
       {error && <div className="status-banner dirty">{error}</div>}
       {loading && <div className="muted">{t('merge.loading')}</div>}
       {binary && (
-        <>
-          <div className="muted">{t('merge.binaryHint')}</div>
-          <div className="modal-actions">
-            <button type="button" className="btn" onClick={onClose}>
-              {t('branch.cancel')}
-            </button>
-          </div>
-        </>
+        <div className="muted">{t('merge.binaryHint')}</div>
       )}
       {!loading && !binary && (
         <>
@@ -305,25 +326,6 @@ export function MergeEditorModal({
               </div>
               <div className="merge-editor-pane-body" ref={theirsRef} />
             </div>
-          </div>
-
-          <div className="modal-actions">
-            <button
-              type="button"
-              className="btn"
-              disabled={busy}
-              onClick={tryClose}
-            >
-              {t('branch.cancel')}
-            </button>
-            <button
-              type="button"
-              className="btn primary"
-              disabled={busy}
-              onClick={() => void save()}
-            >
-              {busy ? t('merge.saving') : t('merge.saveResolved')}
-            </button>
           </div>
         </>
       )}

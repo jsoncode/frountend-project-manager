@@ -141,22 +141,24 @@ export function TerminalPanel({
           title={t('term.closeRunningTitle')}
           onClose={() => setPendingCloseId(null)}
           closeOnEsc={false}
+          footer={
+            <div className="modal-actions">
+              <button type="button" className="btn" onClick={() => setPendingCloseId(null)}>
+                {t('branch.cancel')}
+              </button>
+              <button
+                type="button"
+                className="btn danger"
+                onClick={() => void confirmCloseRunning()}
+              >
+                {t('term.closeRunningConfirm')}
+              </button>
+            </div>
+          }
         >
           <p className="muted">
             {t('term.closeRunningDesc', { name: pendingClose.title })}
           </p>
-          <div className="modal-actions">
-            <button type="button" className="btn" onClick={() => setPendingCloseId(null)}>
-              {t('branch.cancel')}
-            </button>
-            <button
-              type="button"
-              className="btn danger"
-              onClick={() => void confirmCloseRunning()}
-            >
-              {t('term.closeRunningConfirm')}
-            </button>
-          </div>
         </ModalShell>
       )}
     </div>

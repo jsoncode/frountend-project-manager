@@ -125,7 +125,44 @@ export function CommitModal({
   }
 
   return (
-    <ModalShell title={t('git.commitTitle')} onClose={onClose}>
+    <ModalShell
+      title={t('git.commitTitle')}
+      onClose={onClose}
+      footer={
+        <div className="modal-actions">
+          <button
+            type="button"
+            className="btn"
+            onClick={onClose}
+            disabled={busy}
+          >
+            {t('branch.cancel')}
+          </button>
+          {showPush && (
+            <button
+              type="button"
+              className="btn primary btn-with-icon"
+              disabled={!commitMsg.trim() || busy}
+              onClick={() => void doCommit(true)}
+            >
+              {busy && busyLabel === t('git.pushing')
+                ? busyLabel
+                : t('git.commitPush')}
+            </button>
+          )}
+          <button
+            type="button"
+            className="btn primary btn-with-icon"
+            disabled={!commitMsg.trim() || busy}
+            onClick={() => void doCommit(false)}
+          >
+            {busy && busyLabel === t('git.committing')
+              ? busyLabel
+              : t('git.ctx.commit').replace('…', '')}
+          </button>
+        </div>
+      }
+    >
       <p className="muted">
         {showPush
           ? t('git.commitPushHint', { name: branch })
@@ -162,38 +199,6 @@ export function CommitModal({
         disabled={busy}
         autoFocus
       />
-      <div className="modal-actions">
-        <button
-          type="button"
-          className="btn"
-          onClick={onClose}
-          disabled={busy}
-        >
-          {t('branch.cancel')}
-        </button>
-        {showPush && (
-          <button
-            type="button"
-            className="btn primary btn-with-icon"
-            disabled={!commitMsg.trim() || busy}
-            onClick={() => void doCommit(true)}
-          >
-            {busy && busyLabel === t('git.pushing')
-              ? busyLabel
-              : t('git.commitPush')}
-          </button>
-        )}
-        <button
-          type="button"
-          className="btn primary btn-with-icon"
-          disabled={!commitMsg.trim() || busy}
-          onClick={() => void doCommit(false)}
-        >
-          {busy && busyLabel === t('git.committing')
-            ? busyLabel
-            : t('git.ctx.commit').replace('…', '')}
-        </button>
-      </div>
     </ModalShell>
   )
 }

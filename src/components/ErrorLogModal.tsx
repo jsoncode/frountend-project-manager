@@ -16,13 +16,15 @@ export function ErrorLogModal() {
       onClose={clear}
       elevated
       className="error-log-modal"
+      footer={
+        <div className="modal-actions">
+          <button type="button" className="btn primary" onClick={clear}>
+            {t('settings.close')}
+          </button>
+        </div>
+      }
     >
       <pre className="error-log-body">{message}</pre>
-      <div className="modal-actions">
-        <button type="button" className="btn primary" onClick={clear}>
-          {t('settings.close')}
-        </button>
-      </div>
     </ModalShell>
   )
 }

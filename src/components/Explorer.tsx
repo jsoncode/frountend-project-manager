@@ -866,29 +866,31 @@ export function Explorer() {
           title={t('ws.removeTitle')}
           onClose={() => setPendingRemove(null)}
           closeOnEsc={false}
+          footer={
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setPendingRemove(null)}
+              >
+                {t('branch.cancel')}
+              </button>
+              <button
+                type="button"
+                className="btn danger btn-with-icon"
+                onClick={() => void confirmRemove()}
+              >
+                <Trash className="ui-icon" size={14} color="currentColor" aria-hidden />
+                {t('ws.remove')}
+              </button>
+            </div>
+          }
         >
           <p className="muted">
             {t('ws.removeConfirm', {
               name: shortWorkspaceName(pendingRemove),
             })}
           </p>
-          <div className="modal-actions">
-            <button
-              type="button"
-              className="btn"
-              onClick={() => setPendingRemove(null)}
-            >
-              {t('branch.cancel')}
-            </button>
-            <button
-              type="button"
-              className="btn danger btn-with-icon"
-              onClick={() => void confirmRemove()}
-            >
-              <Trash className="ui-icon" size={14} color="currentColor" aria-hidden />
-              {t('ws.remove')}
-            </button>
-          </div>
         </ModalShell>
       )}
     </div>

@@ -761,6 +761,30 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
         <ModalShell
           title={t('git.newBranchTitle')}
           onClose={() => setCreateState(null)}
+          footer={
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setCreateState(null)}
+                disabled={branchBusy}
+              >
+                {t('branch.cancel')}
+              </button>
+              <button
+                type="button"
+                className="btn primary"
+                disabled={
+                  branchBusy ||
+                  !createState.name.trim() ||
+                  createNameTaken
+                }
+                onClick={() => void doCreateBranch()}
+              >
+                {branchBusy ? t('git.creatingBranch') : t('git.ctx.newBranch')}
+              </button>
+            </div>
+          }
         >
           <p className="muted">
             {t('git.newBranchHint', { name: createState.from })}
@@ -791,28 +815,6 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
               {branchError}
             </div>
           )}
-          <div className="modal-actions">
-            <button
-              type="button"
-              className="btn"
-              onClick={() => setCreateState(null)}
-              disabled={branchBusy}
-            >
-              {t('branch.cancel')}
-            </button>
-            <button
-              type="button"
-              className="btn primary"
-              disabled={
-                branchBusy ||
-                !createState.name.trim() ||
-                createNameTaken
-              }
-              onClick={() => void doCreateBranch()}
-            >
-              {branchBusy ? t('git.creatingBranch') : t('git.ctx.newBranch')}
-            </button>
-          </div>
         </ModalShell>
       )}
 
@@ -821,6 +823,26 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
           title={t('git.deleteBranchTitle')}
           onClose={() => setDeleteState(null)}
           closeOnEsc={false}
+          footer={
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setDeleteState(null)}
+                disabled={branchBusy}
+              >
+                {t('branch.cancel')}
+              </button>
+              <button
+                type="button"
+                className="btn danger"
+                disabled={branchBusy}
+                onClick={() => void doDeleteBranch()}
+              >
+                {branchBusy ? t('git.deletingBranch') : t('git.ctx.deleteBranch')}
+              </button>
+            </div>
+          }
         >
           <p className="muted">
             {deleteState.branch.isRemote
@@ -850,24 +872,6 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
               {branchError}
             </div>
           )}
-          <div className="modal-actions">
-            <button
-              type="button"
-              className="btn"
-              onClick={() => setDeleteState(null)}
-              disabled={branchBusy}
-            >
-              {t('branch.cancel')}
-            </button>
-            <button
-              type="button"
-              className="btn danger"
-              disabled={branchBusy}
-              onClick={() => void doDeleteBranch()}
-            >
-              {branchBusy ? t('git.deletingBranch') : t('git.ctx.deleteBranch')}
-            </button>
-          </div>
         </ModalShell>
       )}
 
@@ -877,6 +881,34 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
           onClose={() => setDirtyConfirm(null)}
           closeOnEsc={false}
           className="branch-modal"
+          footer={
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setDirtyConfirm(null)}
+                disabled={!!switchingBranch}
+              >
+                {t('branch.cancel')}
+              </button>
+              <button
+                type="button"
+                className="btn primary btn-with-icon"
+                disabled={!!switchingBranch}
+                onClick={() => void doDirtySwitch()}
+              >
+                <CheckCircle
+                  className="ui-icon"
+                  size={14}
+                  color="currentColor"
+                  aria-hidden
+                />
+                {switchingBranch
+                  ? t('branch.switching')
+                  : t('branch.confirm')}
+              </button>
+            </div>
+          }
         >
           <p className="branch-switch-path">
             <span className="muted">{t('branch.from')}</span>{' '}
@@ -906,32 +938,6 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
                 </div>
               ))}
             </div>
-          </div>
-          <div className="modal-actions">
-            <button
-              type="button"
-              className="btn"
-              onClick={() => setDirtyConfirm(null)}
-              disabled={!!switchingBranch}
-            >
-              {t('branch.cancel')}
-            </button>
-            <button
-              type="button"
-              className="btn primary btn-with-icon"
-              disabled={!!switchingBranch}
-              onClick={() => void doDirtySwitch()}
-            >
-              <CheckCircle
-                className="ui-icon"
-                size={14}
-                color="currentColor"
-                aria-hidden
-              />
-              {switchingBranch
-                ? t('branch.switching')
-                : t('branch.confirm')}
-            </button>
           </div>
         </ModalShell>
       )}

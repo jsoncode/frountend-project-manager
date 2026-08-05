@@ -449,28 +449,30 @@ export function IdeSettingsModal({ inline, onClosePanel }: IdeSettingsModalProps
             title={t('ide.delTitle')}
             onClose={() => setPendingDelete(null)}
             closeOnEsc={false}
+            footer={
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => setPendingDelete(null)}
+                >
+                  {t('ide.cancel')}
+                </button>
+                <button
+                  type="button"
+                  className="btn danger"
+                  onClick={confirmDelete}
+                >
+                  {t('ide.del')}
+                </button>
+              </div>
+            }
           >
             <p className="muted">
               {t('ide.delConfirm', {
                 name: pendingDelete.name || pendingDelete.id,
               })}
             </p>
-            <div className="modal-actions">
-              <button
-                type="button"
-                className="btn"
-                onClick={() => setPendingDelete(null)}
-              >
-                {t('ide.cancel')}
-              </button>
-              <button
-                type="button"
-                className="btn danger"
-                onClick={confirmDelete}
-              >
-                {t('ide.del')}
-              </button>
-            </div>
           </ModalShell>
         )}
       </>
@@ -479,9 +481,8 @@ export function IdeSettingsModal({ inline, onClosePanel }: IdeSettingsModalProps
 
   return (
     <>
-      <ModalShell title={t('ide.title')} onClose={close} wide>
+      <ModalShell title={t('ide.title')} onClose={close} wide footer={modalActions}>
         {content}
-        {modalActions}
       </ModalShell>
 
       {pickerOpen && (
@@ -503,28 +504,30 @@ export function IdeSettingsModal({ inline, onClosePanel }: IdeSettingsModalProps
           title={t('ide.delTitle')}
           onClose={() => setPendingDelete(null)}
           closeOnEsc={false}
+          footer={
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setPendingDelete(null)}
+              >
+                {t('ide.cancel')}
+              </button>
+              <button
+                type="button"
+                className="btn danger"
+                onClick={confirmDelete}
+              >
+                {t('ide.del')}
+              </button>
+            </div>
+          }
         >
           <p className="muted">
             {t('ide.delConfirm', {
               name: pendingDelete.name || pendingDelete.id,
             })}
           </p>
-          <div className="modal-actions">
-            <button
-              type="button"
-              className="btn"
-              onClick={() => setPendingDelete(null)}
-            >
-              {t('ide.cancel')}
-            </button>
-            <button
-              type="button"
-              className="btn danger"
-              onClick={confirmDelete}
-            >
-              {t('ide.del')}
-            </button>
-          </div>
         </ModalShell>
       )}
     </>
@@ -564,7 +567,25 @@ function IdePickerModal({
   }, [editors, query])
 
   return (
-    <ModalShell title={t('ide.pickTitle')} onClose={onClose}>
+    <ModalShell
+      title={t('ide.pickTitle')}
+      onClose={onClose}
+      footer={
+        <div className="modal-actions">
+          <button type="button" className="btn btn-with-icon" onClick={onManual}>
+            <FolderOpen className="ui-icon" size={14} color="currentColor" aria-hidden />
+            {t('ide.pickManual')}
+          </button>
+          <button type="button" className="btn btn-with-icon" onClick={onBlank}>
+            <Add className="ui-icon" size={14} color="currentColor" aria-hidden />
+            {t('ide.pickBlank')}
+          </button>
+          <button type="button" className="btn" onClick={onClose}>
+            {t('ide.cancel')}
+          </button>
+        </div>
+      }
+    >
       <p className="muted">{t('ide.pickHint')}</p>
       <p className="muted" style={{ fontSize: 12, marginTop: -4 }}>
         {t('ide.envHint')}
@@ -609,19 +630,6 @@ function IdePickerModal({
               </button>
             )
           })}
-      </div>
-      <div className="modal-actions">
-        <button type="button" className="btn btn-with-icon" onClick={onManual}>
-          <FolderOpen className="ui-icon" size={14} color="currentColor" aria-hidden />
-          {t('ide.pickManual')}
-        </button>
-        <button type="button" className="btn btn-with-icon" onClick={onBlank}>
-          <Add className="ui-icon" size={14} color="currentColor" aria-hidden />
-          {t('ide.pickBlank')}
-        </button>
-        <button type="button" className="btn" onClick={onClose}>
-          {t('ide.cancel')}
-        </button>
       </div>
     </ModalShell>
   )
