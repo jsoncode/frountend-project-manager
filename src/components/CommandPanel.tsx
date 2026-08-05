@@ -1,5 +1,6 @@
-import { Play, Trash } from 'reicon-react'
+import { Play, Refresh, Search, Shield, Trash, Tree } from 'reicon-react'
 import { useState, type MouseEvent } from 'react'
+import type { MessageKey } from '../i18n/messages'
 import { useI18n } from '../i18n/useI18n'
 import { useProjectStore } from '../stores/projectStore'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -7,6 +8,17 @@ import { useTerminalStore } from '../stores/terminalStore'
 import { ContextMenuPortal } from './ContextMenuPortal'
 import { HistoryChips } from './HistoryChips'
 import { Tooltip } from './Tooltip'
+
+type CommonCmd = { key: MessageKey; icon: typeof Play; cmd: (pm: string) => string }
+
+const COMMON_COMMANDS: CommonCmd[] = [
+  { key: 'cmd.outdated', icon: Search, cmd: (pm) => `${pm} outdated` },
+  { key: 'cmd.update', icon: Refresh, cmd: (pm) => `${pm} update` },
+  { key: 'cmd.updateLatest', icon: Refresh, cmd: (pm) => `${pm} update --latest` },
+  { key: 'cmd.list', icon: Tree, cmd: (pm) => `${pm} list --depth 3` },
+  { key: 'cmd.audit', icon: Shield, cmd: (pm) => `${pm} audit` },
+  { key: 'cmd.storePrune', icon: Trash, cmd: (pm) => `${pm} store prune` },
+]
 
 /** npm/pnpm/yarn scripts — shown inside the action bar. */
 export function CommandPanel({ filterQuery = '' }: { filterQuery?: string }) {
@@ -36,6 +48,26 @@ export function CommandPanel({ filterQuery = '' }: { filterQuery?: string }) {
 
   return (
     <div className="command-panel-side">
+      <div className="pane-sub">{t('cmd.common')}</div>
+      <div className="script-list">
+        {COMMON_COMMANDS.filter((c) => match(t(c.key))).map((c) => {
+          const Icon = c.icon
+          const command = c.cmd(pm)
+          return (
+            <Tooltip key={c.key} title={command}>
+              <button
+                type="button"
+                className="script-list-item btn-with-icon"
+                onClick={() => void runRaw(selected.path, selected.folderName, command)}
+              >
+                <Icon className="ui-icon" size={11} color="currentColor" aria-hidden />
+                <span className="script-list-name">{t(c.key)}</span>
+              </button>
+            </Tooltip>
+          )
+        })}
+      </div>
+
       <div className="pane-sub">
         {t('cmd.title')} · {pm}
       </div>
