@@ -7,6 +7,11 @@ import { useSettingsStore } from './settingsStore'
 export type ProjectStatusSummary = {
   changedFiles: number
   behind: number
+  currentBranch?: string
+  /** Full git info (branches list) — cached from scan or selectProject. */
+  gitInfo?: GitInfo | null
+  /** Full git status (entries) — cached from scan or selectProject. */
+  gitStatus?: GitStatus | null
 }
 
 type WorkspaceState = {
@@ -19,6 +24,10 @@ type WorkspaceState = {
   projectStatuses: Record<string, ProjectStatusSummary>
   /** True while scanning all project statuses in a workspace. */
   scanningStatuses: boolean
+  /** Scan progress: how many projects done vs total. */
+  scanningProgress: { done: number; total: number }
+  /** Set of project paths currently being scanned (loading). */
+  scanningProjects: Set<string>
   loading: boolean
   /** True while filling missing workspace caches for cross-ws search. */
   searchScanning: boolean
@@ -43,6 +52,8 @@ type WorkspaceState = {
   dropWorkspaceCache: (path: string) => void
   /** Scan git status for all projects in a workspace. */
   scanAllProjectStatuses: (workspace: string) => Promise<void>
+  /** Update a single project's cached status (for sync from projectStore). */
+  updateProjectStatus: (projectPath: string, patch: Partial<ProjectStatusSummary>) => void
 }
 
 async function scanWorkspace(workspace: string): Promise<ProjectSummary[]> {
@@ -62,6 +73,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   projectCache: {},
   projectStatuses: {},
   scanningStatuses: false,
+  scanningProgress: { done: 0, total: 0 },
+  scanningProjects: new Set(),
   loading: false,
   searchScanning: false,
   error: null,
@@ -256,7 +269,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     if (!workspace) return
     const projects = get().projectCache[workspace]
     if (!projects || projects.length === 0) return
-    set({ scanningStatuses: true })
+    const total = projects.length
+    const scanningProjects = new Set(projects.map((p) => p.path))
+    set({ scanningStatuses: true, scanningProgress: { done: 0, total }, scanningProjects })
     try {
       const results = await Promise.all(
         projects.map(async (p) => {
@@ -266,17 +281,32 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
               invoke<GitInfo | null>('git_branches', { path: p.path }).catch(() => null),
             ])
             const changedFiles = gitStatus ? gitStatus.entries.length : 0
+            // Current branch name (prefer gitInfo, fallback to gitStatus)
+            const rawBranch = gitInfo?.current ?? gitStatus?.current
+            const currentBranch = (rawBranch && rawBranch !== 'HEAD') ? rawBranch : undefined
             // Find current branch behind count
             let behind = 0
             if (gitInfo?.current && gitInfo.branches) {
-              const currentBranch = gitInfo.branches.find(
+              const currentBranchItem = gitInfo.branches.find(
                 (b) => b.name === gitInfo.current && !b.isRemote
               )
-              behind = currentBranch?.behind ?? 0
+              behind = currentBranchItem?.behind ?? 0
             }
-            return [p.path, { changedFiles, behind }] as const
+            return [p.path, { changedFiles, behind, currentBranch, gitInfo, gitStatus }] as const
           } catch {
             return [p.path, { changedFiles: 0, behind: 0 }] as const
+          } finally {
+            // Mark this project as done
+            set((s) => {
+              const next = new Set(s.scanningProjects)
+              next.delete(p.path)
+              const done = total - next.size
+              return {
+                scanningProjects: next,
+                scanningProgress: { done, total },
+                scanningStatuses: next.size > 0 ? s.scanningStatuses : false,
+              }
+            })
           }
         }),
       )
@@ -285,10 +315,25 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         for (const [path, summary] of results) {
           projectStatuses[path] = summary
         }
-        return { projectStatuses, scanningStatuses: false }
+        return { projectStatuses, scanningStatuses: false, scanningProjects: new Set() }
       })
     } catch {
-      set({ scanningStatuses: false })
+      set({ scanningStatuses: false, scanningProjects: new Set() })
     }
+  },
+  updateProjectStatus: (projectPath, patch) => {
+    set((s) => {
+      const existing = s.projectStatuses[projectPath]
+      if (!existing) {
+        // Only store if we already have a slot (don't create orphan entries)
+        return { projectStatuses: { ...s.projectStatuses, [projectPath]: patch as ProjectStatusSummary } }
+      }
+      return {
+        projectStatuses: {
+          ...s.projectStatuses,
+          [projectPath]: { ...existing, ...patch },
+        },
+      }
+    })
   },
 }))

@@ -1,7 +1,11 @@
 import {
   ArrowDown,
+  ArrowRight,
   ArrowSwapHorizontal,
   ArrowUp,
+  BranchDown,
+  BranchUp,
+  CheckCircle,
   ChevronDown,
   ChevronRight,
   Document,
@@ -20,12 +24,13 @@ import {
 } from 'react'
 import { useI18n } from '../i18n/useI18n'
 import {
+  buildGitDecorationIndex,
   normalizeFsPath,
   toProjectRelative,
   unquoteGitPath,
 } from '../lib/gitDecorations'
 import { projectMatchesQuery } from '../lib/projectSearch'
-import type { ProjectSummary } from '../lib/types'
+import type { GitInfo, GitStatus, ProjectSummary } from '../lib/types'
 import {
   findWorkspaceForPath,
   shortWorkspaceName,
@@ -33,6 +38,7 @@ import {
 import { useExplorerStore } from '../stores/explorerStore'
 import { useProjectStore } from '../stores/projectStore'
 import { useSettingsStore } from '../stores/settingsStore'
+import { useTerminalStore } from '../stores/terminalStore'
 import { useWorkspaceStore } from '../stores/workspaceStore'
 import { CommitModal } from './CommitModal'
 import { ContextMenuPortal } from './ContextMenuPortal'
@@ -68,6 +74,8 @@ export function Explorer() {
   const projectCache = useWorkspaceStore((s) => s.projectCache)
   const projectStatuses = useWorkspaceStore((s) => s.projectStatuses)
   const scanningStatuses = useWorkspaceStore((s) => s.scanningStatuses)
+  const scanningProgress = useWorkspaceStore((s) => s.scanningProgress)
+  const scanningProjects = useWorkspaceStore((s) => s.scanningProjects)
   const scanAllProjectStatuses = useWorkspaceStore((s) => s.scanAllProjectStatuses)
   const error = useWorkspaceStore((s) => s.error)
   const search = useWorkspaceStore((s) => s.search)
@@ -100,6 +108,10 @@ export function Explorer() {
   const [commitEntry, setCommitEntry] = useState<{ path: string; projectPath: string } | null>(null)
   const [diffFile, setDiffFile] = useState<{ filePath: string; projectPath: string; compareFilePath?: string } | null>(null)
   const [diffDirList, setDiffDirList] = useState<{ dirPath: string; projectPath: string; files: { absPath: string; relPath: string; label: string }[] } | null>(null)
+  // Git info for project context menu
+  const [projGitInfo, setProjGitInfo] = useState<{ path: string; info: GitInfo | null } | null>(null)
+  const [branchSwitchTarget, setBranchSwitchTarget] = useState<{ projectPath: string; branch: string } | null>(null)
+  const [gitLoading, setGitLoading] = useState(false)
   const rowRefs = useRef(new Map<string, HTMLButtonElement>())
 
   // Debounce click vs dblclick for workspace/project/dir toggle
@@ -214,6 +226,104 @@ export function Explorer() {
       setActiveWorkspace(next[0] ?? null)
     }
     setPendingRemove(null)
+  }
+
+  // ── Git helpers for project context menu ──
+  const projGitCurrent = projGitInfo?.info?.current ?? undefined
+  const projLocalName = (name: string) =>
+    name.replace(/^remotes\//, '').replace(/^origin\//, '')
+
+  const projRunGit = (projectPath: string, command: string) => {
+    const proj = findProject(projectPath)
+    const name = proj?.folderName ?? projectPath.split('/').pop() ?? projectPath
+    void useTerminalStore.getState().runRaw(projectPath, name, command)
+  }
+
+  const projRunGitInTerm = async (projectPath: string, command: string) => {
+    const proj = findProject(projectPath)
+    const name = proj?.folderName ?? projectPath.split('/').pop() ?? projectPath
+    const { ensureRunTarget, runInSession, waitUntilIdle } = useTerminalStore.getState()
+    const id = ensureRunTarget(projectPath, name)
+    await runInSession(id, projectPath, command)
+    await waitUntilIdle(id)
+  }
+
+  const fetchProjGitInfo = useCallback(async (projectPath: string) => {
+    // First check workspaceStore cache (populated by scanAllProjectStatuses or selectProject)
+    const cached = useWorkspaceStore.getState().projectStatuses[projectPath]
+    if (cached?.gitInfo) {
+      setProjGitInfo({ path: projectPath, info: cached.gitInfo })
+      return
+    }
+    setGitLoading(true)
+    try {
+      const info = await invoke<GitInfo | null>('git_branches', { path: projectPath }).catch(() => null)
+      setProjGitInfo({ path: projectPath, info })
+      // Cache for next time
+      if (info) {
+        useWorkspaceStore.getState().updateProjectStatus(projectPath, {
+          gitInfo: info,
+          currentBranch: (info.current && info.current !== 'HEAD') ? info.current : undefined,
+        })
+      }
+    } catch {
+      setProjGitInfo({ path: projectPath, info: null })
+    } finally {
+      setGitLoading(false)
+    }
+  }, [])
+
+  /** Refresh git info after branch switch and sync to workspaceStore cache. */
+  const refreshProjGitAfterSwitch = async (projectPath: string) => {
+    try {
+      const [info, status] = await Promise.all([
+        invoke<GitInfo | null>('git_branches', { path: projectPath }).catch(() => null),
+        invoke<GitStatus>('git_status', { path: projectPath }).catch(() => null),
+      ])
+      const rawBranch = info?.current ?? status?.current
+      const currentBranch = (rawBranch && rawBranch !== 'HEAD') ? rawBranch : undefined
+      let behind = 0
+      if (info?.current && info.branches) {
+        const cur = info.branches.find((b) => b.name === info.current && !b.isRemote)
+        behind = cur?.behind ?? 0
+      }
+      useWorkspaceStore.getState().updateProjectStatus(projectPath, {
+        gitInfo: info,
+        gitStatus: status,
+        currentBranch,
+        changedFiles: status ? status.entries.length : undefined,
+        behind,
+      })
+      // Also update projGitInfo so the context menu reflects new state
+      setProjGitInfo({ path: projectPath, info })
+      // If this is the currently selected project, sync projectStore too (ActionBar branch panel)
+      const ps = useProjectStore.getState()
+      if (ps.selected?.path === projectPath) {
+        useProjectStore.setState({
+          git: info ?? null,
+          gitStatus: status,
+          gitDecorations: status ? buildGitDecorationIndex(projectPath, status.entries) : ps.gitDecorations,
+        })
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const handleProjBranchSwitch = async (projectPath: string, branchName: string) => {
+    setMenu(null)
+    try {
+      const s = await invoke<GitStatus>('git_status', { path: projectPath })
+      if (s.clean) {
+        await invoke<string>('git_checkout', { path: projectPath, branch: branchName })
+        await useSettingsStore.getState().touchBranchHistory(projectPath, branchName)
+        await refreshProjGitAfterSwitch(projectPath)
+      } else {
+        setBranchSwitchTarget({ projectPath, branch: branchName })
+      }
+    } catch (e) {
+      projRunGit(projectPath, `echo "${String(e)}"`)
+    }
   }
 
   const onToggleWorkspace = (ws: string) => {
@@ -546,6 +656,15 @@ export function Explorer() {
                 </span>
               </button>
 
+              {wsOpen && scanningStatuses && scanningProgress.total > 0 && (
+                <div className="explorer-scan-progress" title={`${scanningProgress.done}/${scanningProgress.total}`}>
+                  <div
+                    className="explorer-scan-progress-bar"
+                    style={{ width: `${(scanningProgress.done / scanningProgress.total) * 100}%` }}
+                  />
+                </div>
+              )}
+
               {wsOpen &&
                 projects.map((p) => {
                   const projId = `proj:${p.path}`
@@ -561,7 +680,9 @@ export function Explorer() {
                   const changedFiles = statusSummary?.changedFiles ??
                     (isSelectedProject ? (gitDecorations.dirs[''] ?? 0) : 0)
                   const behind = statusSummary?.behind ?? 0
+                  const currentBranch = statusSummary?.currentBranch
                   const projGitDirty = changedFiles > 0
+                  const isScanning = scanningProjects.has(p.path)
 
                   return (
                     <div key={p.path}>
@@ -586,6 +707,7 @@ export function Explorer() {
                               x: e.clientX,
                               y: e.clientY,
                             })
+                            void fetchProjGitInfo(p.path)
                           }}
                         >
                         <span
@@ -598,14 +720,29 @@ export function Explorer() {
                             <ChevronRight size={12} color="currentColor" />
                           )}
                         </span>
-                        <Folder2
-                          className="explorer-icon"
-                          size={14}
-                          color="currentColor"
-                          weight={projOpen ? 'Filled' : 'Outline'}
-                          aria-hidden
-                        />
+                        {isScanning ? (
+                          <Refresh
+                            className="explorer-icon ui-icon is-spinning"
+                            size={14}
+                            color="currentColor"
+                            aria-hidden
+                          />
+                        ) : (
+                          <Folder2
+                            className="explorer-icon"
+                            size={14}
+                            color="currentColor"
+                            weight={projOpen ? 'Filled' : 'Outline'}
+                            aria-hidden
+                          />
+                        )}
                         <span className="explorer-label">{p.folderName}</span>
+                        {currentBranch && (
+                          <span className="proj-branch-label" title={currentBranch}>
+                            <BranchUp className="ui-icon" size={11} color="currentColor" aria-hidden />
+                            {currentBranch}
+                          </span>
+                        )}
                         {changedFiles > 0 ? (
                           <span className="proj-status-badge proj-status-changed" title={`${changedFiles} changed files`}>
                             <ArrowUp className="ui-icon" size={10} color="currentColor" aria-hidden />
@@ -714,6 +851,134 @@ export function Explorer() {
             <Pen className="ui-icon" size={14} color="currentColor" aria-hidden />
             {t('explorer.commitChanges')}
           </button>
+          <div className="branch-menu-sep" />
+          <button
+            type="button"
+            role="menuitem"
+            className="btn-with-icon"
+            onClick={() => {
+              projRunGit(menu.path, 'git status')
+              setMenu(null)
+            }}
+          >
+            <CheckCircle className="ui-icon" size={14} color="currentColor" aria-hidden />
+            {t('git.ctx.status')}
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="btn-with-icon"
+            onClick={() => {
+              const branch = projGitCurrent ?? 'HEAD'
+              projRunGit(menu.path, `git log --format="%h %s (%ar)" -10 ${branch}`)
+              setMenu(null)
+            }}
+          >
+            <Document className="ui-icon" size={14} color="currentColor" aria-hidden />
+            {t('git.ctx.log')}
+          </button>
+          <div className="branch-menu-sep" />
+          <button
+            type="button"
+            role="menuitem"
+            className="btn-with-icon"
+            onClick={() => {
+              setMenu(null)
+              void (async () => {
+                try {
+                  await projRunGitInTerm(menu.path, 'git fetch --all --prune')
+                } catch { /* ignore */ }
+              })()
+            }}
+          >
+            <Refresh className="ui-icon" size={14} color="currentColor" aria-hidden />
+            {t('git.ctx.fetch')}
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="btn-with-icon"
+            onClick={() => {
+              setMenu(null)
+              void (async () => {
+                try {
+                  await projRunGitInTerm(menu.path, 'git pull --ff-only --prune; if (-not $?) { git pull --prune }')
+                } catch { /* ignore */ }
+              })()
+            }}
+          >
+            <ArrowDown className="ui-icon" size={14} color="currentColor" aria-hidden />
+            {t('git.ctx.pull')}
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="btn-with-icon"
+            onClick={() => {
+              setMenu(null)
+              projRunGit(menu.path, 'git push')
+            }}
+          >
+            <ArrowUp className="ui-icon" size={14} color="currentColor" aria-hidden />
+            {t('git.ctx.push')}
+          </button>
+          {/* Branch submenu */}
+          {projGitInfo?.info && projGitInfo.path === menu.path && (
+            <>
+              <div className="branch-menu-sep" />
+              {projGitInfo.info.branches
+                .filter((b) => !b.isRemote)
+                .filter((b) => b.name !== projGitCurrent)
+                .slice(0, 10)
+                .map((b) => (
+                  <button
+                    key={b.name}
+                    type="button"
+                    role="menuitem"
+                    className="btn-with-icon"
+                    onClick={() => void handleProjBranchSwitch(menu.path, b.name)}
+                  >
+                    <BranchDown className="ui-icon" size={14} color="currentColor" aria-hidden />
+                    {t('git.ctx.checkout')} {b.name}
+                  </button>
+                ))}
+              {projGitInfo.info.branches.filter((b) => b.isRemote).length > 0 && (
+                <>
+                  <div className="branch-menu-sep" />
+                  <span className="muted" style={{ fontSize: 10, padding: '2px 8px' }}>
+                    {t('git.remoteBranches')}
+                  </span>
+                  {projGitInfo.info.branches
+                    .filter((b) => b.isRemote)
+                    .slice(0, 5)
+                    .map((b) => (
+                      <button
+                        key={b.name}
+                        type="button"
+                        role="menuitem"
+                        className="btn-with-icon"
+                        onClick={() => void handleProjBranchSwitch(menu.path, b.name)}
+                      >
+                        <ArrowRight className="ui-icon" size={14} color="currentColor" aria-hidden />
+                        {t('git.ctx.checkout')} {projLocalName(b.name)}
+                      </button>
+                    ))}
+                </>
+              )}
+              {gitLoading && (
+                <span className="muted" style={{ fontSize: 10, padding: '2px 8px' }}>
+                  <Refresh className="ui-icon is-spinning" size={10} color="currentColor" aria-hidden />
+                  {t('ws.scanningStatuses')}
+                </span>
+              )}
+            </>
+          )}
+          {!projGitInfo && gitLoading && (
+            <span className="muted" style={{ fontSize: 10, padding: '2px 8px' }}>
+              <Refresh className="ui-icon is-spinning" size={10} color="currentColor" aria-hidden />
+              {t('ws.scanningStatuses')}
+            </span>
+          )}
         </OpenWithMenu>
       )}
 
@@ -890,6 +1155,50 @@ export function Explorer() {
             {t('ws.removeConfirm', {
               name: shortWorkspaceName(pendingRemove),
             })}
+          </p>
+        </ModalShell>
+      )}
+
+      {branchSwitchTarget && (
+        <ModalShell
+          title={t('branch.confirmTitle')}
+          onClose={() => setBranchSwitchTarget(null)}
+          closeOnEsc={false}
+          footer={
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setBranchSwitchTarget(null)}
+              >
+                {t('branch.cancel')}
+              </button>
+              <button
+                type="button"
+                className="btn primary btn-with-icon"
+                onClick={() => {
+                  if (!branchSwitchTarget) return
+                  const { projectPath, branch } = branchSwitchTarget
+                  setBranchSwitchTarget(null)
+                  void (async () => {
+                    try {
+                      await invoke<string>('git_checkout', { path: projectPath, branch })
+                      await useSettingsStore.getState().touchBranchHistory(projectPath, branch)
+                      await refreshProjGitAfterSwitch(projectPath)
+                    } catch (e) {
+                      projRunGit(projectPath, `echo "${String(e)}"`)
+                    }
+                  })()
+                }}
+              >
+                <ArrowRight className="ui-icon" size={14} color="currentColor" aria-hidden />
+                {t('branch.confirm')}
+              </button>
+            </div>
+          }
+        >
+          <p className="muted">
+            {t('branch.dirtyDesc', { count: '…' })}
           </p>
         </ModalShell>
       )}

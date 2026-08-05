@@ -51,6 +51,7 @@ type DeleteState = {
 export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
   const selected = useProjectStore((s) => s.selected)
   const git = useProjectStore((s) => s.git)
+  const gitStatus = useProjectStore((s) => s.gitStatus)
   const mergeStatus = useProjectStore((s) => s.mergeStatus)
   const refreshGit = useProjectStore((s) => s.refreshGit)
   const refreshMergeStatus = useProjectStore((s) => s.refreshMergeStatus)
@@ -331,6 +332,8 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
     }
   }
 
+  const changedFilesCount = gitStatus?.entries.length ?? 0
+
   const renderBranch = (b: BranchItem) => {
     const isCurrent = !b.isRemote && git?.current === b.name
     const isSwitching = switchingBranch === b.name
@@ -378,6 +381,14 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
             )}
           </span>
           <span className="branch-name">{b.name}</span>
+          {isCurrent && changedFilesCount > 0 && (
+            <Tooltip title={t('git.changedFilesHint', { n: changedFilesCount })}>
+              <span className="branch-badge changed">
+                <ArrowUp className="inline-icon" size={10} color="currentColor" aria-hidden />
+                {changedFilesCount}
+              </span>
+            </Tooltip>
+          )}
           {isCurrent && mergeStatus?.inProgress && (
             <Tooltip title={t('git.ctx.continueMerge')}>
               <span

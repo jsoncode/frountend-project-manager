@@ -1383,6 +1383,42 @@ body.resizing-row * {
   color: var(--cyan-soft, #569CD6);
 }
 
+/* Project branch label */
+.proj-branch-label {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 10px;
+  height: 16px;
+  line-height: 1;
+  border-radius: 4px;
+  padding: 0 5px;
+  margin-left: auto;
+  color: var(--muted, #858585);
+  opacity: 0.75;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Scan progress bar */
+.explorer-scan-progress {
+  height: 2px;
+  margin: 2px 10px 4px 20px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 1px;
+  overflow: hidden;
+}
+
+.explorer-scan-progress-bar {
+  height: 100%;
+  background: var(--cyan-soft, #569CD6);
+  border-radius: 1px;
+  transition: width 0.3s ease;
+}
+
 .detail-header .git-file-mark {
   margin-left: 0;
   padding-left: 0;
@@ -2154,20 +2190,30 @@ button.history-chip-main:hover {
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  font-size: 12px;
-  padding: 1px 6px;
-  border: 1px solid var(--border);
-  line-height: 18px;
+  font-size: 10px;
+  min-width: 16px;
+  height: 16px;
+  line-height: 1;
+  text-align: center;
+  border-radius: 8px;
+  padding: 0 5px;
+  font-weight: 500;
+  border: none;
+}
+
+.branch-badge.changed {
+  background: rgba(226, 192, 141, 0.18);
+  color: var(--git-modified);
 }
 
 .branch-badge.behind {
-  color: #fbbf24;
-  border-color: #fbbf24;
+  background: rgba(86, 156, 214, 0.18);
+  color: var(--cyan-soft, #569CD6);
 }
 
 .branch-badge.ahead {
+  background: rgba(52, 211, 153, 0.18);
   color: var(--ok);
-  border-color: var(--ok);
 }
 
 .git-toolbar {
@@ -3315,7 +3361,6 @@ button.history-chip-main:hover {
 .branch-badge.merging {
   background: rgba(251, 146, 60, 0.2);
   color: #fb923c;
-  border: 1px solid rgba(251, 146, 60, 0.45);
   cursor: pointer;
 }
 

@@ -15,6 +15,7 @@ import type {
   ProjectSummary,
 } from '../lib/types'
 import { useSettingsStore } from './settingsStore'
+import { useWorkspaceStore } from './workspaceStore'
 
 type ProjectState = {
   selected: ProjectSummary | null
@@ -109,14 +110,40 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
     void useSettingsStore.getState().touchProjectAccess(project.path)
 
+    // Check if workspaceStore has cached git data from a recent scan
+    const cachedStatus = useWorkspaceStore.getState().projectStatuses[project.path]
+    const hasCachedGit = !!cachedStatus?.gitInfo || !!cachedStatus?.gitStatus
+
+    // Seed state immediately from cache if available
+    if (hasCachedGit) {
+      const cachedGitInfo = cachedStatus?.gitInfo ?? null
+      const cachedGitStatus = cachedStatus?.gitStatus ?? null
+      set({
+        selected: project,
+        details: { summary: project, packageManager: 'npm' },
+        git: cachedGitInfo,
+        envFiles: [],
+        mergeStatus: null,
+        loading: true,
+        error: null,
+        ...applyGitStatus(project.path, cachedGitStatus),
+      })
+    }
+
     try {
+      // Only fetch git data if we don't have it cached
+      const gitFetch = hasCachedGit
+        ? Promise.resolve(cachedStatus?.gitInfo ?? null)
+        : invoke<GitInfo | null>('git_branches', { path: project.path })
+      const gitStatusFetch = hasCachedGit
+        ? Promise.resolve(cachedStatus?.gitStatus ?? null)
+        : invoke<GitStatus>('git_status', { path: project.path }).catch(() => null)
+
       const [details, git, envFiles, gitStatus, mergeStatus] = await Promise.all([
         invoke<ProjectDetails>('scan_project', { path: project.path }),
-        invoke<GitInfo | null>('git_branches', { path: project.path }),
+        gitFetch,
         invoke<EnvFileInfo[]>('list_env_files', { path: project.path }),
-        invoke<GitStatus>('git_status', { path: project.path }).catch(
-          () => null,
-        ),
+        gitStatusFetch,
         invoke<MergeStatus>('git_merge_status', { path: project.path }).catch(
           () => null,
         ),
@@ -129,6 +156,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         mergeStatus,
         loading: false,
         ...applyGitStatus(project.path, gitStatus),
+      })
+      // Sync back to workspaceStore cache
+      useWorkspaceStore.getState().updateProjectStatus(project.path, {
+        gitInfo: git,
+        gitStatus,
+        changedFiles: gitStatus ? gitStatus.entries.length : (cachedStatus?.changedFiles ?? 0),
+        currentBranch: ((git?.current && git.current !== 'HEAD') ? git.current : gitStatus?.current) ?? cachedStatus?.currentBranch,
       })
     } catch (e) {
       if (seq !== selectSeq) return
@@ -159,6 +193,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         path: selected.path,
       })
       set({ git })
+      // Sync git info to workspaceStore
+      useWorkspaceStore.getState().updateProjectStatus(selected.path, {
+        gitInfo: git,
+        currentBranch: (git?.current && git.current !== 'HEAD') ? git.current : undefined,
+      })
       await Promise.all([get().refreshGitStatus(), get().refreshMergeStatus()])
     } catch (e) {
       set({ error: String(e) })
@@ -181,6 +220,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       if (seq !== statusSeq) return
       if (get().selected?.path !== selected.path) return
       set(applyGitStatus(selected.path, gitStatus))
+      // Sync git status to workspaceStore
+      useWorkspaceStore.getState().updateProjectStatus(selected.path, {
+        gitStatus,
+        changedFiles: gitStatus.entries.length,
+      })
     } catch {
       if (seq !== statusSeq) return
       set({
