@@ -354,3 +354,25 @@ pub fn set_locale(app: &AppHandle, locale: &str) -> Result<AppConfig, String> {
     save(app, &cfg)?;
     Ok(cfg)
 }
+
+pub fn load_project_statuses() -> Result<serde_json::Value, String> {
+    match crate::db::kv_get("project_statuses")? {
+        Some(raw) if !raw.trim().is_empty() => {
+            let val: serde_json::Value = serde_json::from_str(&raw).unwrap_or_else(|_| serde_json::json!({}));
+            let count = val.as_object().map(|o| o.len()).unwrap_or(0);
+            log::info!("load_project_statuses: loaded {} entries", count);
+            Ok(val)
+        }
+        _ => {
+            log::info!("load_project_statuses: no data found");
+            Ok(serde_json::json!({}))
+        }
+    }
+}
+
+pub fn save_project_statuses(data: serde_json::Value) -> Result<(), String> {
+    let count = data.as_object().map(|o| o.len()).unwrap_or(0);
+    log::info!("save_project_statuses: saving {} entries", count);
+    let raw = serde_json::to_string(&data).map_err(|e| e.to_string())?;
+    crate::db::kv_set("project_statuses", &raw)
+}

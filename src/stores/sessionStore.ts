@@ -88,7 +88,13 @@ export const useSessionStore = create<SessionState>((_set, _get) => ({
 
       // 1. Restore active workspace
       if (session.activeWorkspace) {
-        useWorkspaceStore.setState({ activeWorkspace: session.activeWorkspace })
+        const cachedProjects = useWorkspaceStore.getState().projectCache[session.activeWorkspace]
+        useWorkspaceStore.setState({
+          activeWorkspace: session.activeWorkspace,
+          // Populate projects from cache so the Explorer renders project rows
+          // (and their git status badges) immediately after hydration.
+          ...(cachedProjects ? { projects: cachedProjects } : {}),
+        })
         // Ensure the workspace projects are cached
         await useWorkspaceStore.getState().ensureWorkspaceCached(session.activeWorkspace)
       }
@@ -142,10 +148,19 @@ export const useSessionStore = create<SessionState>((_set, _get) => ({
 
       _set({ hydrated: true })
     } finally {
-      // Delay enabling auto-save slightly to avoid saving during initial render
-      setTimeout(() => {
-        isHydrating = false
-      }, 1000)
+      isHydrating = false
+      // Persist the hydrated state so it survives the next restart.
+      // scheduleSave() already debounces internally (500ms).
+      scheduleSave()
+
+      // Force workspaceStore subscribers (Explorer) to re-render with the
+      // cached projectStatuses that were loaded by hydrateCache().
+      // Without this, the git-status badges may not appear on project rows
+      // until the user manually expands a project.
+      const ws = useWorkspaceStore.getState()
+      if (Object.keys(ws.projectStatuses).length > 0) {
+        useWorkspaceStore.setState({ projectStatuses: { ...ws.projectStatuses } })
+      }
     }
   },
 }))

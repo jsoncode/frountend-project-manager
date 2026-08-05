@@ -60,13 +60,10 @@ async function scanWorkspace(workspace: string): Promise<ProjectSummary[]> {
   return invoke<ProjectSummary[]>('list_projects', { workspace })
 }
 
-/** Debounced helper to persist projectStatuses to SQLite. */
-let persistTimer: ReturnType<typeof setTimeout> | null = null
-function persistStatusesDebounced(statuses: Record<string, ProjectStatusSummary>) {
-  if (persistTimer) clearTimeout(persistTimer)
-  persistTimer = setTimeout(() => {
-    void invoke('save_project_statuses', { data: statuses }).catch(() => {})
-  }, 500)
+/** Persist projectStatuses to dedicated kv key (immediate, fire-and-forget). */
+function persistStatuses(statuses: Record<string, ProjectStatusSummary>) {
+  invoke('save_project_statuses', { data: statuses })
+    .catch((e) => { console.warn('[persistStatuses] save failed:', e) })
 }
 
 function persistCache(workspace: string, projects: ProjectSummary[]) {
@@ -113,20 +110,23 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     try {
       const [remote, cachedStatuses] = await Promise.all([
         invoke<Record<string, ProjectSummary[]>>('load_project_cache'),
-        invoke<Record<string, ProjectStatusSummary> | null>('load_project_statuses'),
+        invoke<Record<string, ProjectStatusSummary>>('load_project_statuses'),
       ])
+      console.log('[hydrateCache] loaded statuses keys:', cachedStatuses ? Object.keys(cachedStatuses).length : 'null')
       set((s) => {
         const projectCache = { ...remote }
         const active = s.activeWorkspace
+        const hasStatuses = cachedStatuses && Object.keys(cachedStatuses).length > 0
         return {
           projectCache,
           projects:
             active && projectCache[active] ? projectCache[active]! : s.projects,
           hydrated: true,
-          ...(cachedStatuses ? { projectStatuses: cachedStatuses } : {}),
+          ...(hasStatuses ? { projectStatuses: cachedStatuses } : {}),
         }
       })
-    } catch {
+    } catch (e) {
+      console.warn('[hydrateCache] failed:', e)
       set({ hydrated: true })
     }
   },
@@ -274,7 +274,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       }
       return { projectCache, projectStatuses }
     })
-    persistStatusesDebounced(get().projectStatuses)
+    persistStatuses(get().projectStatuses)
     void invoke('drop_project_cache', { workspace: path }).catch(() => {})
   },
   scanAllProjectStatuses: async (workspace) => {
@@ -327,7 +327,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         for (const [path, summary] of results) {
           projectStatuses[path] = summary
         }
-        persistStatusesDebounced(projectStatuses)
+        console.log('[scanAllProjectStatuses] persisting', Object.keys(projectStatuses).length, 'entries')
+        persistStatuses(projectStatuses)
         return { projectStatuses, scanningStatuses: false, scanningProjects: new Set() }
       })
     } catch {
@@ -339,14 +340,14 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       const existing = s.projectStatuses[projectPath]
       if (!existing) {
         const next = { ...s.projectStatuses, [projectPath]: patch as ProjectStatusSummary }
-        persistStatusesDebounced(next)
+        persistStatuses(next)
         return { projectStatuses: next }
       }
       const next = {
         ...s.projectStatuses,
         [projectPath]: { ...existing, ...patch },
       }
-      persistStatusesDebounced(next)
+      persistStatuses(next)
       return { projectStatuses: next }
     })
   },

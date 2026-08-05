@@ -211,7 +211,7 @@ fn drop_project_cache(workspace: String) -> Result<(), String> {
 #[tauri::command]
 fn clear_all_project_cache(app: AppHandle) -> Result<(), String> {
     db::project_cache_clear_all()?;
-    // Also clear persisted project statuses.
+    // Also clear project statuses stored in dedicated kv key.
     let _ = db::kv_set("project_statuses", "{}");
     // Also clear history data stored in AppConfig (kv table).
     let mut cfg = config::load_or_default(&app)?;
@@ -224,13 +224,13 @@ fn clear_all_project_cache(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn load_project_statuses() -> Result<Option<serde_json::Value>, String> {
-    db::kv_get_json("project_statuses")
+fn load_project_statuses() -> Result<serde_json::Value, String> {
+    config::load_project_statuses()
 }
 
 #[tauri::command]
 fn save_project_statuses(data: serde_json::Value) -> Result<(), String> {
-    db::kv_set_json("project_statuses", &data)
+    config::save_project_statuses(data)
 }
 
 #[tauri::command]

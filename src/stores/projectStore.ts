@@ -112,10 +112,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
     // Check if workspaceStore has cached git data from a recent scan
     const cachedStatus = useWorkspaceStore.getState().projectStatuses[project.path]
-    const hasCachedGit = !!cachedStatus?.gitInfo || !!cachedStatus?.gitStatus
+    const hasCachedGitInfo = !!cachedStatus?.gitInfo
 
-    // Seed state immediately from cache if available
-    if (hasCachedGit) {
+    // Seed state immediately from cache if available (shows stale data instantly)
+    if (cachedStatus?.gitInfo || cachedStatus?.gitStatus) {
       const cachedGitInfo = cachedStatus?.gitInfo ?? null
       const cachedGitStatus = cachedStatus?.gitStatus ?? null
       set({
@@ -131,13 +131,12 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
 
     try {
-      // Only fetch git data if we don't have it cached
-      const gitFetch = hasCachedGit
+      // Always fetch fresh gitStatus (changes frequently).
+      // Only skip git_branches fetch if we have cached gitInfo.
+      const gitFetch = hasCachedGitInfo
         ? Promise.resolve(cachedStatus?.gitInfo ?? null)
         : invoke<GitInfo | null>('git_branches', { path: project.path })
-      const gitStatusFetch = hasCachedGit
-        ? Promise.resolve(cachedStatus?.gitStatus ?? null)
-        : invoke<GitStatus>('git_status', { path: project.path }).catch(() => null)
+      const gitStatusFetch = invoke<GitStatus>('git_status', { path: project.path }).catch(() => null)
 
       const [details, git, envFiles, gitStatus, mergeStatus] = await Promise.all([
         invoke<ProjectDetails>('scan_project', { path: project.path }),

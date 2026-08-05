@@ -674,11 +674,13 @@ export function Explorer() {
                     selectedProject?.path === p.path
                   // Use projectStatuses for all projects (not just selected)
                   const statusSummary = projectStatuses[p.path]
-                  // Fall back to gitDecorations for the selected project if no status summary
                   const isSelectedProject = selectedProject != null &&
                     normalizeFsPath(selectedProject.path) === normalizeFsPath(p.path)
-                  const changedFiles = statusSummary?.changedFiles ??
-                    (isSelectedProject ? (gitDecorations.dirs[''] ?? 0) : 0)
+                  // For the selected project, prefer fresh gitDecorations from projectStore
+                  // (just fetched) over the cached workspaceStore value which may be stale.
+                  const changedFiles = isSelectedProject
+                    ? (gitDecorations.dirs[''] ?? statusSummary?.changedFiles ?? 0)
+                    : (statusSummary?.changedFiles ?? 0)
                   const behind = statusSummary?.behind ?? 0
                   const currentBranch = statusSummary?.currentBranch
                   const projGitDirty = changedFiles > 0
