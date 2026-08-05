@@ -60,10 +60,43 @@ async function scanWorkspace(workspace: string): Promise<ProjectSummary[]> {
   return invoke<ProjectSummary[]>('list_projects', { workspace })
 }
 
-/** Persist projectStatuses to dedicated kv key (immediate, fire-and-forget). */
-function persistStatuses(statuses: Record<string, ProjectStatusSummary>) {
-  invoke('save_project_statuses', { data: statuses })
+/**
+ * Persist projectStatuses to the dedicated kv key.
+ * Returns a promise so callers on the critical path (e.g. scanAllProjectStatuses)
+ * can await the DB write before signalling completion — otherwise a user who
+ * quits the app immediately after the scan UI shows "done" can lose the data.
+ */
+function persistStatuses(statuses: Record<string, ProjectStatusSummary>): Promise<void> {
+  return invoke<void>('save_project_statuses', { data: statuses })
     .catch((e) => { console.warn('[persistStatuses] save failed:', e) })
+}
+
+/** Normalise a project path for tolerant lookups (separator + case). */
+function normPath(p: string): string {
+  return p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+}
+
+/**
+ * Re-key loaded statuses so their keys exactly match the project paths in the
+ * loaded projectCache. Guards against separator/case drift between saves so
+ * that `projectStatuses[p.path]` in the Explorer always hits cached data.
+ * Purely additive — never drops entries.
+ */
+function alignStatusKeys(
+  raw: Record<string, ProjectStatusSummary>,
+  projectCache: Record<string, ProjectSummary[]>,
+): Record<string, ProjectStatusSummary> {
+  const out = { ...raw }
+  const normIndex: Record<string, string> = {}
+  for (const k of Object.keys(raw)) normIndex[normPath(k)] = k
+  for (const ws of Object.keys(projectCache)) {
+    for (const p of projectCache[ws]) {
+      if (out[p.path]) continue
+      const orig = normIndex[normPath(p.path)]
+      if (orig) out[p.path] = raw[orig]
+    }
+  }
+  return out
 }
 
 function persistCache(workspace: string, projects: ProjectSummary[]) {
@@ -117,12 +150,15 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         const projectCache = { ...remote }
         const active = s.activeWorkspace
         const hasStatuses = cachedStatuses && Object.keys(cachedStatuses).length > 0
+        // Re-key to match the freshly loaded projectCache paths so Explorer's
+        // `projectStatuses[p.path]` lookup always hits cached data.
+        const projectStatuses = hasStatuses ? alignStatusKeys(cachedStatuses, projectCache) : s.projectStatuses
         return {
           projectCache,
           projects:
             active && projectCache[active] ? projectCache[active]! : s.projects,
           hydrated: true,
-          ...(hasStatuses ? { projectStatuses: cachedStatuses } : {}),
+          ...(hasStatuses ? { projectStatuses } : {}),
         }
       })
     } catch (e) {
@@ -322,15 +358,16 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
           }
         }),
       )
-      set((s) => {
-        const projectStatuses = { ...s.projectStatuses }
-        for (const [path, summary] of results) {
-          projectStatuses[path] = summary
-        }
-        console.log('[scanAllProjectStatuses] persisting', Object.keys(projectStatuses).length, 'entries')
-        persistStatuses(projectStatuses)
-        return { projectStatuses, scanningStatuses: false, scanningProjects: new Set() }
-      })
+      const projectStatuses = { ...get().projectStatuses }
+      for (const [path, summary] of results) {
+        projectStatuses[path] = summary
+      }
+      console.log('[scanAllProjectStatuses] persisting', Object.keys(projectStatuses).length, 'entries')
+      // Await so the DB write completes BEFORE we flip scanningStatuses to
+      // false. Otherwise a user who quits the app the instant the scan UI
+      // shows "done" can lose all cached git data (fire-and-forget invoke).
+      await persistStatuses(projectStatuses)
+      set({ projectStatuses, scanningStatuses: false, scanningProjects: new Set() })
     } catch {
       set({ scanningStatuses: false, scanningProjects: new Set() })
     }

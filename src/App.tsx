@@ -56,6 +56,22 @@ export default function App() {
     }
   }, [config, activeWorkspace, setActiveWorkspace])
 
+  // Force workspaceStore subscribers (Explorer) to re-render with the cached
+  // projectStatuses once workspace rows are actually visible. hydrateCache
+  // loads these statuses early, but at that moment config (workspaces list)
+  // isn't ready yet so no project rows render — the cached git badges would
+  // only appear after the user manually expands a project. Re-applying here
+  // (after config is loaded) guarantees all projects echo their cached git
+  // status immediately on restart, without requiring an expand.
+  const wsHydrated = useWorkspaceStore((s) => s.hydrated)
+  useEffect(() => {
+    if (!config || !wsHydrated) return
+    const ws = useWorkspaceStore.getState()
+    if (Object.keys(ws.projectStatuses).length > 0) {
+      useWorkspaceStore.setState({ projectStatuses: { ...ws.projectStatuses } })
+    }
+  }, [config, wsHydrated])
+
   return (
     <div className="app-shell">
       <TopBar />
