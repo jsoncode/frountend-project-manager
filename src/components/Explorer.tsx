@@ -1,8 +1,12 @@
 import {
+  ArrowDown,
+  ArrowSwapHorizontal,
+  ArrowUp,
   ChevronDown,
   ChevronRight,
   Document,
   Folder2,
+  Pen,
   Refresh,
   Trash,
 } from 'reicon-react'
@@ -62,6 +66,9 @@ export function Explorer() {
   const workspaces = config?.workspaces ?? []
 
   const projectCache = useWorkspaceStore((s) => s.projectCache)
+  const projectStatuses = useWorkspaceStore((s) => s.projectStatuses)
+  const scanningStatuses = useWorkspaceStore((s) => s.scanningStatuses)
+  const scanAllProjectStatuses = useWorkspaceStore((s) => s.scanAllProjectStatuses)
   const error = useWorkspaceStore((s) => s.error)
   const search = useWorkspaceStore((s) => s.search)
   const setSearch = useWorkspaceStore((s) => s.setSearch)
@@ -91,7 +98,7 @@ export function Explorer() {
   const [pendingRemove, setPendingRemove] = useState<string | null>(null)
   const [menu, setMenu] = useState<MenuState | null>(null)
   const [commitEntry, setCommitEntry] = useState<{ path: string; projectPath: string } | null>(null)
-  const [diffFile, setDiffFile] = useState<{ filePath: string; projectPath: string } | null>(null)
+  const [diffFile, setDiffFile] = useState<{ filePath: string; projectPath: string; compareFilePath?: string } | null>(null)
   const [diffDirList, setDiffDirList] = useState<{ dirPath: string; projectPath: string; files: { absPath: string; relPath: string; label: string }[] } | null>(null)
   const rowRefs = useRef(new Map<string, HTMLButtonElement>())
 
@@ -274,6 +281,7 @@ export function Explorer() {
 
   const onSelectFile = (entry: DirEntry, projectPath: string) => {
     setMenu(null)
+
     setSelection({ kind: 'file', path: entry.path, projectPath })
     const owner = findProject(projectPath)
     if (owner) {
@@ -545,17 +553,15 @@ export function Explorer() {
                   const projActive =
                     isSelected('project', p.path) ||
                     selectedProject?.path === p.path
-                  const projGitDirty =
-                    selectedProject != null &&
-                    normalizeFsPath(selectedProject.path) ===
-                      normalizeFsPath(p.path) &&
-                    (gitDecorations.dirs[''] ?? 0) > 0
-                  const projChangeCount =
-                    selectedProject != null &&
-                    normalizeFsPath(selectedProject.path) ===
-                      normalizeFsPath(p.path)
-                      ? (gitDecorations.dirs[''] ?? 0)
-                      : 0
+                  // Use projectStatuses for all projects (not just selected)
+                  const statusSummary = projectStatuses[p.path]
+                  // Fall back to gitDecorations for the selected project if no status summary
+                  const isSelectedProject = selectedProject != null &&
+                    normalizeFsPath(selectedProject.path) === normalizeFsPath(p.path)
+                  const changedFiles = statusSummary?.changedFiles ??
+                    (isSelectedProject ? (gitDecorations.dirs[''] ?? 0) : 0)
+                  const behind = statusSummary?.behind ?? 0
+                  const projGitDirty = changedFiles > 0
 
                   return (
                     <div key={p.path}>
@@ -600,8 +606,17 @@ export function Explorer() {
                           aria-hidden
                         />
                         <span className="explorer-label">{p.folderName}</span>
-                        {projGitDirty ? (
-                          <span className="git-dir-count" aria-hidden>{projChangeCount}</span>
+                        {changedFiles > 0 ? (
+                          <span className="proj-status-badge proj-status-changed" title={`${changedFiles} changed files`}>
+                            <ArrowUp className="ui-icon" size={10} color="currentColor" aria-hidden />
+                            {changedFiles}
+                          </span>
+                        ) : null}
+                        {behind > 0 ? (
+                          <span className="proj-status-badge proj-status-behind" title={`${behind} commits behind`}>
+                            <ArrowDown className="ui-icon" size={10} color="currentColor" aria-hidden />
+                            {behind}
+                          </span>
                         ) : null}
                       </button>
                       {projOpen ? renderEntries(p.path, p.path, 2) : null}
@@ -644,6 +659,19 @@ export function Explorer() {
             type="button"
             role="menuitem"
             className="btn-with-icon"
+            disabled={scanningStatuses}
+            onClick={() => {
+              void scanAllProjectStatuses(menu.path)
+              setMenu(null)
+            }}
+          >
+            <Refresh className={`ui-icon${scanningStatuses ? ' is-spinning' : ''}`} size={14} color="currentColor" aria-hidden />
+            {scanningStatuses ? t('ws.scanningStatuses') : t('ws.checkAllStatus')}
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="btn-with-icon"
             onClick={() => {
               void refreshWorkspace(menu.path)
               setMenu(null)
@@ -673,7 +701,20 @@ export function Explorer() {
           x={menu.x}
           y={menu.y}
           onClose={() => setMenu(null)}
-        />
+        >
+          <button
+            type="button"
+            role="menuitem"
+            className="btn-with-icon"
+            onClick={() => {
+              setCommitEntry({ path: menu.path, projectPath: menu.path })
+              setMenu(null)
+            }}
+          >
+            <Pen className="ui-icon" size={14} color="currentColor" aria-hidden />
+            {t('explorer.commitChanges')}
+          </button>
+        </OpenWithMenu>
       )}
 
       {menu?.kind === 'entry' && (
@@ -734,6 +775,37 @@ export function Explorer() {
           >
             {t('explorer.viewChanges')}
           </button>
+          {!menu.isDir && (
+            <>
+              <div className="branch-menu-sep" />
+              <button
+                type="button"
+                role="menuitem"
+                className="btn-with-icon"
+                onClick={async () => {
+                  setMenu(null)
+                  try {
+                    // Get the parent directory of the current file
+                    const filePath = menu.path
+                    const lastSlash = filePath.lastIndexOf('/')
+                    const dir = lastSlash > 0 ? filePath.slice(0, lastSlash) : filePath
+                    const picked = await invoke<string | null>('pick_file_in_directory', { directory: dir })
+                    if (!picked) return
+                    if (picked === filePath) {
+                      window.alert(t('explorer.compareSameFile'))
+                      return
+                    }
+                    setDiffFile({ filePath, projectPath: menu.projectPath, compareFilePath: picked })
+                  } catch {
+                    /* cancelled */
+                  }
+                }}
+              >
+                <ArrowSwapHorizontal className="ui-icon" size={14} color="currentColor" aria-hidden />
+                {t('explorer.compareWith')}
+              </button>
+            </>
+          )}
         </ContextMenuPortal>
       )}
 
@@ -755,6 +827,7 @@ export function Explorer() {
         <FileDiffModal
           projectPath={diffFile.projectPath}
           filePath={diffFile.filePath}
+          compareFilePath={diffFile.compareFilePath}
           onClose={() => setDiffFile(null)}
         />
       )}

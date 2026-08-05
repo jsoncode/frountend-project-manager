@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useI18n } from '../i18n/useI18n'
 import type { MergeFileEntry, MergeStatus } from '../lib/types'
 import { useProjectStore } from '../stores/projectStore'
-import { MergeDiffModal } from './MergeDiffModal'
+import { MergeEditorModal } from './MergeEditorModal'
 import { ModalShell } from './ModalShell'
 
 type Props = {
@@ -236,7 +236,7 @@ export function MergeConflictModal({
       </ModalShell>
 
       {diffFile && (
-        <MergeDiffModal
+        <MergeEditorModal
           projectPath={projectPath}
           file={diffFile}
           onClose={() => setDiffFile(null)}

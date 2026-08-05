@@ -244,6 +244,11 @@ description = "Pick image file"
 commands.allow = ["pick_image"]
 
 [[permission]]
+identifier = "allow-pick-file-in-directory"
+description = "Pick a file starting from a specific directory"
+commands.allow = ["pick_file_in_directory"]
+
+[[permission]]
 identifier = "allow-import-ide-icon"
 description = "Import IDE icon from path into cache"
 commands.allow = ["import_ide_icon"]

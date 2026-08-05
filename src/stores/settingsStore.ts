@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { create } from '../lib/createStore'
 import { isTauri } from '../lib/tauri'
-import type { AppConfig, IdeConfig } from '../lib/types'
+import type { AppConfig, EditorThemeId, IdeConfig } from '../lib/types'
 
 type HistoryKind = 'command' | 'branch' | 'search'
 
@@ -15,6 +15,7 @@ const EMPTY_CONFIG: AppConfig = {
   searchHistory: [],
   projectAccess: {},
   locale: 'zh',
+  editorTheme: 'vs-dark',
 }
 
 const EMPTY_HISTORY = EMPTY_CONFIG.searchHistory
@@ -62,6 +63,7 @@ function normalizeConfig(cfg: AppConfig): AppConfig {
     searchHistory: cfg.searchHistory ?? EMPTY_HISTORY,
     projectAccess: cfg.projectAccess ?? EMPTY_ACCESS,
     locale: cfg.locale === 'en' ? 'en' : 'zh',
+    editorTheme: cfg.editorTheme ?? 'vs-dark',
   }
 }
 
@@ -94,6 +96,7 @@ type SettingsState = {
   clearProjectCache: () => Promise<void>
   clearAiConversations: () => Promise<void>
   setLocale: (locale: 'zh' | 'en') => Promise<void>
+  setEditorTheme: (themeId: EditorThemeId) => Promise<void>
   setIdeModalOpen: (open: boolean) => void
   setAiSettingsOpen: (open: boolean) => void
   setJenCliModalOpen: (open: boolean) => void
@@ -245,5 +248,16 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     }
     const cfg = await invoke<AppConfig>('set_locale', { locale })
     set({ config: { ...cfg, locale: cfg.locale === 'en' ? 'en' : 'zh' } })
+  },
+  setEditorTheme: async (themeId) => {
+    const current = get().config
+    if (!current) return
+    const next = { ...current, editorTheme: themeId }
+    if (isTauri()) {
+      const cfg = await invoke<AppConfig>('save_config', { cfg: next })
+      set({ config: cfg })
+    } else {
+      set({ config: next })
+    }
   },
 }))

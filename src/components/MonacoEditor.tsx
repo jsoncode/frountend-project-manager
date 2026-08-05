@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import * as monaco from 'monaco-editor'
 import { languageFromPath } from '../lib/editorLanguage'
 import { setupMonacoEnvironment } from '../lib/monacoEnv'
+import { applyEditorTheme, registerEditorThemes } from '../lib/monacoThemes'
 import {
   applyAliasCompilerPaths,
   attachImportClickHandler,
@@ -13,6 +14,7 @@ import {
 import { closeActiveEditorFile } from '../lib/closeEditorFile'
 import type { PathAlias } from '../lib/pathAliases'
 import { useI18n } from '../i18n/useI18n'
+import { useSettingsStore } from '../stores/settingsStore'
 
 type Props = {
   path: string
@@ -94,6 +96,7 @@ export function MonacoEditor({
   onOpenFile,
 }: Props) {
   const { t } = useI18n()
+  const editorTheme = useSettingsStore((s) => s.config?.editorTheme ?? 'vs-dark')
   const containerRef = useRef<HTMLDivElement>(null)
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
   const pathRef = useRef(path)
@@ -164,6 +167,7 @@ export function MonacoEditor({
     if (!el) return
 
     setupMonacoEnvironment()
+    registerEditorThemes(monaco)
     setupMonacoModuleNavigation(monaco)
 
     const language = languageFromPath(path)
@@ -181,7 +185,7 @@ export function MonacoEditor({
     const editor = monaco.editor.create(el, {
       model,
       automaticLayout: true,
-      theme: 'vs-dark',
+      theme: editorTheme,
       fontSize: 13,
       fontFamily: EDITOR_FONT,
       fontLigatures: false,
@@ -319,6 +323,11 @@ export function MonacoEditor({
       model.setValue(text)
     }
   }, [value])
+
+  // --- Apply theme changes from settings ---
+  useEffect(() => {
+    applyEditorTheme(monaco, editorTheme)
+  }, [editorTheme])
 
   return <div className="monaco-host" ref={containerRef} />
 }

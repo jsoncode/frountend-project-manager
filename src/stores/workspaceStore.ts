@@ -1,7 +1,13 @@
 import { invoke } from '@tauri-apps/api/core'
 import { create } from '../lib/createStore'
-import type { ProjectSummary } from '../lib/types'
+import type { GitInfo, GitStatus, ProjectSummary } from '../lib/types'
 import { useSettingsStore } from './settingsStore'
+
+/** Per-project quick status summary (changed files + behind count). */
+export type ProjectStatusSummary = {
+  changedFiles: number
+  behind: number
+}
 
 type WorkspaceState = {
   activeWorkspace: string | null
@@ -9,6 +15,10 @@ type WorkspaceState = {
   projects: ProjectSummary[]
   /** Cached scans keyed by workspace path (SQLite-backed). */
   projectCache: Record<string, ProjectSummary[]>
+  /** Per-project status summaries keyed by project path. */
+  projectStatuses: Record<string, ProjectStatusSummary>
+  /** True while scanning all project statuses in a workspace. */
+  scanningStatuses: boolean
   loading: boolean
   /** True while filling missing workspace caches for cross-ws search. */
   searchScanning: boolean
@@ -31,6 +41,8 @@ type WorkspaceState = {
   ensureAllWorkspacesCached: () => Promise<void>
   /** Drop a workspace from cache (e.g. after remove). */
   dropWorkspaceCache: (path: string) => void
+  /** Scan git status for all projects in a workspace. */
+  scanAllProjectStatuses: (workspace: string) => Promise<void>
 }
 
 async function scanWorkspace(workspace: string): Promise<ProjectSummary[]> {
@@ -48,6 +60,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   activeWorkspace: null,
   projects: [],
   projectCache: {},
+  projectStatuses: {},
+  scanningStatuses: false,
   loading: false,
   searchScanning: false,
   error: null,
@@ -228,8 +242,53 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     set((s) => {
       const projectCache = { ...s.projectCache }
       delete projectCache[path]
-      return { projectCache }
+      // Also clear statuses for projects in this workspace
+      const projects = s.projectCache[path] ?? []
+      const projectStatuses = { ...s.projectStatuses }
+      for (const p of projects) {
+        delete projectStatuses[p.path]
+      }
+      return { projectCache, projectStatuses }
     })
     void invoke('drop_project_cache', { workspace: path }).catch(() => {})
+  },
+  scanAllProjectStatuses: async (workspace) => {
+    if (!workspace) return
+    const projects = get().projectCache[workspace]
+    if (!projects || projects.length === 0) return
+    set({ scanningStatuses: true })
+    try {
+      const results = await Promise.all(
+        projects.map(async (p) => {
+          try {
+            const [gitStatus, gitInfo] = await Promise.all([
+              invoke<GitStatus>('git_status', { path: p.path }).catch(() => null),
+              invoke<GitInfo | null>('git_branches', { path: p.path }).catch(() => null),
+            ])
+            const changedFiles = gitStatus ? gitStatus.entries.length : 0
+            // Find current branch behind count
+            let behind = 0
+            if (gitInfo?.current && gitInfo.branches) {
+              const currentBranch = gitInfo.branches.find(
+                (b) => b.name === gitInfo.current && !b.isRemote
+              )
+              behind = currentBranch?.behind ?? 0
+            }
+            return [p.path, { changedFiles, behind }] as const
+          } catch {
+            return [p.path, { changedFiles: 0, behind: 0 }] as const
+          }
+        }),
+      )
+      set((s) => {
+        const projectStatuses = { ...s.projectStatuses }
+        for (const [path, summary] of results) {
+          projectStatuses[path] = summary
+        }
+        return { projectStatuses, scanningStatuses: false }
+      })
+    } catch {
+      set({ scanningStatuses: false })
+    }
   },
 }))

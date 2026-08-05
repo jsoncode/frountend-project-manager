@@ -30,8 +30,13 @@ function newIde(partial?: Partial<IdeConfig>): IdeConfig {
   }
 }
 
-export function IdeSettingsModal() {
-  const open = useSettingsStore((s) => s.ideModalOpen)
+type IdeSettingsModalProps = {
+  inline?: boolean
+  onClosePanel?: () => void
+}
+
+export function IdeSettingsModal({ inline, onClosePanel }: IdeSettingsModalProps = {}) {
+  const storeOpen = useSettingsStore((s) => s.ideModalOpen)
   const setIdeModalOpen = useSettingsStore((s) => s.setIdeModalOpen)
   const config = useSettingsStore((s) => s.config)
   const saveIdes = useSettingsStore((s) => s.saveIdes)
@@ -45,6 +50,8 @@ export function IdeSettingsModal() {
   const fileRef = useRef<HTMLInputElement>(null)
   const [uploadTarget, setUploadTarget] = useState<string | null>(null)
   const { t } = useI18n()
+
+  const isOpen = inline || storeOpen
 
   useEffect(() => {
     if (!pickerOpen) return
@@ -65,7 +72,7 @@ export function IdeSettingsModal() {
     }
   }, [pickerOpen])
 
-  if (!open) return null
+  if (!isOpen) return null
 
   const ides = draft ?? config?.ides ?? []
 
@@ -73,7 +80,11 @@ export function IdeSettingsModal() {
     setDraft(null)
     setPendingDelete(null)
     setPickerOpen(false)
-    setIdeModalOpen(false)
+    if (inline) {
+      onClosePanel?.()
+    } else {
+      setIdeModalOpen(false)
+    }
   }
 
   const update = (id: string, patch: Partial<IdeConfig>) => {
@@ -211,14 +222,17 @@ export function IdeSettingsModal() {
   const save = async () => {
     await saveIdes(ides)
     setDraft(null)
-    setIdeModalOpen(false)
+    if (inline) {
+      onClosePanel?.()
+    } else {
+      setIdeModalOpen(false)
+    }
   }
 
-  return (
+  const content = (
     <>
-      <ModalShell title={t('ide.title')} onClose={close} wide>
-        <p className="muted">{t('ide.desc')}</p>
-        <input
+      {!inline && <p className="muted">{t('ide.desc')}</p>}
+      <input
           ref={fileRef}
           type="file"
           accept="image/*,.ico,.svg"
@@ -355,46 +369,119 @@ export function IdeSettingsModal() {
             </div>
           ))}
         </div>
-        <div className="modal-actions">
-          <button
-            type="button"
-            className="btn btn-with-icon"
-            disabled={scanning}
-            onClick={() => {
-              setPickerQuery('')
-              setPickerOpen(true)
-            }}
-          >
-            <Add className="ui-icon" size={14} color="currentColor" aria-hidden />
-            {t('ide.add')}
-          </button>
-          <button
-            type="button"
-            className="btn btn-with-icon"
-            disabled={scanning}
-            onClick={() => void scanAndAddInstalled()}
-          >
-            <Refresh
-              className={`ui-icon${scanning ? ' is-spinning' : ''}`}
-              size={14}
-              color="currentColor"
-              aria-hidden
-            />
-            {scanning ? t('ide.scanning') : t('ide.redetect')}
-          </button>
-          <button type="button" className="btn" onClick={close} disabled={scanning}>
-            {t('ide.cancel')}
-          </button>
-          <button
-            type="button"
-            className="btn primary btn-with-icon"
-            disabled={scanning}
-            onClick={() => void save()}
-          >
-            <Document className="ui-icon" size={14} color="currentColor" aria-hidden />
-            {t('ide.save')}
-          </button>
+    </>
+  )
+
+  /** Add + Scan buttons used in both inline toolbar and modal actions */
+  const addScanButtons = (
+    <>
+      <button
+        type="button"
+        className="btn btn-sm btn-with-icon"
+        disabled={scanning}
+        onClick={() => {
+          setPickerQuery('')
+          setPickerOpen(true)
+        }}
+      >
+        <Add className="ui-icon" size={14} color="currentColor" aria-hidden />
+        {t('ide.add')}
+      </button>
+      <button
+        type="button"
+        className="btn btn-sm btn-with-icon"
+        disabled={scanning}
+        onClick={() => void scanAndAddInstalled()}
+      >
+        <Refresh
+          className={`ui-icon${scanning ? ' is-spinning' : ''}`}
+          size={14}
+          color="currentColor"
+          aria-hidden
+        />
+        {scanning ? t('ide.scanning') : t('ide.redetect')}
+      </button>
+    </>
+  )
+
+  const modalActions = (
+    <div className="modal-actions">
+      {addScanButtons}
+      <button type="button" className="btn" onClick={close} disabled={scanning}>
+        {t('ide.cancel')}
+      </button>
+      <button
+        type="button"
+        className="btn primary btn-with-icon"
+        disabled={scanning}
+        onClick={() => void save()}
+      >
+        <Document className="ui-icon" size={14} color="currentColor" aria-hidden />
+        {t('ide.save')}
+      </button>
+    </div>
+  )
+
+  if (inline) {
+    return (
+      <>
+        <div className="settings-inline-panel">
+          {content}
+          <div className="ide-inline-toolbar">
+            {addScanButtons}
+          </div>
         </div>
+        {pickerOpen && (
+          <IdePickerModal
+            editors={editors}
+            loading={pickerLoading}
+            query={pickerQuery}
+            onQuery={setPickerQuery}
+            alreadyAdded={alreadyAdded}
+            onPick={(ed) => void addFromEditor(ed)}
+            onManual={() => void addManualExe()}
+            onBlank={addBlank}
+            onClose={() => setPickerOpen(false)}
+          />
+        )}
+        {pendingDelete && (
+          <ModalShell
+            title={t('ide.delTitle')}
+            onClose={() => setPendingDelete(null)}
+            closeOnEsc={false}
+          >
+            <p className="muted">
+              {t('ide.delConfirm', {
+                name: pendingDelete.name || pendingDelete.id,
+              })}
+            </p>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setPendingDelete(null)}
+              >
+                {t('ide.cancel')}
+              </button>
+              <button
+                type="button"
+                className="btn danger"
+                onClick={confirmDelete}
+              >
+                {t('ide.del')}
+              </button>
+            </div>
+          </ModalShell>
+        )}
+      </>
+    )
+  }
+
+  return (
+    <>
+      <ModalShell title={t('ide.title')} onClose={close} wide>
+        {content}
+        {modalActions}
       </ModalShell>
 
       {pickerOpen && (

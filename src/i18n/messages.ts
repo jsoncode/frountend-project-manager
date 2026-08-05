@@ -31,6 +31,8 @@ const zh = {
   'ws.removeTitle': '删除工作区',
   'ws.removeConfirm': '确定删除工作区「{name}」吗？此操作不会删除磁盘上的文件。',
   'ws.empty': '通过「文件 → 添加工作区」开始。',
+  'ws.checkAllStatus': '检查所有项目状态',
+  'ws.scanningStatuses': '正在检查…',
 
   'menu.bar': '主菜单',
   'menu.file': '文件',
@@ -68,6 +70,8 @@ const zh = {
   'explorer.viewChanges': '查看变化',
   'explorer.changedFiles': '变更文件（{count}）',
   'explorer.noChanges': '此目录下没有变更文件',
+  'explorer.compareWith': '比较对象',
+  'explorer.compareSameFile': '不能将文件与自身比较',
 
   'sidebar.nav': '侧边栏视图',
   'sidebar.project': '项目',
@@ -285,6 +289,15 @@ const zh = {
   'settings.clearing': '清除中…',
   'settings.clearSuccess': '清除成功',
   'settings.close': '关闭',
+  'settings.catGeneral': '常规',
+  'settings.catIde': '编辑器/IDE',
+  'settings.catAi': 'AI 模型',
+  'settings.catJenCli': 'Jen CLI',
+  'settings.catCache': '缓存管理',
+  'settings.searchPlaceholder': '搜索设置…',
+  'settings.userSettings': '用户设置',
+  'settings.noMatch': '没有匹配的设置',
+  'settings.clear': '清除',
 
   'jenCli.title': 'jen-cli 设置',
   'jenCli.loading': '加载中…',
@@ -435,6 +448,31 @@ const zh = {
   'ai.error.noModel': '请先在设置中配置并启用模型',
   'ai.error.unsupportedModel': '当前模型类型暂不支持对话（需文本或多模态）',
   'ai.error.tauriOnly': '请在桌面应用中使用 AI 对话',
+
+  // Diff navigation
+  'diff.prev': '上一个',
+  'diff.next': '下一个',
+  'diff.prevChange': '上一个变更',
+  'diff.nextChange': '下一个变更',
+  'diff.changeCount': '第 {current} / {total} 个变更',
+  'diff.noChanges': '无差异',
+  'diff.acceptLeft': '接受左侧',
+  'diff.acceptRight': '接受右侧',
+  'diff.acceptBoth': '接受两者',
+  'diff.save': '保存',
+  'diff.saving': '保存中…',
+  'diff.saved': '已保存',
+  'diff.closeConfirm': '有未保存的更改，确定关闭？',
+
+  // Editor theme
+  'settings.editorTheme': '编辑器主题',
+  'settings.editorThemeHint': '选择代码编辑器的配色方案，立即生效。',
+  'theme.vs-dark': '深色（默认）',
+  'theme.fpm-dark': 'FPM 深色',
+  'theme.fpm-midnight': '午夜',
+  'theme.fpm-dracula': '德古拉',
+  'theme.vs': '浅色',
+  'theme.hc-black': '高对比度',
 } as const
 
 const en: Record<MessageKey, string> = {
@@ -466,6 +504,8 @@ const en: Record<MessageKey, string> = {
   'ws.removeTitle': 'Remove workspace',
   'ws.removeConfirm': 'Remove workspace "{name}"? This does not delete files on disk.',
   'ws.empty': 'Use File → Add workspace to begin.',
+  'ws.checkAllStatus': 'Check all project statuses',
+  'ws.scanningStatuses': 'Scanning…',
 
   'menu.bar': 'Main menu',
   'menu.file': 'File',
@@ -503,6 +543,8 @@ const en: Record<MessageKey, string> = {
   'explorer.viewChanges': 'View changes',
   'explorer.changedFiles': 'Changed files ({count})',
   'explorer.noChanges': 'No changed files in this directory',
+  'explorer.compareWith': 'Compare Target',
+  'explorer.compareSameFile': 'Cannot compare a file with itself',
 
   'sidebar.nav': 'Sidebar views',
   'sidebar.project': 'Project',
@@ -722,6 +764,15 @@ const en: Record<MessageKey, string> = {
   'settings.clearing': 'Clearing…',
   'settings.clearSuccess': 'Cleared',
   'settings.close': 'Close',
+  'settings.catGeneral': 'General',
+  'settings.catIde': 'Editor / IDE',
+  'settings.catAi': 'AI Models',
+  'settings.catJenCli': 'Jen CLI',
+  'settings.catCache': 'Cache',
+  'settings.searchPlaceholder': 'Search settings…',
+  'settings.userSettings': 'User Settings',
+  'settings.noMatch': 'No matching settings',
+  'settings.clear': 'Clear',
 
   'jenCli.title': 'jen-cli settings',
   'jenCli.loading': 'Loading…',
@@ -873,6 +924,31 @@ const en: Record<MessageKey, string> = {
   'ai.error.unsupportedModel':
     'This model type is not supported for chat (need text or multimodal)',
   'ai.error.tauriOnly': 'Use AI chat inside the desktop app',
+
+  // Diff navigation
+  'diff.prev': 'Previous',
+  'diff.next': 'Next',
+  'diff.prevChange': 'Previous change',
+  'diff.nextChange': 'Next change',
+  'diff.changeCount': 'Change {current} of {total}',
+  'diff.noChanges': 'No changes',
+  'diff.acceptLeft': 'Accept left',
+  'diff.acceptRight': 'Accept right',
+  'diff.acceptBoth': 'Accept both',
+  'diff.save': 'Save',
+  'diff.saving': 'Saving…',
+  'diff.saved': 'Saved',
+  'diff.closeConfirm': 'Unsaved changes. Close anyway?',
+
+  // Editor theme
+  'settings.editorTheme': 'Editor Theme',
+  'settings.editorThemeHint': 'Choose a color scheme for the code editor. Applies immediately.',
+  'theme.vs-dark': 'Dark (Default)',
+  'theme.fpm-dark': 'FPM Dark',
+  'theme.fpm-midnight': 'Midnight',
+  'theme.fpm-dracula': 'Dracula',
+  'theme.vs': 'Light',
+  'theme.hc-black': 'High Contrast',
 }
 
 const catalogs: Record<Locale, Record<MessageKey, string>> = {

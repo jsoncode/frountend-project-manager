@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import * as monaco from 'monaco-editor'
 import { useI18n } from '../i18n/useI18n'
 import { languageFromPath } from '../lib/editorLanguage'
@@ -23,7 +23,7 @@ type Props = {
 
 const FONT = "Consolas, 'Courier New', ui-monospace, monospace"
 
-function createPane(
+function createEditor(
   el: HTMLElement,
   value: string,
   language: string,
@@ -47,7 +47,12 @@ function createPane(
   })
 }
 
-export function MergeDiffModal({ projectPath, file, onClose, onSaved }: Props) {
+export function MergeEditorModal({
+  projectPath,
+  file,
+  onClose,
+  onSaved,
+}: Props) {
   const { t } = useI18n()
   const editorTheme = useSettingsStore((s) => s.config?.editorTheme ?? 'vs-dark')
   const oursRef = useRef<HTMLDivElement>(null)
@@ -94,12 +99,12 @@ export function MergeDiffModal({ projectPath, file, onClose, onSaved }: Props) {
         setHunkCount(parseConflictHunks(sides.working).length)
         setLoading(false)
 
-        // Create editors after DOM paints.
+        // Create editors after DOM paints
         requestAnimationFrame(() => {
           if (cancelled) return
           registerEditorThemes(monaco)
           if (oursRef.current && !editorsRef.current.ours) {
-            editorsRef.current.ours = createPane(
+            editorsRef.current.ours = createEditor(
               oursRef.current,
               sides.ours,
               lang,
@@ -108,7 +113,7 @@ export function MergeDiffModal({ projectPath, file, onClose, onSaved }: Props) {
             )
           }
           if (theirsRef.current && !editorsRef.current.theirs) {
-            editorsRef.current.theirs = createPane(
+            editorsRef.current.theirs = createEditor(
               theirsRef.current,
               sides.theirs,
               lang,
@@ -117,13 +122,7 @@ export function MergeDiffModal({ projectPath, file, onClose, onSaved }: Props) {
             )
           }
           if (resultRef.current && !editorsRef.current.result) {
-            const ed = createPane(
-              resultRef.current,
-              sides.working,
-              lang,
-              false,
-              editorTheme,
-            )
+            const ed = createEditor(resultRef.current, sides.working, lang, false, editorTheme)
             editorsRef.current.result = ed
             ed.onDidChangeModelContent(() => {
               const v = ed.getValue()
@@ -150,12 +149,26 @@ export function MergeDiffModal({ projectPath, file, onClose, onSaved }: Props) {
     }
   }, [projectPath, file])
 
-  const applyChoice = (choice: 'ours' | 'theirs' | 'both') => {
+  const applyChoice = useCallback((choice: 'ours' | 'theirs' | 'both') => {
     const ed = editorsRef.current.result
     if (!ed) return
     const next = applyNthHunkChoice(ed.getValue(), 0, choice)
     ed.setValue(next)
-  }
+  }, [])
+
+  const acceptAllOurs = useCallback(() => {
+    const ours = editorsRef.current.ours?.getValue()
+    if (ours != null) {
+      editorsRef.current.result?.setValue(ours)
+    }
+  }, [])
+
+  const acceptAllTheirs = useCallback(() => {
+    const theirs = editorsRef.current.theirs?.getValue()
+    if (theirs != null) {
+      editorsRef.current.result?.setValue(theirs)
+    }
+  }, [])
 
   const tryClose = () => {
     if (dirty && !window.confirm(t('merge.diffDiscardConfirm'))) return
@@ -191,7 +204,7 @@ export function MergeDiffModal({ projectPath, file, onClose, onSaved }: Props) {
       onClose={tryClose}
       wide
       elevated
-      className="merge-diff-modal"
+      className="merge-editor-modal"
       closeOnEsc={!busy}
     >
       {error && <div className="status-banner dirty">{error}</div>}
@@ -208,51 +221,99 @@ export function MergeDiffModal({ projectPath, file, onClose, onSaved }: Props) {
       )}
       {!loading && !binary && (
         <>
-          <div className="merge-diff-toolbar">
-            <span className="muted">
+          <div className="merge-editor-toolbar">
+            <span className="merge-editor-status muted">
               {t('merge.hunkRemaining', { n: hunkCount })}
             </span>
+            <div style={{ flex: 1 }} />
             <button
               type="button"
               className="btn btn-sm"
               disabled={busy || hunkCount === 0}
               onClick={() => applyChoice('ours')}
+              title={t('merge.hunkOurs')}
             >
-              {t('merge.hunkOurs')}
+              ← {t('merge.hunkOurs')}
             </button>
             <button
               type="button"
               className="btn btn-sm"
               disabled={busy || hunkCount === 0}
               onClick={() => applyChoice('theirs')}
+              title={t('merge.hunkTheirs')}
             >
-              {t('merge.hunkTheirs')}
+              {t('merge.hunkTheirs')} →
             </button>
             <button
               type="button"
               className="btn btn-sm"
               disabled={busy || hunkCount === 0}
               onClick={() => applyChoice('both')}
+              title={t('merge.hunkBoth')}
             >
               {t('merge.hunkBoth')}
             </button>
           </div>
-          <div className="merge-diff-panes">
-            <div className="merge-diff-pane">
-              <div className="merge-diff-label">{t('merge.paneOurs')}</div>
-              <div className="merge-diff-editor" ref={oursRef} />
+
+          <div className="merge-editor-panes">
+            {/* Ours pane */}
+            <div className="merge-editor-pane">
+              <div className="merge-editor-pane-header">
+                <span className="merge-editor-pane-title">
+                  {t('merge.paneOurs')}
+                </span>
+                <div className="merge-editor-pane-actions">
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    onClick={acceptAllOurs}
+                    title={t('diff.acceptLeft')}
+                  >
+                    {t('diff.acceptLeft')} →
+                  </button>
+                </div>
+              </div>
+              <div className="merge-editor-pane-body" ref={oursRef} />
             </div>
-            <div className="merge-diff-pane">
-              <div className="merge-diff-label">{t('merge.paneTheirs')}</div>
-              <div className="merge-diff-editor" ref={theirsRef} />
+
+            {/* Result pane (editable) */}
+            <div className="merge-editor-pane">
+              <div className="merge-editor-pane-header">
+                <span className="merge-editor-pane-title">
+                  {t('merge.paneResult')}
+                </span>
+              </div>
+              <div className="merge-editor-pane-body" ref={resultRef} />
             </div>
-            <div className="merge-diff-pane">
-              <div className="merge-diff-label">{t('merge.paneResult')}</div>
-              <div className="merge-diff-editor" ref={resultRef} />
+
+            {/* Theirs pane */}
+            <div className="merge-editor-pane">
+              <div className="merge-editor-pane-header">
+                <span className="merge-editor-pane-title">
+                  {t('merge.paneTheirs')}
+                </span>
+                <div className="merge-editor-pane-actions">
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    onClick={acceptAllTheirs}
+                    title={t('diff.acceptRight')}
+                  >
+                    ← {t('diff.acceptRight')}
+                  </button>
+                </div>
+              </div>
+              <div className="merge-editor-pane-body" ref={theirsRef} />
             </div>
           </div>
+
           <div className="modal-actions">
-            <button type="button" className="btn" disabled={busy} onClick={tryClose}>
+            <button
+              type="button"
+              className="btn"
+              disabled={busy}
+              onClick={tryClose}
+            >
               {t('branch.cancel')}
             </button>
             <button

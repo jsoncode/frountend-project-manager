@@ -706,6 +706,17 @@ fn pick_executable(app: AppHandle) -> Result<Option<String>, String> {
 }
 
 #[tauri::command]
+fn pick_file_in_directory(app: AppHandle, directory: String) -> Result<Option<String>, String> {
+    let file = app
+        .dialog()
+        .file()
+        .set_title("Select File to Compare")
+        .set_directory(directory)
+        .blocking_pick_file();
+    Ok(file.map(|p| p.to_string()))
+}
+
+#[tauri::command]
 fn pick_image(app: AppHandle) -> Result<Option<String>, String> {
     let file = app
         .dialog()
@@ -929,6 +940,7 @@ pub fn run() {
             pick_directory,
             pick_executable,
             pick_image,
+            pick_file_in_directory,
             import_ide_icon,
             import_ide_icon_bytes,
             extract_ide_icon_from_exe,

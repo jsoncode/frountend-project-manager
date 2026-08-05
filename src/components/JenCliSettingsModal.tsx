@@ -464,8 +464,13 @@ function JenCliServersManageModal({
   )
 }
 
-export function JenCliSettingsModal() {
-  const open = useSettingsStore((s) => s.jenCliModalOpen)
+type JenCliSettingsModalProps = {
+  inline?: boolean
+  onClosePanel?: () => void
+}
+
+export function JenCliSettingsModal({ inline, onClosePanel }: JenCliSettingsModalProps = {}) {
+  const storeOpen = useSettingsStore((s) => s.jenCliModalOpen)
   const setOpen = useSettingsStore((s) => s.setJenCliModalOpen)
   const { t } = useI18n()
   const [loading, setLoading] = useState(false)
@@ -479,6 +484,8 @@ export function JenCliSettingsModal() {
   const [paramRows, setParamRows] = useState<KvRow[]>([])
   const [pathEnabled, setPathEnabled] = useState(false)
   const [serversOpen, setServersOpen] = useState(false)
+
+  const isOpen = inline || storeOpen
 
   const reload = useCallback(async () => {
     if (!isTauri()) return
@@ -506,11 +513,11 @@ export function JenCliSettingsModal() {
   }, [])
 
   useEffect(() => {
-    if (open) {
+    if (isOpen) {
       setServersOpen(false)
       void reload()
     }
-  }, [open, reload])
+  }, [isOpen, reload])
 
   const aliases = useMemo(
     () => Object.keys(state?.servers.servers ?? {}),
@@ -588,17 +595,18 @@ export function JenCliSettingsModal() {
     }
   }
 
-  if (!open) return null
+  const handleClose = () => {
+    if (inline) {
+      onClosePanel?.()
+    } else {
+      setOpen(false)
+    }
+  }
 
-  return (
+  if (!isOpen) return null
+
+  const content = (
     <>
-      <ModalShell
-        title={t('jenCli.title')}
-        onClose={() => setOpen(false)}
-        wide
-        elevated
-        className="jen-cli-settings-modal"
-      >
         {loading && <p className="muted">{t('jenCli.loading')}</p>}
         {error && <div className="status-banner dirty">{error}</div>}
 
@@ -800,10 +808,42 @@ export function JenCliSettingsModal() {
         )}
 
         <div className="modal-actions">
-          <button type="button" className="btn" onClick={() => setOpen(false)}>
+          <button type="button" className="btn" onClick={handleClose}>
             {t('settings.close')}
           </button>
         </div>
+    </>
+  )
+
+  if (inline) {
+    return (
+      <>
+        <div className="settings-inline-panel">
+          {content}
+        </div>
+        {serversOpen && state && (
+          <JenCliServersManageModal
+            initial={state.servers}
+            exampleJson={state.exampleServersJson}
+            configPath={state.paths.serversConfig}
+            onClose={() => setServersOpen(false)}
+            onSaved={reload}
+          />
+        )}
+      </>
+    )
+  }
+
+  return (
+    <>
+      <ModalShell
+        title={t('jenCli.title')}
+        onClose={handleClose}
+        wide
+        elevated
+        className="jen-cli-settings-modal"
+      >
+        {content}
       </ModalShell>
 
       {serversOpen && state && (

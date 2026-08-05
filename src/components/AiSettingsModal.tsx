@@ -3,15 +3,22 @@ import { AiModelSettingsModal } from '../ai/AiModelSettingsModal'
 import { useAiStore } from '../stores/aiStore'
 import { useSettingsStore } from '../stores/settingsStore'
 
+type AiSettingsModalProps = {
+  inline?: boolean
+  onClosePanel?: () => void
+}
+
 /** Hosts AI model settings from the main window (Settings → AI). */
-export function AiSettingsModal() {
-  const open = useSettingsStore((s) => s.aiSettingsOpen)
+export function AiSettingsModal({ inline, onClosePanel }: AiSettingsModalProps = {}) {
+  const storeOpen = useSettingsStore((s) => s.aiSettingsOpen)
   const setAiSettingsOpen = useSettingsStore((s) => s.setAiSettingsOpen)
   const load = useAiStore((s) => s.load)
   const [ready, setReady] = useState(false)
 
+  const isOpen = inline || storeOpen
+
   useEffect(() => {
-    if (!open) {
+    if (!isOpen) {
       setReady(false)
       return
     }
@@ -23,9 +30,17 @@ export function AiSettingsModal() {
     return () => {
       cancelled = true
     }
-  }, [open, load])
+  }, [isOpen, load])
 
-  if (!open || !ready) return null
+  if (!isOpen || !ready) return null
 
-  return <AiModelSettingsModal onClose={() => setAiSettingsOpen(false)} />
+  const handleClose = () => {
+    if (inline) {
+      onClosePanel?.()
+    } else {
+      setAiSettingsOpen(false)
+    }
+  }
+
+  return <AiModelSettingsModal onClose={handleClose} inline={inline} />
 }

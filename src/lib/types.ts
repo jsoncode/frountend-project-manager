@@ -22,6 +22,14 @@ export type HistoryItem = {
   pinned: boolean
 }
 
+export type EditorThemeId =
+  | 'vs-dark'
+  | 'vs'
+  | 'fpm-dark'
+  | 'fpm-midnight'
+  | 'fpm-dracula'
+  | 'hc-black'
+
 export type AppConfig = {
   workspaces: string[]
   tags: Record<string, string[]>
@@ -35,6 +43,8 @@ export type AppConfig = {
   projectAccess?: Record<string, number>
   /** UI language: zh | en — default zh */
   locale?: 'zh' | 'en'
+  /** Monaco editor color theme id — default 'vs-dark' */
+  editorTheme?: EditorThemeId
 }
 
 export type ProjectSummary = {

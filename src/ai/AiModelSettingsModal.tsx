@@ -20,6 +20,7 @@ const TYPE_LABEL_KEYS: Record<AiModelType, MessageKey> = {
 
 type Props = {
   onClose: () => void
+  inline?: boolean
 }
 
 type EditorState =
@@ -27,7 +28,7 @@ type EditorState =
   | { mode: 'edit'; model: AiModel }
   | null
 
-export function AiModelSettingsModal({ onClose }: Props) {
+export function AiModelSettingsModal({ onClose, inline }: Props) {
   const { t } = useI18n()
   const config = useAiStore((s) => s.config)
   const saveConfig = useAiStore((s) => s.saveConfig)
@@ -73,117 +74,180 @@ export function AiModelSettingsModal({ onClose }: Props) {
     )
   }
 
-  return (
+  const content = (
     <>
+      <div className="ai-settings-toolbar">
+        <p className="muted" style={{ margin: 0, flex: 1 }}>
+          {t('ai.settingsHint')}
+        </p>
+        <button
+          type="button"
+          className="ai-btn ai-btn-sm ai-icon-btn"
+          disabled={busy}
+          title={t('ai.addModel')}
+          aria-label={t('ai.addModel')}
+          onClick={() => setEditor({ mode: 'add' })}
+        >
+          <AddCircle className="ui-icon" size={20} color="currentColor" aria-hidden />
+        </button>
+      </div>
+
+      {config.models.length === 0 ? (
+        <p className="ai-settings-empty">{t('ai.noModels')}</p>
+      ) : (
+        <ul className="ai-model-list">
+          {config.models.map((model) => {
+            const title = model.remark.trim() || model.modelName || '—'
+            return (
+              <li key={model.id} className="ai-model-row">
+                <div className="ai-model-row-main">
+                  <span className="ai-model-row-title" title={title}>
+                    {title}
+                  </span>
+                  <span className="ai-model-row-meta muted">
+                    <span className="ai-model-type-pill">
+                      {t(TYPE_LABEL_KEYS[model.type])}
+                    </span>
+                    {model.modelName.trim() ? (
+                      <span>{model.modelName.trim()}</span>
+                    ) : null}
+                    {!model.active ? (
+                      <span>{t('ai.modelInactive')}</span>
+                    ) : null}
+                  </span>
+                </div>
+                <div className="ai-model-row-actions">
+                  <button
+                    type="button"
+                    className={`ai-btn ai-btn-sm ai-icon-btn${model.active ? ' is-active' : ''}`}
+                    disabled={busy}
+                    title={
+                      model.active ? t('ai.modelActive') : t('ai.modelInactive')
+                    }
+                    aria-label={
+                      model.active ? t('ai.modelActive') : t('ai.modelInactive')
+                    }
+                    aria-pressed={model.active}
+                    onClick={() => void toggleActive(model)}
+                  >
+                    {model.active ? (
+                      <CheckSquare
+                        className="ui-icon"
+                        size={18}
+                        color="currentColor"
+                        aria-hidden
+                      />
+                    ) : (
+                      <CloseSquare
+                        className="ui-icon"
+                        size={18}
+                        color="currentColor"
+                        aria-hidden
+                      />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    className="ai-btn ai-btn-sm ai-icon-btn"
+                    disabled={busy}
+                    title={t('ai.editModel')}
+                    aria-label={t('ai.editModel')}
+                    onClick={() => setEditor({ mode: 'edit', model })}
+                  >
+                    <Pen className="ui-icon" size={18} color="currentColor" aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    className="ai-btn ai-btn-sm ai-btn-danger ai-icon-btn"
+                    disabled={busy}
+                    title={t('ai.deleteModel')}
+                    aria-label={t('ai.deleteModel')}
+                    onClick={() => setPendingDelete(model)}
+                  >
+                    <Trash className="ui-icon" size={18} color="currentColor" aria-hidden />
+                  </button>
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+
+      {error ? <p className="ai-settings-error">{error}</p> : null}
+      {!inline && (
+        <div className="modal-actions">
+          <button type="button" className="ai-btn" onClick={onClose}>
+            {t('settings.close')}
+          </button>
+        </div>
+      )}
+    </>
+  )
+
+  if (inline) {
+    return (
+      <>
+        <div className="settings-inline-panel">
+          {content}
+        </div>
+        {editor ? (
+          <AiModelEditorModal
+            key={editor.mode === 'edit' ? editor.model.id : 'new'}
+            initial={
+              editor.mode === 'edit' ? { ...editor.model } : blankAiModel()
+            }
+            onClose={() => setEditor(null)}
+            onSave={saveFromEditor}
+          />
+        ) : null}
+        {pendingDelete ? (
+          <ModalShell
+            title={t('ai.deleteModelTitle')}
+            onClose={() => setPendingDelete(null)}
+            nested
+            closeOnEsc={false}
+          >
+            <p className="muted">
+              {t('ai.deleteModelConfirm', {
+                title:
+                  pendingDelete.remark.trim() ||
+                  pendingDelete.modelName ||
+                  '—',
+              })}
+            </p>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="ai-btn"
+                onClick={() => setPendingDelete(null)}
+              >
+                {t('branch.cancel')}
+              </button>
+              <button
+                type="button"
+                className="ai-btn ai-btn-danger btn-with-icon"
+                disabled={busy}
+                onClick={() => void removeModel(pendingDelete)}
+              >
+                <Trash className="ui-icon" size={14} color="currentColor" aria-hidden />
+                {t('ai.deleteModel')}
+              </button>
+            </div>
+          </ModalShell>
+        ) : null}
+      </>
+    )
+  }
+
+  return (
+    <>      
       <ModalShell
         title={t('ai.settingsTitle')}
         onClose={onClose}
         elevated
         className="ai-settings-modal"
       >
-        <div className="ai-settings-toolbar">
-          <p className="muted" style={{ margin: 0, flex: 1 }}>
-            {t('ai.settingsHint')}
-          </p>
-          <button
-            type="button"
-            className="ai-btn ai-btn-sm ai-icon-btn"
-            disabled={busy}
-            title={t('ai.addModel')}
-            aria-label={t('ai.addModel')}
-            onClick={() => setEditor({ mode: 'add' })}
-          >
-            <AddCircle className="ui-icon" size={20} color="currentColor" aria-hidden />
-          </button>
-        </div>
-
-        {config.models.length === 0 ? (
-          <p className="ai-settings-empty">{t('ai.noModels')}</p>
-        ) : (
-          <ul className="ai-model-list">
-            {config.models.map((model) => {
-              const title = model.remark.trim() || model.modelName || '—'
-              return (
-                <li key={model.id} className="ai-model-row">
-                  <div className="ai-model-row-main">
-                    <span className="ai-model-row-title" title={title}>
-                      {title}
-                    </span>
-                    <span className="ai-model-row-meta muted">
-                      <span className="ai-model-type-pill">
-                        {t(TYPE_LABEL_KEYS[model.type])}
-                      </span>
-                      {model.modelName.trim() ? (
-                        <span>{model.modelName.trim()}</span>
-                      ) : null}
-                      {!model.active ? (
-                        <span>{t('ai.modelInactive')}</span>
-                      ) : null}
-                    </span>
-                  </div>
-                  <div className="ai-model-row-actions">
-                    <button
-                      type="button"
-                      className={`ai-btn ai-btn-sm ai-icon-btn${model.active ? ' is-active' : ''}`}
-                      disabled={busy}
-                      title={
-                        model.active ? t('ai.modelActive') : t('ai.modelInactive')
-                      }
-                      aria-label={
-                        model.active ? t('ai.modelActive') : t('ai.modelInactive')
-                      }
-                      aria-pressed={model.active}
-                      onClick={() => void toggleActive(model)}
-                    >
-                      {model.active ? (
-                        <CheckSquare
-                          className="ui-icon"
-                          size={18}
-                          color="currentColor"
-                          aria-hidden
-                        />
-                      ) : (
-                        <CloseSquare
-                          className="ui-icon"
-                          size={18}
-                          color="currentColor"
-                          aria-hidden
-                        />
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      className="ai-btn ai-btn-sm ai-icon-btn"
-                      disabled={busy}
-                      title={t('ai.editModel')}
-                      aria-label={t('ai.editModel')}
-                      onClick={() => setEditor({ mode: 'edit', model })}
-                    >
-                      <Pen className="ui-icon" size={18} color="currentColor" aria-hidden />
-                    </button>
-                    <button
-                      type="button"
-                      className="ai-btn ai-btn-sm ai-btn-danger ai-icon-btn"
-                      disabled={busy}
-                      title={t('ai.deleteModel')}
-                      aria-label={t('ai.deleteModel')}
-                      onClick={() => setPendingDelete(model)}
-                    >
-                      <Trash className="ui-icon" size={18} color="currentColor" aria-hidden />
-                    </button>
-                  </div>
-                </li>
-              )
-            })}
-          </ul>
-        )}
-
-        {error ? <p className="ai-settings-error">{error}</p> : null}
-        <div className="modal-actions">
-          <button type="button" className="ai-btn" onClick={onClose}>
-            {t('settings.close')}
-          </button>
-        </div>
+        {content}
       </ModalShell>
 
       {editor ? (
