@@ -359,6 +359,16 @@ description = "Drop project scan cache entry from SQLite"
 commands.allow = ["drop_project_cache"]
 
 [[permission]]
+identifier = "allow-clear-all-project-cache"
+description = "Clear all project scan cache from SQLite"
+commands.allow = ["clear_all_project_cache"]
+
+[[permission]]
+identifier = "allow-clear-all-ai-conversations"
+description = "Clear all AI conversations and messages"
+commands.allow = ["clear_all_ai_conversations"]
+
+[[permission]]
 identifier = "allow-jen-cli-get-state"
 description = "Load jen-cli settings state"
 commands.allow = ["jen_cli_get_state"]

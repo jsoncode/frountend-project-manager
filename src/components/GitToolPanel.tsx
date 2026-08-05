@@ -86,10 +86,11 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
   const closeMenu = useCallback(() => setMenu(null), [])
   const closeHistoryMenu = useCallback(() => setHistoryMenu(null), [])
 
-  /** Set of branch names that are favorited (pinned in history). */
-  const favNames = new Set(
-    branchHistory.filter((h) => h.pinned).map((h) => h.value),
-  )
+  /** Set of branch names that are favorited (new store + legacy pinned items). */
+  const favNames = new Set<string>([
+    ...(selected && config ? (config.branchFavorites?.[selected.path] ?? []) : []),
+    ...branchHistory.filter((h) => h.pinned).map((h) => h.value),
+  ])
 
   if (!selected) {
     return <div className="muted">{t('tool.needProject')}</div>
@@ -651,8 +652,8 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
             className="favorite"
             onClick={() => {
               const name = localName(menu.branch.name)
-              const pinned = favNames.has(name)
-              void setHistoryPinned(selected.path, 'branch', name, !pinned)
+              const isCurrentlyFav = favNames.has(name) || favNames.has(menu.branch.name)
+              void setHistoryPinned(selected.path, 'branch', name, !isCurrentlyFav)
               setMenu(null)
             }}
           >
@@ -703,13 +704,8 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
             type="button"
             role="menuitem"
             onClick={() => {
-              const pinned = favNames.has(historyMenu.value)
-              void setHistoryPinned(
-                selected.path,
-                'branch',
-                historyMenu.value,
-                !pinned,
-              )
+              const isCurrentlyFav = favNames.has(historyMenu.value)
+              void setHistoryPinned(selected.path, 'branch', historyMenu.value, !isCurrentlyFav)
               setHistoryMenu(null)
             }}
           >

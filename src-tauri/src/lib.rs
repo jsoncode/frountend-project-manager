@@ -208,6 +208,24 @@ fn drop_project_cache(workspace: String) -> Result<(), String> {
     db::project_cache_drop(&workspace)
 }
 
+#[tauri::command]
+fn clear_all_project_cache(app: AppHandle) -> Result<(), String> {
+    db::project_cache_clear_all()?;
+    // Also clear history data stored in AppConfig (kv table).
+    let mut cfg = config::load_or_default(&app)?;
+    cfg.command_history.clear();
+    cfg.branch_history.clear();
+    cfg.branch_favorites.clear();
+    cfg.search_history.clear();
+    config::save(&app, &cfg)?;
+    Ok(())
+}
+
+#[tauri::command]
+fn clear_all_ai_conversations() -> Result<(), String> {
+    db::ai_clear_all_conversations()
+}
+
 #[tauri::command(async)]
 async fn ai_open_chat_window(app: AppHandle, feed_text: Option<String>) -> Result<(), String> {
     // CRITICAL (Windows): creating a WebviewWindow inside a sync command deadlocks
@@ -851,6 +869,8 @@ pub fn run() {
             load_project_cache,
             save_project_cache,
             drop_project_cache,
+            clear_all_project_cache,
+            clear_all_ai_conversations,
             ai_open_chat_window,
             ai_take_pending_feed,
             ai_chat_start,

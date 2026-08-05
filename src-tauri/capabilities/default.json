@@ -95,6 +95,8 @@
     "allow-load-project-cache",
     "allow-save-project-cache",
     "allow-drop-project-cache",
+    "allow-clear-all-project-cache",
+    "allow-clear-all-ai-conversations",
     "allow-jen-cli-get-state",
     "allow-jen-cli-save-servers",
     "allow-jen-cli-save-defaults",

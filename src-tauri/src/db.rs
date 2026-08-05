@@ -254,6 +254,24 @@ pub fn project_cache_drop(workspace: &str) -> Result<(), String> {
     })
 }
 
+pub fn project_cache_clear_all() -> Result<(), String> {
+    with_conn(|conn| {
+        conn.execute("DELETE FROM project_cache", [])
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    })
+}
+
+pub fn ai_clear_all_conversations() -> Result<(), String> {
+    with_conn(|conn| {
+        conn.execute("DELETE FROM ai_messages", [])
+            .map_err(|e| e.to_string())?;
+        conn.execute("DELETE FROM ai_conversations", [])
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    })
+}
+
 pub fn project_cache_all() -> Result<Vec<(String, String)>, String> {
     with_conn(|conn| {
         let mut stmt = conn

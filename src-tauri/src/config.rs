@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -36,6 +36,9 @@ pub struct AppConfig {
     /// key: absolute project path
     #[serde(default)]
     pub branch_history: HashMap<String, Vec<HistoryItem>>,
+    /// Favorite branch names per project (independent from history)
+    #[serde(default)]
+    pub branch_favorites: HashMap<String, HashSet<String>>,
     /// Global project filter search history
     #[serde(default)]
     pub search_history: Vec<HistoryItem>,
@@ -59,6 +62,7 @@ impl Default for AppConfig {
             ides: Vec::new(),
             command_history: HashMap::new(),
             branch_history: HashMap::new(),
+            branch_favorites: HashMap::new(),
             search_history: Vec::new(),
             project_access: HashMap::new(),
             locale: default_locale(),
@@ -259,21 +263,37 @@ pub fn set_history_pinned(
     pinned: bool,
 ) -> Result<AppConfig, String> {
     let mut cfg = load_or_default(app)?;
-    let list = match kind {
-        "command" => cfg
-            .command_history
-            .entry(project_path.to_string())
-            .or_default(),
-        "branch" => cfg
-            .branch_history
-            .entry(project_path.to_string())
-            .or_default(),
+    match kind {
+        "command" => {
+            let list = cfg
+                .command_history
+                .entry(project_path.to_string())
+                .or_default();
+            if let Some(item) = list.iter_mut().find(|i| i.value == value) {
+                item.pinned = pinned;
+            }
+            sort_history(list);
+        }
+        "branch" => {
+            // Use separate favorites set — does NOT affect branch_history.
+            let favs = cfg
+                .branch_favorites
+                .entry(project_path.to_string())
+                .or_default();
+            if pinned {
+                favs.insert(value.to_string());
+            } else {
+                favs.remove(value);
+            }
+            // Also clear legacy pinned flag in branch_history for backward compat.
+            if let Some(list) = cfg.branch_history.get_mut(project_path) {
+                if let Some(item) = list.iter_mut().find(|i| i.value == value) {
+                    item.pinned = false;
+                }
+            }
+        }
         _ => return Err(format!("unknown history kind: {kind}")),
-    };
-    if let Some(item) = list.iter_mut().find(|i| i.value == value) {
-        item.pinned = pinned;
     }
-    sort_history(list);
     save(app, &cfg)?;
     Ok(cfg)
 }

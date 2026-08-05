@@ -534,6 +534,11 @@
   color: var(--danger);
 }
 
+.btn.danger:hover:not(:disabled) {
+  background: var(--danger);
+  color: #fff;
+}
+
 .btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
@@ -2588,6 +2593,23 @@ button.history-chip-main:hover {
   display: flex;
   gap: 8px;
   margin-top: 10px;
+}
+
+.cache-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+}
+
+.cache-item + .cache-item {
+  border-top: 1px solid var(--border-dim);
+}
+
+.cache-item-title {
+  font-weight: 500;
+  margin-bottom: 2px;
 }
 
 .ide-list {

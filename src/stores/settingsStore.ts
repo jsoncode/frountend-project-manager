@@ -11,6 +11,7 @@ const EMPTY_CONFIG: AppConfig = {
   ides: [],
   commandHistory: {},
   branchHistory: {},
+  branchFavorites: {},
   searchHistory: [],
   projectAccess: {},
   locale: 'zh',
@@ -20,6 +21,7 @@ const EMPTY_HISTORY = EMPTY_CONFIG.searchHistory
 const EMPTY_IDES = EMPTY_CONFIG.ides
 const EMPTY_CMD_HISTORY = EMPTY_CONFIG.commandHistory
 const EMPTY_BRANCH_HISTORY = EMPTY_CONFIG.branchHistory
+const EMPTY_BRANCH_FAVORITES = EMPTY_CONFIG.branchFavorites
 const EMPTY_ACCESS = EMPTY_CONFIG.projectAccess
 
 function sleep(ms: number) {
@@ -56,6 +58,7 @@ function normalizeConfig(cfg: AppConfig): AppConfig {
     ides: cfg.ides ?? EMPTY_IDES,
     commandHistory: cfg.commandHistory ?? EMPTY_CMD_HISTORY,
     branchHistory: cfg.branchHistory ?? EMPTY_BRANCH_HISTORY,
+    branchFavorites: cfg.branchFavorites ?? EMPTY_BRANCH_FAVORITES,
     searchHistory: cfg.searchHistory ?? EMPTY_HISTORY,
     projectAccess: cfg.projectAccess ?? EMPTY_ACCESS,
     locale: cfg.locale === 'en' ? 'en' : 'zh',
@@ -88,6 +91,8 @@ type SettingsState = {
     kind: HistoryKind,
     value: string,
   ) => Promise<void>
+  clearProjectCache: () => Promise<void>
+  clearAiConversations: () => Promise<void>
   setLocale: (locale: 'zh' | 'en') => Promise<void>
   setIdeModalOpen: (open: boolean) => void
   setAiSettingsOpen: (open: boolean) => void
@@ -224,6 +229,13 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       value,
     })
     set({ config: cfg })
+  },
+  clearProjectCache: async () => {
+    await invoke('clear_all_project_cache')
+    await get().load()
+  },
+  clearAiConversations: async () => {
+    await invoke('clear_all_ai_conversations')
   },
   setLocale: async (locale) => {
     if (!isTauri()) {

@@ -1,31 +1,54 @@
 import type { MouseEvent } from 'react'
 import type { HistoryItem } from '../lib/types'
+import type { MessageKey } from '../i18n/messages'
 import { useI18n } from '../i18n/useI18n'
 import { Tooltip } from './Tooltip'
 
 /** Pad number with leading zero. */
 const pad = (n: number) => String(n).padStart(2, '0')
 
-/** Format timestamp for display: today→HH:mm, this year→M/D, older→YYYY/M/D. */
-function formatRelativeDate(ts: number): string {
-  const d = new Date(ts)
-  const now = new Date()
-  if (d.getFullYear() === now.getFullYear()) {
-    if (
-      d.getMonth() === now.getMonth() &&
-      d.getDate() === now.getDate()
-    ) {
-      return `${pad(d.getHours())}:${pad(d.getMinutes())}`
-    }
-    return `${d.getMonth() + 1}/${d.getDate()}`
-  }
-  return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`
-}
-
 /** Format timestamp as full datetime for tooltip. */
 function formatFullDate(ts: number): string {
   const d = new Date(ts)
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
+
+/** Format time portion as HH:mm. */
+function formatTime(d: Date): string {
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+/** Format timestamp for display using human-readable relative dates. */
+function formatRelativeDate(ts: number, t: (key: MessageKey, params?: Record<string, string | number>) => string): string {
+  const d = new Date(ts)
+  const now = new Date()
+  const diffMs = now.getTime() - d.getTime()
+  const diffMin = Math.floor(diffMs / 60000)
+  const diffDay = Math.floor(diffMs / 86400000)
+
+  // Less than 1 minute
+  if (diffMin < 1) return t('time.justNow')
+  // Less than 1 hour
+  if (diffMin < 60) return t('time.minutesAgo', { count: diffMin })
+  // Today
+  if (d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()) {
+    const period = d.getHours() < 12 ? 'time.todayMorning' : 'time.todayAfternoon'
+    return t(period, { time: formatTime(d) })
+  }
+  // Yesterday
+  const yesterday = new Date(now)
+  yesterday.setDate(yesterday.getDate() - 1)
+  if (d.getFullYear() === yesterday.getFullYear() && d.getMonth() === yesterday.getMonth() && d.getDate() === yesterday.getDate()) {
+    return t('time.yesterday', { time: formatTime(d) })
+  }
+  // 2-6 days ago
+  if (diffDay >= 2 && diffDay <= 6) return t('time.daysAgo', { count: diffDay })
+  // This year or older — show month/day
+  if (d.getFullYear() === now.getFullYear()) {
+    return t('time.date', { month: d.getMonth() + 1, day: d.getDate() })
+  }
+  // Older than this year
+  return t('time.fullDate', { year: d.getFullYear(), month: d.getMonth() + 1, day: d.getDate() })
 }
 
 type Props = {
@@ -49,8 +72,6 @@ export function HistoryChips({
   onContext,
 }: Props) {
   const { t } = useI18n()
-  const pinned = items.filter((i) => i.pinned)
-  const recent = items.filter((i) => !i.pinned)
 
   return (
     <div className="history-block">
@@ -58,39 +79,19 @@ export function HistoryChips({
       {items.length === 0 && (
         <div className="muted">{emptyText ?? t('history.empty')}</div>
       )}
-      {pinned.length > 0 && (
-        <>
-          <div className="history-label">{t('history.frequent')}</div>
-          <div className="history-chips">
-            {pinned.map((item) => (
-              <HistoryChip
-                key={`p-${item.value}`}
-                item={item}
-                isCurrent={item.value === currentValue}
-                onRun={onRun}
-                onDoubleClick={onDoubleClick}
-                onContext={onContext}
-              />
-            ))}
-          </div>
-        </>
-      )}
-      {recent.length > 0 && (
-        <>
-          <div className="history-label">{t('history.recent')}</div>
-          <div className="history-chips">
-            {recent.map((item) => (
-              <HistoryChip
-                key={`r-${item.value}`}
-                item={item}
-                isCurrent={item.value === currentValue}
-                onRun={onRun}
-                onDoubleClick={onDoubleClick}
-                onContext={onContext}
-              />
-            ))}
-          </div>
-        </>
+      {items.length > 0 && (
+        <div className="history-chips">
+          {items.map((item) => (
+            <HistoryChip
+              key={item.value}
+              item={item}
+              isCurrent={item.value === currentValue}
+              onRun={onRun}
+              onDoubleClick={onDoubleClick}
+              onContext={onContext}
+            />
+          ))}
+        </div>
       )}
     </div>
   )
@@ -110,7 +111,7 @@ function HistoryChip({
   onContext?: (e: MouseEvent, value: string) => void
 }) {
   const { t } = useI18n()
-  const dateLabel = formatRelativeDate(item.lastUsedAt)
+  const dateLabel = formatRelativeDate(item.lastUsedAt, t)
   const fullLabel = formatFullDate(item.lastUsedAt)
   const main = (
     <span className="history-chip-name">{item.value}</span>

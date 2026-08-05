@@ -1,8 +1,10 @@
-import { Play } from 'reicon-react'
+import { Play, Trash } from 'reicon-react'
+import { useState, type MouseEvent } from 'react'
 import { useI18n } from '../i18n/useI18n'
 import { useProjectStore } from '../stores/projectStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useTerminalStore } from '../stores/terminalStore'
+import { ContextMenuPortal } from './ContextMenuPortal'
 import { HistoryChips } from './HistoryChips'
 import { Tooltip } from './Tooltip'
 
@@ -14,6 +16,7 @@ export function CommandPanel({ filterQuery = '' }: { filterQuery?: string }) {
   const runRaw = useTerminalStore((s) => s.runRaw)
   const config = useSettingsStore((s) => s.config)
   const { t } = useI18n()
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; value: string; originalValue: string } | null>(null)
 
   if (!selected || !details) {
     return <div className="muted">{t('cmd.selectProject')}</div>
@@ -25,9 +28,11 @@ export function CommandPanel({ filterQuery = '' }: { filterQuery?: string }) {
   // Keep package.json scripts key order (do not re-sort).
   const scripts = Object.keys(details.summary.scripts).filter(match)
   const pm = details.packageManager
-  const history = (config?.commandHistory?.[selected.path] ?? [])
-    .filter((h) => match(h.value))
-    .sort((a, b) => a.value.localeCompare(b.value))
+  // Strip package manager prefix from history items (e.g., "pnpm build" → "build")
+  const stripPrefix = (v: string) => v.replace(/^(npm run |pnpm |yarn |bun )/, '')
+  const rawHistory = config?.commandHistory?.[selected.path] ?? []
+  const history = rawHistory
+    .map((h) => ({ ...h, originalValue: h.value, value: stripPrefix(h.value) }))
 
   return (
     <div className="command-panel-side">
@@ -65,7 +70,35 @@ export function CommandPanel({ filterQuery = '' }: { filterQuery?: string }) {
           void useSettingsStore.getState().touchCommandHistory(selected.path, cmd)
           void runRaw(selected.path, selected.folderName, full)
         }}
+        onContext={(e: MouseEvent, value: string) => {
+          e.preventDefault()
+          e.stopPropagation()
+          // Find the original stored value (may have pm prefix) for deletion
+          const item = rawHistory.find((h) => stripPrefix(h.value) === value)
+          setCtxMenu({ x: e.clientX, y: e.clientY, value, originalValue: item?.value ?? value })
+        }}
       />
+
+      {ctxMenu && (
+        <ContextMenuPortal
+          x={ctxMenu.x}
+          y={ctxMenu.y}
+          onClose={() => setCtxMenu(null)}
+        >
+          <button
+            type="button"
+            role="menuitem"
+            className="danger"
+            onClick={() => {
+              void useSettingsStore.getState().deleteHistory(selected.path, 'command', ctxMenu.originalValue)
+              setCtxMenu(null)
+            }}
+          >
+            <Trash size={14} color="currentColor" />
+            {t('history.delete')}
+          </button>
+        </ContextMenuPortal>
+      )}
     </div>
   )
 }

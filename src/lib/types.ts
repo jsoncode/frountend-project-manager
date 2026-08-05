@@ -28,6 +28,8 @@ export type AppConfig = {
   ides: IdeConfig[]
   commandHistory?: Record<string, HistoryItem[]>
   branchHistory?: Record<string, HistoryItem[]>
+  /** Favorite branch names per project (independent from history) */
+  branchFavorites?: Record<string, string[]>
   searchHistory?: HistoryItem[]
   /** project path → last accessed ms */
   projectAccess?: Record<string, number>
