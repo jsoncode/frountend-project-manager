@@ -89,6 +89,11 @@ description = "Commit a completed merge"
 commands.allow = ["git_merge_commit"]
 
 [[permission]]
+identifier = "allow-git-diff-head"
+description = "Read file diff between HEAD and working tree"
+commands.allow = ["git_diff_head"]
+
+[[permission]]
 identifier = "allow-list-env-files"
 description = "List env files"
 commands.allow = ["list_env_files"]
@@ -397,3 +402,23 @@ commands.allow = ["jen_cli_reset_servers"]
 identifier = "allow-jen-cli-set-path-enabled"
 description = "Enable or disable jen-cli on user PATH"
 commands.allow = ["jen_cli_set_path_enabled"]
+
+[[permission]]
+identifier = "allow-load-project-statuses"
+description = "Load cached project git status summaries from SQLite"
+commands.allow = ["load_project_statuses"]
+
+[[permission]]
+identifier = "allow-save-project-statuses"
+description = "Save project git status summaries to SQLite"
+commands.allow = ["save_project_statuses"]
+
+[[permission]]
+identifier = "allow-load-session"
+description = "Load the persisted session snapshot"
+commands.allow = ["load_session"]
+
+[[permission]]
+identifier = "allow-save-session"
+description = "Save the current session snapshot"
+commands.allow = ["save_session"]
