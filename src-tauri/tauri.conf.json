@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Frontend Project Manager",
-  "version": "0.1.0",
+  "version": "0.4.1",
   "identifier": "com.fpm.desktop",
   "build": {
     "frontendDist": "../dist",
@@ -38,7 +38,10 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "dmg"],
+    "targets": [
+      "nsis",
+      "dmg"
+    ],
     "resources": [
       "../vendor/jen-cli"
     ],
