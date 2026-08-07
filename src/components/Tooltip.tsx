@@ -181,11 +181,27 @@ export function Tooltip({
 
     update()
     const onScroll = () => hideNow()
+    // Leaving the app (Alt+Tab / task switch) does not fire mouseleave on
+    // the trigger — the tip would stay visible after switching back.
+    const onVisibility = () => {
+      if (document.hidden) hideNow()
+    }
+    // Minimize → tray restore does not reliably fire blur/visibilitychange
+    // in WebView2. Closing on refocus guarantees no stale tip survives.
+    const onFocus = () => hideNow()
     window.addEventListener('scroll', onScroll, true)
     window.addEventListener('resize', hideNow)
+    window.addEventListener('blur', hideNow)
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onVisibility)
+    document.documentElement.addEventListener('mouseleave', hideNow)
     return () => {
       window.removeEventListener('scroll', onScroll, true)
       window.removeEventListener('resize', hideNow)
+      window.removeEventListener('blur', hideNow)
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVisibility)
+      document.documentElement.removeEventListener('mouseleave', hideNow)
     }
   }, [open, placement, title, hideNow])
 

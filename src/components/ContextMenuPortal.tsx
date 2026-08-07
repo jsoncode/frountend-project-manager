@@ -62,6 +62,9 @@ export function ContextMenuPortal({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
     }
+    const onVisibility = () => {
+      if (document.hidden) close()
+    }
     // Defer click listener so the opening contextmenu click doesn't instantly close.
     const timer = window.setTimeout(() => {
       window.addEventListener('click', close)
@@ -70,6 +73,11 @@ export function ContextMenuPortal({
     window.addEventListener('scroll', close, true)
     window.addEventListener('resize', close)
     window.addEventListener('keydown', onKey)
+    window.addEventListener('blur', close)
+    // Minimize → tray restore may not fire blur/visibilitychange in WebView2;
+    // closing on refocus guarantees no stale menu survives.
+    window.addEventListener('focus', close)
+    document.addEventListener('visibilitychange', onVisibility)
     return () => {
       window.clearTimeout(timer)
       window.removeEventListener('click', close)
@@ -77,6 +85,9 @@ export function ContextMenuPortal({
       window.removeEventListener('scroll', close, true)
       window.removeEventListener('resize', close)
       window.removeEventListener('keydown', onKey)
+      window.removeEventListener('blur', close)
+      window.removeEventListener('focus', close)
+      document.removeEventListener('visibilitychange', onVisibility)
     }
   }, [onClose])
 

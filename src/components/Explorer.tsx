@@ -43,6 +43,7 @@ import { useWorkspaceStore } from '../stores/workspaceStore'
 import { CommitModal } from './CommitModal'
 import { ContextMenuPortal } from './ContextMenuPortal'
 import { FileDiffModal } from './FileDiffModal'
+import { FileIcon } from './FileIcon'
 import { ModalShell } from './ModalShell'
 import { OpenWithMenu } from './OpenWithMenu'
 import { Tooltip } from './Tooltip'
@@ -101,6 +102,7 @@ export function Explorer() {
 
   const [dirCache, setDirCache] = useState<Record<string, DirEntry[]>>({})
   const [dirLoading, setDirLoading] = useState<Set<string>>(() => new Set())
+  const [dirErrors, setDirErrors] = useState<Set<string>>(() => new Set())
   const dirCacheRef = useRef<Record<string, DirEntry[]>>({})
   const dirInflight = useRef(new Set<string>())
   const [pendingRemove, setPendingRemove] = useState<string | null>(null)
@@ -175,9 +177,23 @@ export function Explorer() {
       })
       dirCacheRef.current[path] = entries
       setDirCache((prev) => ({ ...prev, [path]: entries }))
+      setDirErrors((prev) => {
+        if (!prev.has(path)) return prev
+        const next = new Set(prev)
+        next.delete(path)
+        return next
+      })
     } catch {
-      dirCacheRef.current[path] = []
-      setDirCache((prev) => ({ ...prev, [path]: [] }))
+      // Never cache a failure as an empty list — that would render a
+      // misleading "empty folder" for a directory that actually has content.
+      delete dirCacheRef.current[path]
+      setDirCache((prev) => {
+        if (!(path in prev)) return prev
+        const next = { ...prev }
+        delete next[path]
+        return next
+      })
+      setDirErrors((prev) => new Set(prev).add(path))
     } finally {
       dirInflight.current.delete(path)
       setDirLoading((prev) => {
@@ -187,6 +203,22 @@ export function Explorer() {
       })
     }
   }, [])
+
+  // Safety net: any expanded project/dir without a cache entry gets
+  // (re)loaded. Covers expands that raced a previous failed load, and the
+  // frame between expanding and the forced load marking itself loading.
+  useEffect(() => {
+    for (const id of expanded) {
+      let path: string
+      if (id.startsWith('dir:')) path = id.slice(4)
+      else if (id.startsWith('proj:')) path = id.slice(5)
+      else continue
+      if (dirErrors.has(path)) continue
+      if (dirCacheRef.current[path] === undefined && !dirInflight.current.has(path)) {
+        void loadDir(path)
+      }
+    }
+  }, [expanded, dirCache, dirErrors, loadDir])
 
   // Track expanded in a ref so the auto-expand effect doesn't re-fire on every collapse.
   const expandedRef = useRef(expanded)
@@ -444,7 +476,7 @@ export function Explorer() {
     depth: number,
   ): ReactNode => {
     const entries = dirCache[parentPath]
-    if (dirLoading.has(parentPath) && !entries) {
+    if (dirLoading.has(parentPath)) {
       return (
         <div
           className="explorer-row muted"
@@ -454,7 +486,21 @@ export function Explorer() {
         </div>
       )
     }
-    if (!entries || entries.length === 0) {
+    if (!entries) {
+      // undefined cache = never loaded successfully. A genuinely empty dir
+      // is cached as [] and falls through to the emptyDir branch below.
+      return (
+        <div
+          className="explorer-row muted"
+          style={{ paddingLeft: 8 + depth * 10 }}
+        >
+          {dirErrors.has(parentPath)
+            ? t('explorer.loadFailed')
+            : t('explorer.loading')}
+        </div>
+      )
+    }
+    if (entries.length === 0) {
       return (
         <div
           className="explorer-row muted"
@@ -558,12 +604,9 @@ export function Explorer() {
             }}
           >
           <span className="explorer-twist" aria-hidden />
-          <Document
-            className="explorer-icon"
-            size={14}
-            color="currentColor"
-            aria-hidden
-          />
+          <span className="explorer-icon">
+            <FileIcon filename={entry.name} size={14} />
+          </span>
           <span className="explorer-label">{entry.name}</span>
           {gitMark ? (
             <span className={`git-file-mark git-mark-${gitMark}`}>
@@ -1125,7 +1168,9 @@ export function Explorer() {
                     setDiffDirList(null)
                   }}
                 >
-                  <Document className="ui-icon" size={14} color="currentColor" aria-hidden />
+                  <span className="explorer-icon">
+                    <FileIcon filename={f.relPath} size={14} />
+                  </span>
                   <span className="explorer-diff-list-path" title={f.absPath}>{f.relPath}</span>
                   <span className="explorer-diff-list-label muted">{f.label}</span>
                 </button>

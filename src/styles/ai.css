@@ -552,8 +552,6 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  max-height: min(56vh, 480px);
-  overflow: auto;
 }
 
 .ai-model-row {

@@ -1293,6 +1293,9 @@ body.resizing-row * {
 }
 
 .explorer-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
   opacity: 0.85;
 }
@@ -2615,7 +2618,7 @@ button.history-chip-main:hover {
 
 .modal {
   width: min(720px, 92vw);
-  max-height: 80vh;
+  height: 90vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -2683,7 +2686,6 @@ button.history-chip-main:hover {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  height: 80vh;
 }
 
 .settings-modal-root .modal-body {
@@ -3466,7 +3468,6 @@ button.history-chip-main:hover {
 
 .merge-diff-modal.modal-wide {
   width: min(1200px, 96vw);
-  max-height: 90vh;
 }
 
 .merge-summary {
@@ -3619,7 +3620,7 @@ button.history-chip-main:hover {
 /* File Diff Modal */
 .file-diff-modal.modal-wide {
   width: min(1400px, 96vw);
-  height: min(90vh, 800px);
+  height: 90vh;
 }
 
 .file-diff-modal .modal-body {
@@ -3698,7 +3699,6 @@ button.history-chip-main:hover {
 /* Merge editor 3-pane layout */
 .merge-editor-modal.modal-wide {
   width: min(1600px, 98vw);
-  max-height: 92vh;
 }
 
 .merge-editor-modal .modal-body {
