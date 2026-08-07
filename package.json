@@ -1,7 +1,7 @@
 {
   "name": "frontend-project-manager",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.4.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -16,6 +16,8 @@
     "tauri:build:mac:app": "tauri build --bundles app",
     "tauri:build:mac:universal": "tauri build --target universal-apple-darwin --bundles dmg",
     "version:sync": "node scripts/sync-version.mjs",
+    "release": "node scripts/release-tag.mjs",
+    "release:tag-only": "node scripts/release-tag.mjs --tag-only",
     "tauri:preview": "tauri preview"
   },
   "dependencies": {
