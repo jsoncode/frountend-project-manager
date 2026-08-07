@@ -72,6 +72,34 @@ export default function App() {
     }
   }, [config, wsHydrated])
 
+  // Convert vertical wheel to horizontal scroll for horizontal-only
+  // containers (tab bars, quick lists) so devices without a trackpad
+  // can still scroll sideways.
+  useEffect(() => {
+    const onWheel = (e: WheelEvent) => {
+      // Only intercept pure vertical wheel (no horizontal delta from trackpad)
+      if (e.deltaY === 0 || e.deltaX !== 0) return
+      const target = e.target
+      if (!(target instanceof Element)) return
+      let el: Element | null = target
+      while (el && el !== document.body) {
+        const style = getComputedStyle(el)
+        if (style.overflowX === 'auto' || style.overflowX === 'scroll') {
+          const hasHOverflow = el.scrollWidth > el.clientWidth + 1
+          const noVOverflow = el.scrollHeight <= el.clientHeight + 1
+          if (hasHOverflow && noVOverflow) {
+            e.preventDefault()
+            el.scrollLeft += e.deltaY
+            return
+          }
+        }
+        el = el.parentElement
+      }
+    }
+    window.addEventListener('wheel', onWheel, { passive: false })
+    return () => window.removeEventListener('wheel', onWheel)
+  }, [])
+
   return (
     <div className="app-shell">
       <TopBar />

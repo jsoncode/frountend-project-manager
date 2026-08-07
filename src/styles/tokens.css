@@ -118,16 +118,13 @@ textarea {
   font-family: inherit;
 }
 
+/* Hide all native scrollbars — Monaco & xterm manage their own. */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 0;
+  height: 0;
+  display: none;
 }
 
-::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.28);
-  border-radius: 8px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.42);
+* {
+  scrollbar-width: none;
 }
