@@ -545,7 +545,7 @@
   background: rgba(248, 113, 113, 0.12);
 }
 
-.ai-settings-modal .ai-model-list {
+.ai-model-list {
   list-style: none;
   margin: 4px 0 0;
   padding: 0;

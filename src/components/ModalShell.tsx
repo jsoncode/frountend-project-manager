@@ -1,7 +1,27 @@
 import { X } from 'reicon-react'
-import { useEffect, type ReactNode } from 'react'
+import { getCurrentWindow } from '@tauri-apps/api/window'
+import { useEffect, type MouseEvent, type ReactNode } from 'react'
 import { useI18n } from '../i18n/useI18n'
+import { isTauri } from '../lib/tauri'
 import { Tooltip } from './Tooltip'
+
+/**
+ * Start a native window drag when the user presses on the backdrop area
+ * (the dim region around the modal). Clicks inside the modal content are
+ * excluded so form controls and scroll areas keep working normally.
+ * Double-click toggles maximize, matching the titlebar behaviour.
+ */
+function onBackdropMouseDown(e: MouseEvent) {
+  if (!isTauri()) return
+  if (e.button !== 0) return
+  // Only drag when clicking the backdrop itself, not the modal content.
+  if (e.target !== e.currentTarget) return
+  if (e.detail === 2) {
+    void getCurrentWindow().toggleMaximize()
+    return
+  }
+  void getCurrentWindow().startDragging()
+}
 
 type Props = {
   title: string
@@ -50,7 +70,7 @@ export function ModalShell({
   }, [closeOnEsc, onClose])
 
   return (
-    <div className={`modal-backdrop${stackClass}`}>
+    <div className={`modal-backdrop${stackClass}`} onMouseDown={onBackdropMouseDown}>
       <div className={`modal ${wide ? 'modal-wide' : ''} ${className}`.trim()}>
         <div className="modal-header">
           <h3>{title}</h3>

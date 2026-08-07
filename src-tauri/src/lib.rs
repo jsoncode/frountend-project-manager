@@ -594,6 +594,11 @@ async fn list_installed_editors() -> Vec<InstalledEditor> {
 }
 
 #[tauri::command]
+fn resolve_typed_executable(path: String) -> Option<InstalledEditor> {
+    ide::resolve_typed_executable(&path)
+}
+
+#[tauri::command]
 fn open_in_ide(app: AppHandle, ide_id: String, project_path: String) -> Result<(), String> {
     let cfg = config::load_or_default(&app)?;
     let target = cfg
@@ -940,6 +945,7 @@ pub fn run() {
             preview_file,
             detect_ides,
             list_installed_editors,
+            resolve_typed_executable,
             open_in_ide,
             reveal_in_file_manager,
             save_ides,

@@ -17,6 +17,7 @@ import { AiSettingsModal } from './AiSettingsModal'
 import { IdeSettingsModal } from './IdeSettingsModal'
 import { JenCliSettingsModal } from './JenCliSettingsModal'
 import { ModalShell } from './ModalShell'
+import { ThemeCodePreview } from './ThemeCodePreview'
 
 type SettingsCategory = 'general' | 'ide' | 'ai' | 'jencli' | 'cache'
 
@@ -163,6 +164,10 @@ export function SettingsModal() {
                   </button>
                 ))}
               </div>
+            </div>
+
+            <div className="theme-code-preview-wrapper">
+              <ThemeCodePreview />
             </div>
           </>
         )

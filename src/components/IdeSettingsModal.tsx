@@ -38,6 +38,7 @@ type IdeSettingsModalProps = {
 export function IdeSettingsModal({ inline, onClosePanel }: IdeSettingsModalProps = {}) {
   const storeOpen = useSettingsStore((s) => s.ideModalOpen)
   const setIdeModalOpen = useSettingsStore((s) => s.setIdeModalOpen)
+  const setSettingsOpen = useSettingsStore((s) => s.setSettingsOpen)
   const config = useSettingsStore((s) => s.config)
   const saveIdes = useSettingsStore((s) => s.saveIdes)
   const [draft, setDraft] = useState<IdeConfig[] | null>(null)
@@ -162,6 +163,26 @@ export function IdeSettingsModal({ inline, onClosePanel }: IdeSettingsModalProps
     setPickerQuery('')
   }
 
+  // Validate a path the user typed into the picker search box and add it.
+  const addFromTypedPath = async (path: string) => {
+    const trimmed = path.trim()
+    if (!trimmed) return
+    if (alreadyAdded(trimmed)) return
+    try {
+      const ed = await invoke<InstalledEditor | null>(
+        'resolve_typed_executable',
+        { path: trimmed },
+      )
+      if (!ed) {
+        showErrorLog(t('ide.pickPathInvalid'))
+        return
+      }
+      await addFromEditor(ed)
+    } catch (e) {
+      showErrorLog(e)
+    }
+  }
+
   const addBlank = () => {
     setDraft([...ides, newIde()])
     setPickerOpen(false)
@@ -223,7 +244,8 @@ export function IdeSettingsModal({ inline, onClosePanel }: IdeSettingsModalProps
     await saveIdes(ides)
     setDraft(null)
     if (inline) {
-      onClosePanel?.()
+      // Inline panel lives inside the Settings modal — close it on save.
+      setSettingsOpen(false)
     } else {
       setIdeModalOpen(false)
     }
@@ -429,6 +451,16 @@ export function IdeSettingsModal({ inline, onClosePanel }: IdeSettingsModalProps
           {content}
           <div className="ide-inline-toolbar">
             {addScanButtons}
+            <button
+              type="button"
+              className="btn btn-sm primary btn-with-icon"
+              style={{ marginLeft: 'auto' }}
+              disabled={scanning || !draft}
+              onClick={() => void save()}
+            >
+              <Document className="ui-icon" size={14} color="currentColor" aria-hidden />
+              {t('ide.save')}
+            </button>
           </div>
         </div>
         {pickerOpen && (
@@ -441,6 +473,7 @@ export function IdeSettingsModal({ inline, onClosePanel }: IdeSettingsModalProps
             onPick={(ed) => void addFromEditor(ed)}
             onManual={() => void addManualExe()}
             onBlank={addBlank}
+            onSavePath={addFromTypedPath}
             onClose={() => setPickerOpen(false)}
           />
         )}
@@ -495,6 +528,7 @@ export function IdeSettingsModal({ inline, onClosePanel }: IdeSettingsModalProps
           onPick={(ed) => void addFromEditor(ed)}
           onManual={() => void addManualExe()}
           onBlank={addBlank}
+          onSavePath={addFromTypedPath}
           onClose={() => setPickerOpen(false)}
         />
       )}
@@ -543,6 +577,7 @@ function IdePickerModal({
   onPick,
   onManual,
   onBlank,
+  onSavePath,
   onClose,
 }: {
   editors: InstalledEditor[]
@@ -553,9 +588,11 @@ function IdePickerModal({
   onPick: (ed: InstalledEditor) => void
   onManual: () => void
   onBlank: () => void
+  onSavePath: (path: string) => Promise<void> | void
   onClose: () => void
 }) {
   const { t } = useI18n()
+  const [resolving, setResolving] = useState(false)
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return editors
@@ -566,12 +603,30 @@ function IdePickerModal({
     )
   }, [editors, query])
 
+  // Heuristic: the query looks like a local executable path. The backend does
+  // the real existence / extension validation when the user clicks Save.
+  const pathCandidate = query.trim()
+  const looksLikePath =
+    pathCandidate.length > 0 &&
+    (/[\\/]/.test(pathCandidate) || /^%[^%]+%/.test(pathCandidate))
+  const canSavePath =
+    looksLikePath && !resolving && !alreadyAdded(pathCandidate)
+
+  const handleSavePath = () => {
+    if (!canSavePath) return
+    setResolving(true)
+    Promise.resolve(onSavePath(pathCandidate)).finally(() =>
+      setResolving(false),
+    )
+  }
+
   return (
     <ModalShell
       title={t('ide.pickTitle')}
       onClose={onClose}
+      className="ide-picker-modal"
       footer={
-        <div className="modal-actions">
+        <div className="modal-actions ide-picker-actions">
           <button type="button" className="btn btn-with-icon" onClick={onManual}>
             <FolderOpen className="ui-icon" size={14} color="currentColor" aria-hidden />
             {t('ide.pickManual')}
@@ -580,8 +635,19 @@ function IdePickerModal({
             <Add className="ui-icon" size={14} color="currentColor" aria-hidden />
             {t('ide.pickBlank')}
           </button>
-          <button type="button" className="btn" onClick={onClose}>
+          <div className="ide-picker-actions-spacer" />
+          <button type="button" className="btn" onClick={onClose} disabled={resolving}>
             {t('ide.cancel')}
+          </button>
+          <button
+            type="button"
+            className="btn primary btn-with-icon"
+            disabled={!canSavePath}
+            onClick={handleSavePath}
+            title={t('ide.pickPathHint')}
+          >
+            <Document className="ui-icon" size={14} color="currentColor" aria-hidden />
+            {resolving ? t('ide.scanning') : t('ide.pickSave')}
           </button>
         </div>
       }
@@ -589,6 +655,9 @@ function IdePickerModal({
       <p className="muted">{t('ide.pickHint')}</p>
       <p className="muted" style={{ fontSize: 12, marginTop: -4 }}>
         {t('ide.envHint')}
+      </p>
+      <p className="muted" style={{ fontSize: 12, marginTop: -4 }}>
+        {t('ide.pickPathHint')}
       </p>
       <input
         className="ide-pick-search"

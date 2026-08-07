@@ -220,6 +220,9 @@ const BUILTIN_PROBES: &[IdeProbe] = &[
             r"%LOCALAPPDATA%\Programs\Codex\Codex.exe",
             r"%LOCALAPPDATA%\Programs\OpenAI Codex\Codex.exe",
             r"%LOCALAPPDATA%\codex\codex.exe",
+            // OpenAI Codex CLI installs under a per-release hash subdir that
+            // changes frequently — match it with a single-segment wildcard.
+            r"%LOCALAPPDATA%\OpenAI\Codex\bin\*\codex.exe",
             r"%USERPROFILE%\.local\bin\codex.exe",
             r"%USERPROFILE%\.codex\bin\codex.exe",
         ],
@@ -341,6 +344,42 @@ fn first_existing_path(candidates: &[String]) -> Option<String> {
         }
     }
     None
+}
+
+/// Resolve a path template that contains a single `*` wildcard segment.
+///
+/// Used for install layouts with a dynamic subdir, e.g.
+/// `%LOCALAPPDATA%\OpenAI\Codex\bin\*\codex.exe` where `*` is a per-release
+/// hash. The `*` must occupy one path segment; we scan the prefix dir and
+/// return the newest matching target so stale hash dirs are ignored.
+fn resolve_wildcard_path(expanded: &str) -> Option<String> {
+    let (prefix, suffix) = expanded.split_once('*')?;
+    let prefix_dir = PathBuf::from(prefix.trim_end_matches(['\\', '/']));
+    if !prefix_dir.is_dir() {
+        return None;
+    }
+    let suffix = suffix.trim_start_matches(['\\', '/']);
+    let entries = fs::read_dir(&prefix_dir).ok()?;
+    let mut best: Option<(std::time::SystemTime, String)> = None;
+    for entry in entries.flatten() {
+        let cand = if suffix.is_empty() {
+            entry.path()
+        } else {
+            entry.path().join(suffix)
+        };
+        let path_str = cand.to_string_lossy().to_string();
+        if !is_accepted_executable(&path_str) || !is_launchable_path(&cand) {
+            continue;
+        }
+        let mtime = entry
+            .metadata()
+            .and_then(|m| m.modified())
+            .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+        if best.as_ref().map_or(true, |(t, _)| mtime > *t) {
+            best = Some((mtime, path_str));
+        }
+    }
+    best.map(|(_, p)| p)
 }
 
 fn which_cmd(name: &str) -> Option<String> {
@@ -486,12 +525,19 @@ fn resolve_probe(probe: &IdeProbe) -> Option<String> {
         }
     };
 
-    let candidates: Vec<String> = os_paths
-        .iter()
-        .map(|p| expand_path_template(p))
-        .collect();
-    if let Some(found) = first_existing_path(&candidates) {
-        return Some(found);
+    for p in os_paths {
+        let expanded = expand_path_template(p);
+        if expanded.contains('*') {
+            if let Some(found) = resolve_wildcard_path(&expanded) {
+                return Some(found);
+            }
+            continue;
+        }
+        if is_accepted_executable(&expanded)
+            && is_launchable_path(&PathBuf::from(&expanded))
+        {
+            return Some(expanded);
+        }
     }
 
     for cli in probe.cli {
@@ -759,6 +805,37 @@ Get-ItemProperty $keys |
             })
         })
         .collect()
+}
+
+/// Validate a user-typed executable path and derive an `InstalledEditor`.
+///
+/// Used by the "Add from installed apps" picker when the user pastes a
+/// real local app path into the search box — returns `None` when the path
+/// is missing or not an accepted executable.
+pub fn resolve_typed_executable(path: &str) -> Option<InstalledEditor> {
+    let raw = path.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    let expanded = expand_path_template(raw);
+    if !is_accepted_executable(&expanded) {
+        return None;
+    }
+    let p = PathBuf::from(&expanded);
+    if !is_launchable_path(&p) {
+        return None;
+    }
+    let name = p
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "Custom IDE".to_string());
+    Some(InstalledEditor {
+        name,
+        executable: p.to_string_lossy().to_string(),
+        available: true,
+    })
 }
 
 /// List installed editors: catalog paths + env extras + OS discovery.

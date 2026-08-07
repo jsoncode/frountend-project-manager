@@ -2950,6 +2950,61 @@ button.history-chip-main:hover {
   white-space: nowrap;
 }
 
+/* Editor theme code preview */
+.theme-code-preview-wrapper {
+  margin-top: 16px;
+}
+
+.theme-code-preview {
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--bg-0);
+}
+
+.theme-code-preview-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border-dim);
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.theme-code-preview-tab {
+  padding: 3px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-size: 11px;
+  font-family: var(--font-mono, ui-monospace, Consolas, monospace);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.theme-code-preview-tab:hover {
+  color: var(--cyan);
+  background: rgba(34, 211, 238, 0.08);
+}
+
+.theme-code-preview-tab.active {
+  color: var(--cyan);
+  background: rgba(34, 211, 238, 0.12);
+}
+
+.theme-code-preview-label {
+  margin-left: auto;
+  font-size: 11px;
+  opacity: 0.6;
+}
+
+.theme-code-preview-editor {
+  height: 380px;
+  position: relative;
+  overflow: hidden;
+}
+
 .cache-item {
   display: flex;
   align-items: center;
@@ -3113,6 +3168,29 @@ button.history-chip-main:hover {
 .ide-pick-badge {
   flex-shrink: 0;
   font-size: 13px;
+}
+
+/* --- Add-from-installed picker modal --- */
+.ide-picker-modal .modal-header,
+.ide-picker-modal .modal-body,
+.ide-picker-modal .modal-footer {
+  padding-left: 22px;
+  padding-right: 22px;
+}
+
+.ide-picker-modal .ide-pick-search,
+.ide-picker-modal .ide-pick-list {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.ide-picker-actions {
+  margin-top: 0;
+  flex-wrap: nowrap;
+}
+
+.ide-picker-actions-spacer {
+  flex: 1;
 }
 
 .ide-exe-row {
