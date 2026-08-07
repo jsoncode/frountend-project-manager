@@ -36,8 +36,8 @@ importers:
         specifier: ^19.2.8
         version: 19.2.8(react@19.2.8)
       reicon-react:
-        specifier: ^1.1.302
-        version: 1.1.302(react@19.2.8)
+        specifier: ^1.2.0
+        version: 1.2.0(react@19.2.8)
     devDependencies:
       '@tauri-apps/cli':
         specifier: ^2.11.4
@@ -53,7 +53,7 @@ importers:
         version: 19.2.4(@types/react@19.2.18)
       '@vitejs/plugin-react':
         specifier: ^6.0.5
-        version: 6.0.5(vite@8.2.0(@types/node@26.1.2))
+        version: 6.0.5(vite@8.2.1(@types/node@26.1.2))
       oxlint:
         specifier: ^1.77.0
         version: 1.77.0
@@ -61,8 +61,8 @@ importers:
         specifier: ~7.0.2
         version: 7.0.2
       vite:
-        specifier: ^8.2.0
-        version: 8.2.0(@types/node@26.1.2)
+        specifier: ^8.2.1
+        version: 8.2.1(@types/node@26.1.2)
 
 packages:
 
@@ -658,8 +658,8 @@ packages:
     resolution: {integrity: sha512-PWaYA1L/q9u2u7xYQi+Y3L3Yfnie7XyLeaJICV1MGD6LprsBxcAqGjYyr0eY3p+QdsA+x/Irkt4Qif8D63+Sbw==}
     engines: {node: '>=0.10.0'}
 
-  reicon-react@1.1.302:
-    resolution: {integrity: sha512-QbBVVe8GDajRbHuWprW2w5n6nDQq9qIM3778ohzbb5SPU+FQJ02mN86RojHfW9KGU1DQGSJei3aEKHwbalcMkw==}
+  reicon-react@1.2.0:
+    resolution: {integrity: sha512-1+6kKPSJPnNHYcA9rEbUVMpzKSXJuJPVHEkIo6l6DQnhNnEEpBXBn/XgBqEFniokMyXy+sitLv7vVpQ/xsJ26Q==}
     peerDependencies:
       react: '>=16.8.0'
 
@@ -687,8 +687,8 @@ packages:
   undici-types@8.3.0:
     resolution: {integrity: sha512-j375ScV60dom+YkPFIfTLcOiPxkN/buHz5GobjLhixFuANaNs3C9l4GmrWqejgXWJ7BbJcFYpTEUkS1Ge8bpZQ==}
 
-  vite@8.2.0:
-    resolution: {integrity: sha512-pn+CFpM0lwDeKwmOq1ZaBK/9sjorZcgqxki6MbY/jPEVd9vichIlmlD4HmQ5wdP5EgqQCFRaACBxMC7uEGc6lQ==}
+  vite@8.2.1:
+    resolution: {integrity: sha512-EU/eS7BH3XROHh2YnBefjM6DBKA6ZeMZEYQbj7NLWg5wHYlhB8B/Mayd5XsgWq+NFYccDOTemRpdETWR6Ka/lw==}
     engines: {node: ^20.19.0 || >=22.12.0}
     hasBin: true
     peerDependencies:
@@ -960,10 +960,10 @@ snapshots:
   '@typescript/typescript-win32-x64@7.0.2':
     optional: true
 
-  '@vitejs/plugin-react@6.0.5(vite@8.2.0(@types/node@26.1.2))':
+  '@vitejs/plugin-react@6.0.5(vite@8.2.1(@types/node@26.1.2))':
     dependencies:
       '@rolldown/pluginutils': 1.0.1
-      vite: 8.2.0(@types/node@26.1.2)
+      vite: 8.2.1(@types/node@26.1.2)
 
   '@xterm/addon-fit@0.11.0': {}
 
@@ -1076,7 +1076,7 @@ snapshots:
 
   react@19.2.8: {}
 
-  reicon-react@1.1.302(react@19.2.8):
+  reicon-react@1.2.0(react@19.2.8):
     dependencies:
       react: 19.2.8
 
@@ -1134,7 +1134,7 @@ snapshots:
 
   undici-types@8.3.0: {}
 
-  vite@8.2.0(@types/node@26.1.2):
+  vite@8.2.1(@types/node@26.1.2):
     dependencies:
       lightningcss: 1.33.0
       picomatch: 4.0.5
