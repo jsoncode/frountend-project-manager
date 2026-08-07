@@ -30,24 +30,6 @@ pub struct AliasMapping {
 /// Soft limit for the in-app editor (emergency edits, not large binaries).
 const MAX_TEXT_FILE_BYTES: u64 = 2 * 1024 * 1024;
 
-const IGNORED_NAMES: &[&str] = &[
-    "node_modules",
-    ".git",
-    ".svn",
-    ".hg",
-    ".DS_Store",
-    "Thumbs.db",
-    "dist",
-    "build",
-    ".next",
-    ".nuxt",
-    ".output",
-    "coverage",
-    "__pycache__",
-    ".turbo",
-    ".cache",
-];
-
 const MODULE_EXTENSIONS: &[&str] = &[
     ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".vue", ".json", ".css",
     ".scss", ".less",
@@ -65,12 +47,6 @@ const INDEX_FILES: &[&str] = &[
 
 /// Prefer declaration files when resolving libraries for the editor.
 const TYPE_INDEX_FILES: &[&str] = &["index.d.ts", "index.ts", "index.tsx"];
-
-fn should_ignore(name: &str) -> bool {
-    IGNORED_NAMES
-        .iter()
-        .any(|n| name.eq_ignore_ascii_case(n))
-}
 
 fn path_str(p: &Path) -> String {
     p.to_string_lossy().to_string()
@@ -403,7 +379,7 @@ pub fn list_directory_entries(path: &str) -> Result<Vec<DirEntryInfo>, String> {
     for entry in reader {
         let entry = entry.map_err(|e| e.to_string())?;
         let name = entry.file_name().to_string_lossy().to_string();
-        if name.is_empty() || should_ignore(&name) {
+        if name.is_empty() {
             continue;
         }
         let file_type = entry.file_type().map_err(|e| e.to_string())?;
