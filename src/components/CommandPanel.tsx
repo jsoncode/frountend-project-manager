@@ -45,28 +45,32 @@ export function CommandPanel({ filterQuery = '' }: { filterQuery?: string }) {
   const rawHistory = config?.commandHistory?.[selected.path] ?? []
   const history = rawHistory
     .map((h) => ({ ...h, originalValue: h.value, value: stripPrefix(h.value) }))
+    .filter((h) => !q || h.value.toLowerCase().includes(q))
+    .sort((a, b) => {
+      // Pinned first, then alphabetical by name
+      if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
+      return a.value.localeCompare(b.value, undefined, { sensitivity: 'base' })
+    })
 
   return (
     <div className="command-panel-side">
-      <div className="pane-sub">{t('cmd.common')}</div>
-      <div className="script-list">
-        {COMMON_COMMANDS.filter((c) => match(t(c.key))).map((c) => {
-          const Icon = c.icon
-          const command = c.cmd(pm)
-          return (
-            <Tooltip key={c.key} title={command}>
-              <button
-                type="button"
-                className="script-list-item btn-with-icon"
-                onClick={() => void runRaw(selected.path, selected.folderName, command)}
-              >
-                <Icon className="ui-icon" size={11} color="currentColor" aria-hidden />
-                <span className="script-list-name">{t(c.key)}</span>
-              </button>
-            </Tooltip>
-          )
-        })}
-      </div>
+      <HistoryChips
+        title={t('cmd.history')}
+        items={history}
+        emptyText={q ? t('actionBar.noMatch') : t('cmd.historyEmpty')}
+        onRun={(cmd) => {
+          const full = pm === 'npm' ? `npm run ${cmd}` : `${pm} ${cmd}`
+          void useSettingsStore.getState().touchCommandHistory(selected.path, cmd)
+          void runRaw(selected.path, selected.folderName, full)
+        }}
+        onContext={(e: MouseEvent, value: string) => {
+          e.preventDefault()
+          e.stopPropagation()
+          // Find the original stored value (may have pm prefix) for deletion
+          const item = rawHistory.find((h) => stripPrefix(h.value) === value)
+          setCtxMenu({ x: e.clientX, y: e.clientY, value, originalValue: item?.value ?? value })
+        }}
+      />
 
       <div className="pane-sub">
         {t('cmd.title')} · {pm}
@@ -93,23 +97,26 @@ export function CommandPanel({ filterQuery = '' }: { filterQuery?: string }) {
         )}
       </div>
 
-      <HistoryChips
-        title={t('cmd.history')}
-        items={history}
-        emptyText={q ? t('actionBar.noMatch') : t('cmd.historyEmpty')}
-        onRun={(cmd) => {
-          const full = pm === 'npm' ? `npm run ${cmd}` : `${pm} ${cmd}`
-          void useSettingsStore.getState().touchCommandHistory(selected.path, cmd)
-          void runRaw(selected.path, selected.folderName, full)
-        }}
-        onContext={(e: MouseEvent, value: string) => {
-          e.preventDefault()
-          e.stopPropagation()
-          // Find the original stored value (may have pm prefix) for deletion
-          const item = rawHistory.find((h) => stripPrefix(h.value) === value)
-          setCtxMenu({ x: e.clientX, y: e.clientY, value, originalValue: item?.value ?? value })
-        }}
-      />
+      <div className="pane-sub">{t('cmd.common')}</div>
+      <div className="script-list">
+        {COMMON_COMMANDS.filter((c) => match(t(c.key))).map((c) => {
+          const Icon = c.icon
+          const command = c.cmd(pm)
+          return (
+            <Tooltip key={c.key} title={command}>
+              <button
+                type="button"
+                className="script-list-item btn-with-icon"
+                onClick={() => void runRaw(selected.path, selected.folderName, command)}
+              >
+                <Icon className="ui-icon" size={11} color="currentColor" aria-hidden />
+                <span className="script-list-name">{t(c.key)}</span>
+                <span className="script-list-cmd muted">{command}</span>
+              </button>
+            </Tooltip>
+          )
+        })}
+      </div>
 
       {ctxMenu && (
         <ContextMenuPortal

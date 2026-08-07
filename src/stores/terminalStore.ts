@@ -6,6 +6,7 @@ import type { TermSession } from '../lib/types'
 import { getTerminalPlainText, markPtyReady, waitPtyReady, writeHostToTerminal, writeToTerminal } from '../lib/ptyHost'
 import {
   detectIssueKind,
+  stripAnsi,
   trimLogTail,
   type TermIssueAlert,
   type TermIssueKind,
@@ -29,9 +30,12 @@ function isSameProject(a: string, b: string) {
 
 /** Heuristic: chunk looks like a shell returned to an idle prompt. */
 function looksLikeShellPrompt(chunk: string): boolean {
+  // Strip ANSI escape codes first — colored prompts (e.g. oh-my-posh)
+  // would otherwise break the regex match, leaving `running` stuck true.
+  const text = stripAnsi(chunk)
   // PowerShell: PS C:\path>   |  cmd: C:\path>  |  bash-ish: ...$ or ...#
   return /(?:^|[\r\n])(?:PS\s+\S.*>\s?|[A-Za-z]:[^>\r\n]*>\s?|[^>\r\n]*[$#]\s?)\s*$/.test(
-    chunk,
+    text,
   )
 }
 

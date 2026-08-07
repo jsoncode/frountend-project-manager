@@ -17,7 +17,6 @@ export function TerminalPanel({
 }) {
   const sessions = useTerminalStore((s) => s.sessions)
   const activeId = useTerminalStore((s) => s.activeId)
-  const issueAlerts = useTerminalStore((s) => s.issueAlerts)
   const setActive = useTerminalStore((s) => s.setActive)
   const createSession = useTerminalStore((s) => s.createSession)
   const closeSession = useTerminalStore((s) => s.closeSession)
@@ -64,45 +63,40 @@ export function TerminalPanel({
       style={fill ? undefined : { height }}
     >
       <div className="terminal-tabs">
-        {sessions.map((s) => (
-          <button
-            key={s.id}
-            type="button"
-            className={`terminal-tab ${s.id === activeId ? 'active' : ''}`}
-            onClick={() => activateTab(s.id)}
-            onMouseDown={(e) => {
-              if (e.button === 1) e.preventDefault()
-            }}
-            onAuxClick={(e) => {
-              if (e.button !== 1) return
-              e.preventDefault()
-              e.stopPropagation()
-              requestClose(s.id)
-            }}
-          >
-            <span
-              className={`term-dot${s.running ? ' running' : ''}`}
-              title={s.running ? t('term.running') : t('term.idle')}
-            />
-            {s.title}
-            {issueAlerts[s.id] ? (
-              <Tooltip title={t('term.aiAnalyzeHint')}>
-                <span
-                  className={`term-issue-dot ${issueAlerts[s.id]!.kind}`}
-                />
-              </Tooltip>
-            ) : null}
-            <span
-              className="term-close"
-              onClick={(e) => {
+        <div className="terminal-tab-list">
+          {sessions.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              className={`terminal-tab ${s.id === activeId ? 'active' : ''}`}
+              onClick={() => activateTab(s.id)}
+              onMouseDown={(e) => {
+                if (e.button === 1) e.preventDefault()
+              }}
+              onAuxClick={(e) => {
+                if (e.button !== 1) return
+                e.preventDefault()
                 e.stopPropagation()
                 requestClose(s.id)
               }}
             >
-              <X className="ui-icon" size={12} color="currentColor" aria-hidden />
-            </span>
-          </button>
-        ))}
+              <span
+                className={`term-dot${s.running ? ' running' : ''}`}
+                title={s.running ? t('term.running') : t('term.idle')}
+              />
+              {s.title}
+              <span
+                className="term-close"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  requestClose(s.id)
+                }}
+              >
+                <X className="ui-icon" size={12} color="currentColor" aria-hidden />
+              </span>
+            </button>
+          ))}
+        </div>
         <Tooltip title={t('term.new')}>
           <button
             type="button"
@@ -113,11 +107,6 @@ export function TerminalPanel({
             <Add className="ui-icon" size={14} color="currentColor" aria-hidden />
           </button>
         </Tooltip>
-        {active ? (
-          <span className="terminal-status muted">
-            {active.connected ? t('term.connected') : t('term.disconnected')}
-          </span>
-        ) : null}
       </div>
 
       {!active && (
