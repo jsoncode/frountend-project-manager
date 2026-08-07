@@ -70,6 +70,15 @@ export function TerminalPanel({
             type="button"
             className={`terminal-tab ${s.id === activeId ? 'active' : ''}`}
             onClick={() => activateTab(s.id)}
+            onMouseDown={(e) => {
+              if (e.button === 1) e.preventDefault()
+            }}
+            onAuxClick={(e) => {
+              if (e.button !== 1) return
+              e.preventDefault()
+              e.stopPropagation()
+              requestClose(s.id)
+            }}
           >
             <span
               className={`term-dot${s.running ? ' running' : ''}`}
