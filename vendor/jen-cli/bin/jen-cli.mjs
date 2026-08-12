@@ -70,6 +70,11 @@ jen-cli
     BUILD_COMMAND_ACTIVE=pnpm run build:prod
   project 仅在 server=tx 且 job=system3_Front_docker1/2/3/4 时必选（支持模糊匹配，未命中时会要求从列表选择）
   任意参数值若是 npm/pnpm install 指令且未带 --registry，会自动补齐华为源 registry
+
+生产风险拦截:
+  当最终发布的分支名包含 master，或 server(别名/baseUrl) 包含 prod，
+  或 BUILD_COMMAND_ACTIVE 包含 prod (均忽略大小写) 时，
+  需手动输入 yes 确认后才继续发布，其余输入均中止
 `;
 	// eslint-disable-next-line no-console
 	console.log(help.trim());
@@ -250,6 +255,47 @@ function createPrettyLogPrinter() {
 			}
 		}
 	};
+}
+
+// 生产风险拦截: 分支含 master、server 含 prod、或 BUILD_COMMAND_ACTIVE 含 prod(忽略大小写)时，需手动输入 yes 才继续
+async function confirmProdRisk({branchValue, buildCommandValue, server}) {
+	const branch = String(branchValue ?? "");
+	const buildCommand = String(buildCommandValue ?? "");
+	const branchHit = branch.toLowerCase().includes("master");
+	const serverHit =
+		String(server.alias).toLowerCase().includes("prod") ||
+		String(server.baseUrl).toLowerCase().includes("prod");
+	const buildHit = buildCommand.toLowerCase().includes("prod");
+	if (!branchHit && !serverHit && !buildHit) return;
+
+	const reasons = [];
+	if (branchHit) reasons.push(`分支 "${branch}" 包含 master`);
+	if (serverHit) reasons.push(`服务器 "${server.alias}" (${server.baseUrl}) 包含 prod`);
+	if (buildHit) reasons.push(`构建命令 "${buildCommand}" 包含 prod`);
+
+	// eslint-disable-next-line no-console
+	console.log(`\n[风险拦截] 检测到生产环境发布风险: ${reasons.join("；")}`);
+
+	// 非交互环境（如 CI / FPM 后台调用）下无法手动确认，直接中止，避免误发生产
+	if (!process.stdin.isTTY || !process.stdout.isTTY) {
+		throw new Error("生产风险发布需人工确认: 当前为非交互环境，无法输入 yes，已中止发布");
+	}
+
+	const rl = readline.createInterface({input: process.stdin, output: process.stdout});
+	try {
+		const answer = await new Promise((resolve) => {
+			rl.question("确认要发布吗？请输入 yes 继续，其余输入将中止: ", (v) =>
+				resolve(String(v ?? "").trim())
+			);
+		});
+		if (answer.toLowerCase() !== "yes") {
+			throw new Error("未输入 yes，已中止生产风险发布");
+		}
+		// eslint-disable-next-line no-console
+		console.log("已确认，继续发布");
+	} finally {
+		rl.close();
+	}
 }
 
 async function monitorBuild(buildUrl, {authHeader, intervalMs, printConsole, onLogChunk}) {
@@ -458,6 +504,13 @@ async function main() {
 	console.log(`Job: ${job}`);
 	// eslint-disable-next-line no-console
 	console.log(`参数: ${Object.entries(params).map(([k, v]) => `${k}=${v}`).join(", ")}`);
+
+	// 参数全部确定后（含默认补齐/模糊匹配结果）再做生产风险拦截
+	await confirmProdRisk({
+		branchValue: params[paramKey("branch")],
+		buildCommandValue: params[paramKey("buildCommand")],
+		server
+	});
 
 	const queueLocation = await triggerBuild(server, job, params, {authHeader, crumb});
 	// eslint-disable-next-line no-console
