@@ -3870,3 +3870,62 @@ button.history-chip-main:hover {
   vertical-align: middle;
 }
 
+/* ── Result pane: current conflict + line-level diff colors ── */
+.merge-conflict-current {
+  outline: 1px solid rgba(251, 191, 36, 0.55);
+  background: rgba(251, 191, 36, 0.12) !important;
+}
+
+.merge-diff-ours-line {
+  background: rgba(226, 192, 141, 0.16) !important;
+}
+
+.merge-diff-theirs-line {
+  background: rgba(94, 234, 212, 0.14) !important;
+}
+
+/* ── Side panes: per-block conflict highlighting ── */
+.merge-side-ours-line {
+  background: rgba(226, 192, 141, 0.1) !important;
+}
+
+.merge-side-theirs-line {
+  background: rgba(94, 234, 212, 0.08) !important;
+}
+
+.merge-side-ours-current {
+  background: rgba(226, 192, 141, 0.22) !important;
+  outline: 1px solid rgba(226, 192, 141, 0.5);
+}
+
+.merge-side-theirs-current {
+  background: rgba(94, 234, 212, 0.18) !important;
+  outline: 1px solid rgba(94, 234, 212, 0.45);
+}
+
+.merge-side-ours-gutter {
+  background: rgba(226, 192, 141, 0.6);
+  border-left: 3px solid #e2c08d;
+  margin-left: 4px;
+}
+
+.merge-side-theirs-gutter {
+  background: rgba(94, 234, 212, 0.55);
+  border-left: 3px solid #5eead4;
+  margin-left: 4px;
+}
+
+/* Floating per-block accept button in the side panes */
+.merge-side-widget {
+  display: flex;
+  align-items: center;
+  padding: 2px 6px;
+  background: rgba(30, 30, 30, 0.92);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  z-index: 10;
+  backdrop-filter: blur(4px);
+}
+
+

@@ -195,11 +195,11 @@ fn parse_track(track: &str) -> (u32, u32) {
     (ahead, behind)
 }
 
-fn read_local_branches(path: &str) -> Vec<BranchItem> {
+fn read_local_branches(path: &str, remote_names: &BTreeSet<String>) -> Vec<BranchItem> {
     let output = git_command(path)
         .args([
             "for-each-ref",
-            "--format=%(refname:short)\t%(upstream:track)",
+            "--format=%(refname:short)\t%(upstream)\t%(upstream:track)",
             "--sort=-committerdate",
             "refs/heads/",
         ])
@@ -210,6 +210,8 @@ fn read_local_branches(path: &str) -> Vec<BranchItem> {
         return Vec::new();
     };
 
+    let mut fallback_budget = MAX_BEHIND_COUNTED;
+
     String::from_utf8_lossy(&output.stdout)
         .lines()
         .filter_map(|line| {
@@ -217,14 +219,28 @@ fn read_local_branches(path: &str) -> Vec<BranchItem> {
             if line.is_empty() {
                 return None;
             }
-            let (name, track) = line
-                .split_once('\t')
-                .map(|(n, t)| (n.trim(), t.trim()))
-                .unwrap_or((line, ""));
+            let mut cols = line.splitn(3, '\t');
+            let name = cols.next().unwrap_or("").trim();
+            let upstream = cols.next().unwrap_or("").trim();
+            let track = cols.next().unwrap_or("").trim();
             if name.is_empty() || name == "HEAD" {
                 return None;
             }
-            let (ahead, behind) = parse_track(track);
+            let (mut ahead, mut behind) = parse_track(track);
+            // No upstream configured: compare against the same-named origin
+            // branch so untracked branches still report pending updates.
+            if upstream.is_empty() && fallback_budget > 0 {
+                let origin_ref = format!("origin/{name}");
+                if remote_names.contains(&origin_ref) {
+                    fallback_budget -= 1;
+                    if let Some((local_only, remote_only)) =
+                        count_between(path, name, &origin_ref)
+                    {
+                        ahead = local_only;
+                        behind = remote_only;
+                    }
+                }
+            }
             Some(BranchItem {
                 name: name.to_string(),
                 is_remote: false,
@@ -235,7 +251,51 @@ fn read_local_branches(path: &str) -> Vec<BranchItem> {
         .collect()
 }
 
-fn read_remote_branches(path: &str) -> Vec<BranchItem> {
+/// Commit counts on each side of two refs' symmetric difference:
+/// returns (only-in-left, only-in-right).
+fn count_between(path: &str, left: &str, right: &str) -> Option<(u32, u32)> {
+    let spec = format!("{left}...{right}");
+    let output = git_command(path)
+        .args(["rev-list", "--left-right", "--count", &spec])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    let mut parts = text.split_whitespace();
+    let left_only = parts.next()?.parse::<u32>().ok()?;
+    let right_only = parts.next()?.parse::<u32>().ok()?;
+    Some((left_only, right_only))
+}
+
+/// Short names of every ref under `ref_prefix` (one cheap listing pass).
+fn list_ref_short_names(path: &str, ref_prefix: &str) -> Vec<String> {
+    git_command(path)
+        .args(["for-each-ref", "--format=%(refname:short)", ref_prefix])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| {
+            String::from_utf8_lossy(&o.stdout)
+                .lines()
+                .map(|l| l.trim().to_string())
+                .filter(|l| !l.is_empty())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Cap the slow per-ref fallback so big repos stay responsive.
+const MAX_BEHIND_COUNTED: usize = 60;
+
+/// Remote-tracking branches always look like `<remote>/<branch>`; a bare name
+/// (e.g. `origin`) is the remote ref itself — a grouping, not a branch.
+fn is_remote_branch_name(name: &str) -> bool {
+    !name.is_empty() && name != "HEAD" && !name.ends_with("/HEAD") && name.contains('/')
+}
+
+fn read_remote_branches(path: &str, local_names: &BTreeSet<String>) -> Vec<BranchItem> {
     let output = git_command(path)
         .args([
             "for-each-ref",
@@ -250,15 +310,40 @@ fn read_remote_branches(path: &str) -> Vec<BranchItem> {
         return Vec::new();
     };
 
+    let mut budget = MAX_BEHIND_COUNTED;
+
     String::from_utf8_lossy(&output.stdout)
         .lines()
         .map(|l| l.trim().to_string())
-        .filter(|l| !l.is_empty() && l != "HEAD" && !l.ends_with("/HEAD"))
-        .map(|name| BranchItem {
-            name,
-            is_remote: true,
-            ahead: 0,
-            behind: 0,
+        .filter(|l| is_remote_branch_name(l))
+        .map(|name| {
+            // Pending updates = commits the remote ref has that its LOCAL
+            // counterpart lacks. Never compare against HEAD: that number
+            // shifts every time the user checks out a different branch and
+            // no update action can ever consume it. Remote-only branches
+            // (no local ref yet) have nothing to pull — a checkout starts
+            // at the remote tip — so they report 0.
+            let mut ahead = 0;
+            let mut behind = 0;
+            if budget > 0 {
+                if let Some((_, local)) = name.split_once('/') {
+                    if local_names.contains(local) {
+                        budget -= 1;
+                        if let Some((local_only, remote_only)) =
+                            count_between(path, local, &name)
+                        {
+                            ahead = local_only;
+                            behind = remote_only;
+                        }
+                    }
+                }
+            }
+            BranchItem {
+                name,
+                is_remote: true,
+                ahead,
+                behind,
+            }
         })
         .collect()
 }
@@ -276,8 +361,16 @@ pub fn git_branches(path: &str) -> Result<Option<GitInfo>, String> {
         .filter(|o| o.status.success())
         .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
 
-    let locals = read_local_branches(path);
-    let remotes = read_remote_branches(path);
+    // Ref name sets first so each branch's count can be computed against
+    // its own counterpart (upstream / same-named local ref), never HEAD.
+    let remote_set: BTreeSet<String> = list_ref_short_names(path, "refs/remotes/")
+        .into_iter()
+        .filter(|n| is_remote_branch_name(n))
+        .collect();
+
+    let locals = read_local_branches(path, &remote_set);
+    let local_set: BTreeSet<String> = locals.iter().map(|b| b.name.clone()).collect();
+    let remotes = read_remote_branches(path, &local_set);
 
     let mut seen = BTreeSet::new();
     let mut branches = Vec::new();
@@ -651,11 +744,69 @@ fn current_branch_name(path: &str) -> Option<String> {
         .filter(|s| !s.is_empty() && s != "HEAD")
 }
 
+fn run_git_collect(path: &str, args: &[&str]) -> Result<String, String> {
+    let output = git_command(path)
+        .args(args)
+        .output()
+        .map_err(|e| e.to_string())?;
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    if output.status.success() {
+        Ok(stdout)
+    } else {
+        Err(if !stderr.is_empty() {
+            stderr
+        } else if !stdout.is_empty() {
+            stdout
+        } else {
+            format!("git {} 失败", args.first().copied().unwrap_or("?"))
+        })
+    }
+}
+
+/// Marker used to recognise stashes created automatically before a pull.
+const AUTO_STASH_MARK: &str = "FPM auto stash";
+
+fn top_stash_is_auto(path: &str) -> bool {
+    git_command(path)
+        .args(["stash", "list", "-1", "--format=%s"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).contains(AUTO_STASH_MARK))
+        .unwrap_or(false)
+}
+
+/// Restore the auto-stash created before a pull (after commit/abort finishes).
+/// Appends a human-readable note to `msg`; never fails the whole operation.
+fn pop_auto_stash(path: &str, msg: &mut String) {
+    if !merge_in_progress(path) && top_stash_is_auto(path) {
+        match run_git_collect(path, &["stash", "pop"]) {
+            Ok(_) => msg.push_str("；已恢复更新前暂存的本地改动"),
+            Err(e) => msg.push_str(&format!(
+                "；更新完成，但恢复本地暂存改动时产生冲突，请手动解决（{e}）"
+            )),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PullBranchResult {
+    /// "updated" | "uptodate" | "conflicts"
+    pub status: String,
+    pub message: String,
+    /// Present when the pull left conflicts to resolve.
+    pub merge: Option<MergeStatus>,
+}
+
 /// Pull / fast-forward a branch. Works without checking it out:
-/// - current branch → `git pull --ff-only`
+/// - current branch → attempt a real pull; dirty working trees are
+///   auto-stashed first and restored afterwards, so local uncommitted
+///   changes no longer silently block the update.
 /// - other local branch → `git fetch origin <branch>:<branch>` (FF only)
 /// - remote-only name → same fetch into local ref
-pub fn git_pull_branch(path: &str, branch: &str) -> Result<String, String> {
+pub fn git_pull_branch(path: &str, branch: &str) -> Result<PullBranchResult, String> {
     let git_dir = std::path::Path::new(path).join(".git");
     if !git_dir.exists() {
         return Err("非 Git 仓库".into());
@@ -667,71 +818,222 @@ pub fn git_pull_branch(path: &str, branch: &str) -> Result<String, String> {
     }
 
     let current = current_branch_name(path);
-    if current.as_deref() == Some(local.as_str()) {
+    if current.as_deref() != Some(local.as_str()) {
+        // Update local branch ref from origin without checkout (fast-forward only).
+        let spec = format!("{local}:{local}");
         let output = git_command(path)
-            .args(["pull", "--ff-only", "--prune"])
+            .args(["fetch", "origin", &spec])
             .output()
             .map_err(|e| e.to_string())?;
+
         if !output.status.success() {
-            // Fallback without --ff-only for repos that allow merge pulls
-            let retry = git_command(path)
-                .args(["pull", "--prune"])
-                .output()
-                .map_err(|e| e.to_string())?;
-            if !retry.status.success() {
-                let err = String::from_utf8_lossy(&retry.stderr).trim().to_string();
-                let err = if err.is_empty() {
-                    String::from_utf8_lossy(&output.stderr).trim().to_string()
-                } else {
-                    err
-                };
-                if merge_in_progress(path) {
-                    return Err(format!("MERGE_CONFLICT:{err}"));
-                }
-                return Err(err);
-            }
-            let msg = String::from_utf8_lossy(&retry.stdout).trim().to_string();
-            return Ok(if msg.is_empty() {
-                format!("pulled {local}")
+            let err = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            return Err(if err.is_empty() {
+                format!("无法更新分支 {local}（可能需要先建立与 origin/{local} 的跟踪，或存在分叉）")
             } else {
-                msg
+                err
             });
         }
-        let msg = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        return Ok(if msg.is_empty() {
-            format!("pulled {local}")
-        } else {
-            msg
+
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Ok(PullBranchResult {
+            status: "updated".into(),
+            message: if stderr.is_empty() {
+                format!("updated {local} ← origin/{local}")
+            } else {
+                format!("updated {local}: {stderr}")
+            },
+            merge: None,
         });
     }
 
-    // Update local branch ref from origin without checkout (fast-forward only).
-    let spec = format!("{local}:{local}");
-    let output = git_command(path)
-        .args(["fetch", "origin", &spec])
-        .output()
-        .map_err(|e| e.to_string())?;
+    // ── Current branch: attempt the pull ──
+    // Dirty working tree → stash first so uncommitted changes don't block it.
+    let mut stashed = false;
+    if !git_status(path).map(|s| s.clean).unwrap_or(true) {
+        let msg = format!("{AUTO_STASH_MARK} before pull");
+        run_git_collect(path, &["stash", "push", "-u", "-m", &msg])
+            .map_err(|e| format!("暂存本地改动失败，无法更新：{e}"))?;
+        stashed = true;
+    }
 
-    if !output.status.success() {
-        let err = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        return Err(if err.is_empty() {
-            format!("无法更新分支 {local}（可能需要先建立与 origin/{local} 的跟踪，或存在分叉）")
-        } else {
-            err
+    let mut pull_msg = match run_git_collect(path, &["pull", "--ff-only", "--prune"]) {
+        Ok(m) => m,
+        Err(_) => match run_git_collect(path, &["pull", "--prune"]) {
+            Ok(m) => m,
+            Err(e) => {
+                if merge_in_progress(path) {
+                    let merge = git_merge_status(path)?;
+                    let mut message = format!(
+                        "更新产生 {} 个冲突，请通过三栏合并工具解决",
+                        merge.conflict_count
+                    );
+                    if stashed {
+                        message.push_str("；更新前的本地改动已暂存（stash），完成或取消合并后将自动恢复");
+                    }
+                    return Ok(PullBranchResult {
+                        status: "conflicts".into(),
+                        message,
+                        merge: Some(merge),
+                    });
+                }
+                if stashed {
+                    // Pull itself failed (not a merge conflict) → restore stash.
+                    let _ = run_git_collect(path, &["stash", "pop"]);
+                }
+                return Err(format!("更新失败：{e}"));
+            }
+        },
+    };
+
+    if pull_msg.is_empty() {
+        pull_msg = format!("pulled {local}");
+    }
+    if pull_msg.to_lowercase().contains("already up to date") {
+        let mut message = pull_msg;
+        if stashed {
+            pop_auto_stash(path, &mut message);
+        }
+        return Ok(PullBranchResult {
+            status: "uptodate".into(),
+            message,
+            merge: None,
         });
     }
 
-    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    Ok(if stderr.is_empty() {
-        format!("updated {local} ← origin/{local}")
-    } else {
-        format!("updated {local}: {stderr}")
+    if stashed {
+        pop_auto_stash(path, &mut pull_msg);
+    }
+    Ok(PullBranchResult {
+        status: "updated".into(),
+        message: pull_msg,
+        merge: None,
     })
 }
 
 fn is_conflict_code(code: &str) -> bool {
     matches!(code, "UU" | "AA" | "DD" | "AU" | "UA" | "DU" | "UD")
         || (code.len() == 2 && code.contains('U'))
+}
+
+/// Update every branch that shows pending commits in one shot:
+/// - non-current local branches → `git fetch origin <b>:<b>` (fast-forward
+///   only, no checkout needed);
+/// - the current branch → real pull with auto-stash + conflict reporting
+///   (same behaviour as `git_pull_branch`).
+/// Branches that diverged from their remote cannot fast-forward and are
+/// reported instead of failing the whole operation.
+pub fn git_pull_all(path: &str) -> Result<PullBranchResult, String> {
+    let git_dir = std::path::Path::new(path).join(".git");
+    if !git_dir.exists() {
+        return Err("非 Git 仓库".into());
+    }
+
+    let current = current_branch_name(path);
+    let info = git_branches(path)?;
+
+    let mut updated: Vec<String> = Vec::new();
+    let mut skipped: Vec<String> = Vec::new();
+    let mut current_behind = 0u32;
+
+    if let Some(info) = info {
+        for b in &info.branches {
+            // Remote items mirror their local counterpart's count; the local
+            // entry is the one that actually gets fast-forwarded.
+            if b.is_remote {
+                continue;
+            }
+            if Some(b.name.as_str()) == current.as_deref() {
+                current_behind = b.behind;
+                continue;
+            }
+            if b.behind == 0 {
+                continue;
+            }
+            let spec = format!("{0}:{0}", b.name);
+            let ok = git_command(path)
+                .args(["fetch", "origin", &spec])
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false);
+            if ok {
+                updated.push(b.name.clone());
+            } else {
+                skipped.push(b.name.clone());
+            }
+        }
+    }
+
+    // Pull the current branch last — it may stash local changes or merge.
+    if current_behind > 0 {
+        if let Some(cur) = current.as_deref() {
+            let res = git_pull_branch(path, cur)?;
+            if res.status == "conflicts" {
+                let mut message = res.message;
+                append_pull_all_summary(&mut message, &updated, &skipped);
+                return Ok(PullBranchResult {
+                    status: "conflicts".into(),
+                    message,
+                    merge: res.merge,
+                });
+            }
+            if res.status == "updated" {
+                updated.push(cur.to_string());
+            }
+        }
+    }
+
+    if updated.is_empty() && skipped.is_empty() {
+        return Ok(PullBranchResult {
+            status: "uptodate".into(),
+            message: "所有分支已是最新".into(),
+            merge: None,
+        });
+    }
+
+    let mut message = String::new();
+    if !updated.is_empty() {
+        message.push_str(&format!(
+            "已更新 {} 个分支：{}",
+            updated.len(),
+            updated.join("、")
+        ));
+    }
+    if !skipped.is_empty() {
+        if !message.is_empty() {
+            message.push('；');
+        }
+        message.push_str(&format!(
+            "{} 个分支与远端分叉，无法快进更新，请签出后手动合并：{}",
+            skipped.len(),
+            skipped.join("、")
+        ));
+    }
+
+    Ok(PullBranchResult {
+        status: if updated.is_empty() { "uptodate" } else { "updated" }.into(),
+        message,
+        merge: None,
+    })
+}
+
+fn append_pull_all_summary(message: &mut String, updated: &[String], skipped: &[String]) {
+    if updated.is_empty() && skipped.is_empty() {
+        return;
+    }
+    message.push('；');
+    if !updated.is_empty() {
+        message.push_str(&format!("另已更新 {} 个分支", updated.len()));
+    }
+    if !skipped.is_empty() {
+        if !updated.is_empty() {
+            message.push('，');
+        }
+        message.push_str(&format!(
+            "{} 个分支与远端分叉无法快进更新",
+            skipped.len()
+        ));
+    }
 }
 
 fn merge_head_path(path: &str) -> std::path::PathBuf {
@@ -793,6 +1095,8 @@ pub struct MergeStartResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MergeFileSides {
+    /// Common ancestor (stage 1) — used for per-side change highlighting.
+    pub base: String,
     pub ours: String,
     pub theirs: String,
     pub working: String,
@@ -1001,6 +1305,7 @@ pub fn git_merge_file_sides(path: &str, file: &str) -> Result<MergeFileSides, St
         return Err("文件路径为空".into());
     }
 
+    let base = git_show_stage(path, 1, &file).unwrap_or_default();
     let ours = git_show_stage(path, 2, &file).unwrap_or_default();
     let theirs = git_show_stage(path, 3, &file).unwrap_or_default();
     let working_path = std::path::Path::new(path).join(&file);
@@ -1011,6 +1316,7 @@ pub fn git_merge_file_sides(path: &str, file: &str) -> Result<MergeFileSides, St
     };
 
     Ok(MergeFileSides {
+        base,
         ours,
         theirs,
         working,
@@ -1137,6 +1443,31 @@ pub fn git_merge_resolve_content(
     git_merge_status(path)
 }
 
+/// Finish resolving a stash-pop conflict set: the popped changes are already
+/// merged into the working tree, so drop the retained auto-stash entry.
+pub fn git_stash_finish_pop(path: &str) -> Result<String, String> {
+    require_git_repo(path)?;
+    if merge_in_progress(path) {
+        return Err("合并仍在进行中，请先完成或取消合并".into());
+    }
+    if !top_stash_is_auto(path) {
+        return Ok("nothing to drop".into());
+    }
+    let output = git_command(path)
+        .args(["stash", "drop", "stash@{0}"])
+        .output()
+        .map_err(|e| e.to_string())?;
+    if !output.status.success() {
+        let err = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(if err.is_empty() {
+            "丢弃自动暂存记录失败".into()
+        } else {
+            err
+        });
+    }
+    Ok("stash dropped".into())
+}
+
 pub fn git_merge_abort(path: &str) -> Result<String, String> {
     require_git_repo(path)?;
     if !merge_in_progress(path) {
@@ -1154,7 +1485,9 @@ pub fn git_merge_abort(path: &str) -> Result<String, String> {
             err
         });
     }
-    Ok("merge aborted".into())
+    let mut msg = "merge aborted".to_string();
+    pop_auto_stash(path, &mut msg);
+    Ok(msg)
 }
 
 pub fn git_merge_commit(path: &str, message: Option<String>) -> Result<String, String> {
@@ -1190,5 +1523,7 @@ pub fn git_merge_commit(path: &str, message: Option<String>) -> Result<String, S
             err
         });
     }
-    Ok(format!("merge committed: {msg}"))
+    let mut msg = format!("merge committed: {msg}");
+    pop_auto_stash(path, &mut msg);
+    Ok(msg)
 }

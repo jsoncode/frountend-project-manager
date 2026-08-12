@@ -108,9 +108,18 @@ export type MergeStartResult = {
 }
 
 export type MergeFileSides = {
+  /** Common ancestor (stage 1) for per-side change highlighting. */
+  base: string
   ours: string
   theirs: string
   working: string
+}
+
+export type PullBranchResult = {
+  /** "updated" | "uptodate" | "conflicts" */
+  status: 'updated' | 'uptodate' | 'conflicts' | string
+  message: string
+  merge?: MergeStatus | null
 }
 
 export type EnvFileInfo = {

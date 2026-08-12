@@ -5,6 +5,7 @@ import {
   type GitDecorationIndex,
 } from '../lib/gitDecorations'
 import { create } from '../lib/createStore'
+import { maxBranchBehind } from '../lib/gitInfo'
 import type {
   EnvEntry,
   EnvFileInfo,
@@ -161,6 +162,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         gitInfo: git,
         gitStatus,
         changedFiles: gitStatus ? gitStatus.entries.length : (cachedStatus?.changedFiles ?? 0),
+        behind: maxBranchBehind(git),
         currentBranch: ((git?.current && git.current !== 'HEAD') ? git.current : gitStatus?.current) ?? cachedStatus?.currentBranch,
       })
     } catch (e) {
@@ -192,9 +194,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         path: selected.path,
       })
       set({ git })
-      // Sync git info to workspaceStore
+      // Sync git info to workspaceStore (behind included so the Explorer
+      // project badge stays in sync with the branch panel after fetch).
       useWorkspaceStore.getState().updateProjectStatus(selected.path, {
         gitInfo: git,
+        behind: maxBranchBehind(git),
         currentBranch: (git?.current && git.current !== 'HEAD') ? git.current : undefined,
       })
       await Promise.all([get().refreshGitStatus(), get().refreshMergeStatus()])

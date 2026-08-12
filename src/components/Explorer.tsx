@@ -29,8 +29,9 @@ import {
   toProjectRelative,
   unquoteGitPath,
 } from '../lib/gitDecorations'
+import { maxBranchBehind } from '../lib/gitInfo'
 import { projectMatchesQuery } from '../lib/projectSearch'
-import type { GitInfo, GitStatus, ProjectSummary } from '../lib/types'
+import type { GitInfo, GitStatus, MergeStatus, ProjectSummary, PullBranchResult } from '../lib/types'
 import {
   findWorkspaceForPath,
   shortWorkspaceName,
@@ -44,6 +45,7 @@ import { CommitModal } from './CommitModal'
 import { ContextMenuPortal } from './ContextMenuPortal'
 import { FileDiffModal } from './FileDiffModal'
 import { FileIcon } from './FileIcon'
+import { MergeConflictModal } from './MergeConflictModal'
 import { ModalShell } from './ModalShell'
 import { OpenWithMenu } from './OpenWithMenu'
 import { Tooltip } from './Tooltip'
@@ -74,9 +76,7 @@ export function Explorer() {
 
   const projectCache = useWorkspaceStore((s) => s.projectCache)
   const projectStatuses = useWorkspaceStore((s) => s.projectStatuses)
-  const scanningStatuses = useWorkspaceStore((s) => s.scanningStatuses)
-  const scanningProgress = useWorkspaceStore((s) => s.scanningProgress)
-  const scanningProjects = useWorkspaceStore((s) => s.scanningProjects)
+  const scanningWorkspaces = useWorkspaceStore((s) => s.scanningWorkspaces)
   const scanAllProjectStatuses = useWorkspaceStore((s) => s.scanAllProjectStatuses)
   const error = useWorkspaceStore((s) => s.error)
   const search = useWorkspaceStore((s) => s.search)
@@ -113,6 +113,8 @@ export function Explorer() {
   // Git info for project context menu
   const [projGitInfo, setProjGitInfo] = useState<{ path: string; info: GitInfo | null } | null>(null)
   const [branchSwitchTarget, setBranchSwitchTarget] = useState<{ projectPath: string; branch: string } | null>(null)
+  // Merge conflicts produced by a context-menu pull (opens the 3-way tool).
+  const [pullMerge, setPullMerge] = useState<{ projectPath: string; initial: MergeStatus | null } | null>(null)
   const [gitLoading, setGitLoading] = useState(false)
   const rowRefs = useRef(new Map<string, HTMLButtonElement>())
 
@@ -296,6 +298,7 @@ export function Explorer() {
         useWorkspaceStore.getState().updateProjectStatus(projectPath, {
           gitInfo: info,
           currentBranch: (info.current && info.current !== 'HEAD') ? info.current : undefined,
+          behind: maxBranchBehind(info),
         })
       }
     } catch {
@@ -314,11 +317,8 @@ export function Explorer() {
       ])
       const rawBranch = info?.current ?? status?.current
       const currentBranch = (rawBranch && rawBranch !== 'HEAD') ? rawBranch : undefined
-      let behind = 0
-      if (info?.current && info.branches) {
-        const cur = info.branches.find((b) => b.name === info.current && !b.isRemote)
-        behind = cur?.behind ?? 0
-      }
+      // Same derivation as the scan so the badge and branch panel agree.
+      const behind = maxBranchBehind(info)
       useWorkspaceStore.getState().updateProjectStatus(projectPath, {
         gitInfo: info,
         gitStatus: status,
@@ -699,11 +699,11 @@ export function Explorer() {
                 </span>
               </button>
 
-              {wsOpen && scanningStatuses && scanningProgress.total > 0 && (
-                <div className="explorer-scan-progress" title={`${scanningProgress.done}/${scanningProgress.total}`}>
+              {wsOpen && scanningWorkspaces[ws] && scanningWorkspaces[ws].progress.total > 0 && (
+                <div className="explorer-scan-progress" title={`${scanningWorkspaces[ws].progress.done}/${scanningWorkspaces[ws].progress.total}`}>
                   <div
                     className="explorer-scan-progress-bar"
-                    style={{ width: `${(scanningProgress.done / scanningProgress.total) * 100}%` }}
+                    style={{ width: `${(scanningWorkspaces[ws].progress.done / scanningWorkspaces[ws].progress.total) * 100}%` }}
                   />
                 </div>
               )}
@@ -724,10 +724,15 @@ export function Explorer() {
                   const changedFiles = isSelectedProject
                     ? (gitDecorations.dirs[''] ?? statusSummary?.changedFiles ?? 0)
                     : (statusSummary?.changedFiles ?? 0)
-                  const behind = statusSummary?.behind ?? 0
+                  // Derive from the cached GitInfo snapshot (same data the
+                  // branch panel renders) so both badges always agree; fall
+                  // back to the persisted scalar for legacy entries.
+                  const behind = statusSummary?.gitInfo
+                    ? maxBranchBehind(statusSummary.gitInfo)
+                    : (statusSummary?.behind ?? 0)
                   const currentBranch = statusSummary?.currentBranch
                   const projGitDirty = changedFiles > 0
-                  const isScanning = scanningProjects.has(p.path)
+                  const isScanning = scanningWorkspaces[ws]?.projects.has(p.path) ?? false
 
                   return (
                     <div key={p.path}>
@@ -795,7 +800,7 @@ export function Explorer() {
                           </span>
                         ) : null}
                         {behind > 0 ? (
-                          <span className="proj-status-badge proj-status-behind" title={`${behind} commits behind`}>
+                          <span className="proj-status-badge proj-status-behind" title={t('explorer.behindHint', { n: behind })}>
                             <ArrowDown className="ui-icon" size={10} color="currentColor" aria-hidden />
                             {behind}
                           </span>
@@ -841,14 +846,14 @@ export function Explorer() {
             type="button"
             role="menuitem"
             className="btn-with-icon"
-            disabled={scanningStatuses}
+            disabled={!!scanningWorkspaces[menu.path]}
             onClick={() => {
               void scanAllProjectStatuses(menu.path)
               setMenu(null)
             }}
           >
-            <Refresh className={`ui-icon${scanningStatuses ? ' is-spinning' : ''}`} size={14} color="currentColor" aria-hidden />
-            {scanningStatuses ? t('ws.scanningStatuses') : t('ws.checkAllStatus')}
+            <Refresh className={`ui-icon${scanningWorkspaces[menu.path] ? ' is-spinning' : ''}`} size={14} color="currentColor" aria-hidden />
+            {scanningWorkspaces[menu.path] ? t('ws.scanningStatuses') : t('ws.checkAllStatus')}
           </button>
           <button
             type="button"
@@ -933,6 +938,8 @@ export function Explorer() {
                 try {
                   await projRunGitInTerm(menu.path, 'git fetch --all --prune')
                 } catch { /* ignore */ }
+                // Remote tips changed — refresh cached counts so the badge updates.
+                await refreshProjGitAfterSwitch(menu.path)
               })()
             }}
           >
@@ -946,14 +953,32 @@ export function Explorer() {
             onClick={() => {
               setMenu(null)
               void (async () => {
+                const projName = findProjectName(menu.path)
                 try {
-                  await projRunGitInTerm(menu.path, 'git pull --ff-only --prune; if (-not $?) { git pull --prune }')
-                } catch { /* ignore */ }
-                // Check for merge conflicts after pull
+                  // Backend-driven update-all: fast-forwards every pending
+                  // branch (auto-stash for the current one) so the project
+                  // badge actually clears; reports conflicts structurally.
+                  const res = await invoke<PullBranchResult>('git_pull_all', {
+                    path: menu.path,
+                  })
+                  if (res.status === 'conflicts' && res.merge) {
+                    setPullMerge({ projectPath: menu.path, initial: res.merge })
+                  } else if (projName) {
+                    // Echo the outcome so a blocked/failed pull is never silent.
+                    useTerminalStore.getState().runRaw(menu.path, projName, `echo "${res.message}"`)
+                  }
+                } catch (e) {
+                  if (projName) {
+                    useTerminalStore.getState().runRaw(menu.path, projName, `echo "更新失败：${String(e)}"`)
+                  }
+                }
+                // Recompute behind counts and sync every cache.
+                await refreshProjGitAfterSwitch(menu.path)
+                // Also surface conflicts detected outside our own pull.
                 try {
-                  const status = await invoke<import('../lib/types').MergeStatus>('git_merge_status', { path: menu.path }).catch(() => null)
-                  if (status?.inProgress) {
-                    useProjectStore.getState().refreshMergeStatus()
+                  const status = await invoke<MergeStatus>('git_merge_status', { path: menu.path }).catch(() => null)
+                  if (status && (status.inProgress || status.conflictCount > 0)) {
+                    setPullMerge((prev) => prev ?? { projectPath: menu.path, initial: status })
                   }
                 } catch { /* ignore */ }
               })()
@@ -1136,6 +1161,17 @@ export function Explorer() {
           onDone={() => {
             setCommitEntry(null)
             if (selectedProject) void useProjectStore.getState().refreshGitStatus()
+          }}
+        />
+      )}
+
+      {pullMerge && (
+        <MergeConflictModal
+          projectPath={pullMerge.projectPath}
+          initial={pullMerge.initial}
+          onClose={() => setPullMerge(null)}
+          onDone={() => {
+            void refreshProjGitAfterSwitch(pullMerge.projectPath)
           }}
         />
       )}

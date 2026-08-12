@@ -54,6 +54,11 @@ description = "Pull/update a branch without requiring checkout"
 commands.allow = ["git_pull_branch"]
 
 [[permission]]
+identifier = "allow-git-pull-all"
+description = "Update every branch that has pending commits"
+commands.allow = ["git_pull_all"]
+
+[[permission]]
 identifier = "allow-git-merge-status"
 description = "Get in-progress merge status and conflict files"
 commands.allow = ["git_merge_status"]
@@ -87,6 +92,11 @@ commands.allow = ["git_merge_abort"]
 identifier = "allow-git-merge-commit"
 description = "Commit a completed merge"
 commands.allow = ["git_merge_commit"]
+
+[[permission]]
+identifier = "allow-git-stash-finish-pop"
+description = "Drop the retained auto-stash after resolving stash-pop conflicts"
+commands.allow = ["git_stash_finish_pop"]
 
 [[permission]]
 identifier = "allow-git-diff-head"

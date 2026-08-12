@@ -15,7 +15,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react'
 import { useI18n } from '../i18n/useI18n'
 import { writeHostToTerminal } from '../lib/ptyHost'
-import type { BranchItem, GitStatus, MergeStatus } from '../lib/types'
+import type { BranchItem, GitStatus, MergeStatus, PullBranchResult } from '../lib/types'
 import { useProjectStore } from '../stores/projectStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useTerminalStore } from '../stores/terminalStore'
@@ -153,21 +153,28 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
   const pullBranch = async (branch: BranchItem) => {
     const name = localName(branch.name)
     setPulling(true)
+    setBranchError(null)
+    echoTerm(`\r\n\x1b[36m$ git pull ${name}\x1b[0m\r\n`)
     try {
-      const isCurrent =
-        !!git?.current &&
-        (git.current === name ||
-          git.current === branch.name ||
-          localName(git.current) === name)
-      // Real shell git — keeps native color / progress. Do not echo captured text.
-      const command = isCurrent
-        ? 'git pull --ff-only --prune; if (-not $?) { git pull --prune }'
-        : `git fetch origin ${JSON.stringify(`${name}:${name}`)}`
-      await runGitInTerm(command)
+      // Backend-driven pull: attempts the update even with local uncommitted
+      // changes (auto-stash) and reports conflicts structurally.
+      const res = await invoke<PullBranchResult>('git_pull_branch', {
+        path: selected.path,
+        branch: branch.name,
+      })
+      echoTerm(`\x1b[32m${res.message}\x1b[0m\r\n`)
+      if (res.status === 'conflicts' && res.merge) {
+        // Conflicts → resolve via the 3-way merge tool.
+        setMergeModal({ initial: res.merge })
+      }
     } catch (e) {
-      echoTerm(`\r\n\x1b[31m${String(e)}\x1b[0m\r\n`)
+      // Surface the failure clearly — silent no-ops made users think the
+      // update succeeded when it never ran.
+      const msg = String(e)
+      setBranchError(msg)
+      echoTerm(`\x1b[31m${msg}\x1b[0m\r\n`)
     }
-    // Always check for merge conflicts after pull, even if the command threw.
+    // Always refresh so project/branch badges reflect the real state.
     try {
       await refreshGit()
     } catch {
@@ -178,7 +185,7 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
         path: selected.path,
       }).catch(() => null)
       if (status && (status.inProgress || status.conflictCount > 0)) {
-        setMergeModal({ initial: status })
+        setMergeModal((prev) => prev ?? { initial: status })
       }
     } catch {
       /* ignore */

@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import * as monaco from 'monaco-editor'
 import { useI18n } from '../i18n/useI18n'
+import { computeLineDiff, splitLines } from '../lib/diffUtils'
 import { languageFromPath } from '../lib/editorLanguage'
 import {
   applyHunkChoice,
@@ -34,6 +35,52 @@ const CONFLICT_DECORATION = {
 const CONFLICT_MARKER_DECORATION = {
   isWholeLine: true,
   className: 'merge-conflict-marker-line',
+}
+
+/** Ours lines that differ from the common ancestor. */
+const OURS_CHANGED_DECORATION = {
+  isWholeLine: true,
+  className: 'merge-side-ours-line',
+  linesDecorationsClassName: 'merge-side-ours-gutter',
+}
+
+/** Theirs lines that differ from the common ancestor. */
+const THEIRS_CHANGED_DECORATION = {
+  isWholeLine: true,
+  className: 'merge-side-theirs-line',
+  linesDecorationsClassName: 'merge-side-theirs-gutter',
+}
+
+/** Result pane: ours-side line that differs from the theirs side. */
+const DIFF_OURS_LINE_DECORATION = {
+  isWholeLine: true,
+  className: 'merge-diff-ours-line',
+}
+
+/** Result pane: theirs-side line that differs from the ours side. */
+const DIFF_THEIRS_LINE_DECORATION = {
+  isWholeLine: true,
+  className: 'merge-diff-theirs-line',
+}
+
+/** Stronger outline for the conflict currently being resolved. */
+const CURRENT_CONFLICT_DECORATION = {
+  isWholeLine: true,
+  className: 'merge-conflict-current',
+}
+
+/** Stronger emphasis for the active conflict block in the ours pane. */
+const OURS_CURRENT_DECORATION = {
+  isWholeLine: true,
+  className: 'merge-side-ours-current',
+  linesDecorationsClassName: 'merge-side-ours-gutter',
+}
+
+/** Stronger emphasis for the active conflict block in the theirs pane. */
+const THEIRS_CURRENT_DECORATION = {
+  isWholeLine: true,
+  className: 'merge-side-theirs-current',
+  linesDecorationsClassName: 'merge-side-theirs-gutter',
 }
 
 function createEditor(
@@ -72,6 +119,80 @@ function hunkLineRange(text: string, hunk: ConflictHunk): { start: number; end: 
   return { start: startLine, end: startLine + hunkLines - 1 }
 }
 
+/** Normalize block text so trailing-newline variants compare equal. */
+function normBlock(s: string): string {
+  return s.replace(/\r?\n$/, '')
+}
+
+/**
+ * Line ranges (1-based, inclusive) in `side` that changed relative to `base`.
+ * Used to highlight what each side actually modified (vs the common ancestor).
+ */
+function changedLineRanges(base: string, side: string): Array<{ start: number; end: number }> {
+  const diff = computeLineDiff(splitLines(base), splitLines(side))
+  const ranges: Array<{ start: number; end: number }> = []
+  let cur: { start: number; end: number } | null = null
+  for (const l of diff) {
+    if (l.type === 'insert' && l.modifiedLineNo) {
+      if (cur && cur.end === l.modifiedLineNo - 1) {
+        cur.end = l.modifiedLineNo
+      } else {
+        if (cur) ranges.push(cur)
+        cur = { start: l.modifiedLineNo, end: l.modifiedLineNo }
+      }
+    } else {
+      if (cur) ranges.push(cur)
+      cur = null
+    }
+  }
+  if (cur) ranges.push(cur)
+  return ranges
+}
+
+/**
+ * Pair each working-file conflict hunk with the line range of the same block
+ * in a side file (WebStorm-style per-block targeting). Order-anchored greedy
+ * match on block content, falling back to a forward search.
+ */
+function matchSideRanges(
+  base: string,
+  side: string,
+  hunks: ConflictHunk[],
+  pick: (h: ConflictHunk) => string,
+): Array<{ start: number; end: number } | null> {
+  const regions = changedLineRanges(base, side)
+  const sideLines = side.split('\n')
+  const out: Array<{ start: number; end: number } | null> = []
+  let cursor = 0
+  for (const h of hunks) {
+    const target = normBlock(pick(h))
+    let found: { start: number; end: number } | null = null
+    if (target.length > 0) {
+      for (let i = cursor; i < regions.length; i++) {
+        const r = regions[i]
+        const text = normBlock(sideLines.slice(r.start - 1, r.end).join('\n'))
+        if (text === target) {
+          found = r
+          cursor = i + 1
+          break
+        }
+      }
+      if (!found) {
+        const targetLines = target.split('\n')
+        outer: for (let s = 0; s + targetLines.length <= sideLines.length; s++) {
+          for (let k = 0; k < targetLines.length; k++) {
+            if (sideLines[s + k] !== targetLines[k]) continue outer
+          }
+          found = { start: s + 1, end: s + targetLines.length }
+          break
+        }
+      }
+    }
+    out.push(found)
+  }
+  return out
+}
+
 export function MergeEditorModal({
   projectPath,
   file,
@@ -90,6 +211,14 @@ export function MergeEditorModal({
   }>({ ours: null, theirs: null, result: null })
   const decorationsRef = useRef<string[]>([])
   const widgetsRef = useRef<monaco.editor.IContentWidget[]>([])
+  const oursDecoRef = useRef<string[]>([])
+  const theirsDecoRef = useRef<string[]>([])
+  const oursWidgetRef = useRef<monaco.editor.IContentWidget[]>([])
+  const theirsWidgetRef = useRef<monaco.editor.IContentWidget[]>([])
+  /** Loaded ours/theirs/base texts for side-pane block matching. */
+  const sidesRef = useRef({ base: '', ours: '', theirs: '' })
+  /** Mirror of currentHunk for use inside editor callbacks. */
+  const currentHunkRef = useRef(0)
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -105,7 +234,7 @@ export function MergeEditorModal({
   const hunkCount = hunks.length
 
   /** Apply conflict decorations to the result editor. */
-  const applyDecorations = useCallback((editor: monaco.editor.IStandaloneCodeEditor, text: string, hunkList: ConflictHunk[]) => {
+  const applyDecorations = useCallback((editor: monaco.editor.IStandaloneCodeEditor, text: string, hunkList: ConflictHunk[], activeIdx: number) => {
     const model = editor.getModel()
     if (!model) return
 
@@ -129,6 +258,44 @@ export function MergeEditorModal({
             range: new monaco.Range(line, 1, line, model.getLineMaxColumn(line)),
             options: CONFLICT_MARKER_DECORATION,
           })
+        }
+      }
+
+      // Emphasize the conflict currently being resolved.
+      if (idx === activeIdx) {
+        decorations.push({
+          range: new monaco.Range(range.start, 1, range.end, model.getLineMaxColumn(range.end)),
+          options: CURRENT_CONFLICT_DECORATION,
+        })
+      }
+
+      // Line-level comparison inside the conflict (WebStorm-style): mark the
+      // ours lines that differ from theirs and vice versa, so it is obvious
+      // line by line where the two sides disagree.
+      const oursNorm = hunk.ours.replace(/\r?\n$/, '')
+      const theirsNorm = hunk.theirs.replace(/\r?\n$/, '')
+      const oursLines = oursNorm.length > 0 ? oursNorm.split('\n') : []
+      const theirsLines = theirsNorm.length > 0 ? theirsNorm.split('\n') : []
+      const lineDiff = computeLineDiff(oursLines, theirsLines)
+      const oursStart = range.start + 1 // first line after <<<<<<<
+      const theirsStart = oursStart + oursLines.length + 1 // after =======
+      for (const dl of lineDiff) {
+        if (dl.type === 'delete' && dl.lineNo > 0) {
+          const line = oursStart + dl.lineNo - 1
+          if (line <= model.getLineCount()) {
+            decorations.push({
+              range: new monaco.Range(line, 1, line, model.getLineMaxColumn(line)),
+              options: DIFF_OURS_LINE_DECORATION,
+            })
+          }
+        } else if (dl.type === 'insert' && dl.modifiedLineNo) {
+          const line = theirsStart + dl.modifiedLineNo - 1
+          if (line <= model.getLineCount()) {
+            decorations.push({
+              range: new monaco.Range(line, 1, line, model.getLineMaxColumn(line)),
+              options: DIFF_THEIRS_LINE_DECORATION,
+            })
+          }
         }
       }
 
@@ -179,7 +346,7 @@ export function MergeEditorModal({
     widgetsRef.current = newWidgets
   }, [t])
 
-  /** Apply a choice to a specific hunk index. */
+  /** Apply a choice to a specific hunk index, then jump to the next one. */
   const applyHunkAt = useCallback((idx: number, choice: 'ours' | 'theirs' | 'both') => {
     const ed = editorsRef.current.result
     if (!ed) return
@@ -189,7 +356,83 @@ export function MergeEditorModal({
     if (!hunk) return
     const next = applyHunkChoice(text, hunk, choice)
     ed.setValue(next)
+    // WebStorm-style flow: automatically move on to the next remaining conflict.
+    const remaining = parseConflictHunks(next)
+    if (remaining.length > 0) {
+      const nextIdx = Math.min(idx, remaining.length - 1)
+      currentHunkRef.current = nextIdx
+      setCurrentHunk(nextIdx)
+      const range = hunkLineRange(next, remaining[nextIdx])
+      ed.revealLineInCenter(range.start)
+      ed.setPosition({ lineNumber: range.start, column: 1 })
+    }
+    ed.focus()
   }, [])
+
+  /**
+   * Highlight each conflict's matching block in the ours/theirs panes and
+   * float an "accept this block" button on the active one (per-block
+   * targeting instead of whole-file diffing).
+   */
+  const applySideDecorations = useCallback((hunkList: ConflictHunk[], activeIdx: number) => {
+    const { base, ours, theirs } = sidesRef.current
+
+    const applyToSide = (
+      ed: monaco.editor.IStandaloneCodeEditor | null,
+      sideText: string,
+      pick: (h: ConflictHunk) => string,
+      choice: 'ours' | 'theirs',
+      decoRef: { current: string[] },
+      widgetRef: { current: monaco.editor.IContentWidget[] },
+    ) => {
+      if (!ed) return
+      const model = ed.getModel()
+      if (!model) return
+      const matched = matchSideRanges(base, sideText, hunkList, pick)
+      const decorations: monaco.editor.IModelDeltaDecoration[] = []
+      matched.forEach((r, i) => {
+        if (!r) return
+        const active = i === activeIdx
+        decorations.push({
+          range: new monaco.Range(r.start, 1, r.end, model.getLineMaxColumn(r.end)),
+          options: active
+            ? (choice === 'ours' ? OURS_CURRENT_DECORATION : THEIRS_CURRENT_DECORATION)
+            : (choice === 'ours' ? OURS_CHANGED_DECORATION : THEIRS_CHANGED_DECORATION),
+        })
+      })
+      if (decoRef.current.length > 0) ed.deltaDecorations(decoRef.current, [])
+      decoRef.current = ed.deltaDecorations([], decorations)
+
+      for (const w of widgetRef.current) ed.removeContentWidget(w)
+      widgetRef.current = []
+      const r = matched[activeIdx]
+      if (!r) return
+      ed.revealLineInCenterIfOutsideViewport(r.start)
+      const domNode = document.createElement('div')
+      domNode.className = 'merge-side-widget'
+      const btn = document.createElement('button')
+      btn.className = `btn btn-xs merge-hunk-btn ${choice}`
+      btn.textContent = choice === 'ours'
+        ? `${t('merge.acceptBlock')} →`
+        : `← ${t('merge.acceptBlock')}`
+      btn.title = choice === 'ours' ? t('merge.hunkOurs') : t('merge.hunkTheirs')
+      btn.addEventListener('click', () => applyHunkAt(activeIdx, choice))
+      domNode.appendChild(btn)
+      const widget: monaco.editor.IContentWidget = {
+        getId: () => `merge-side-${choice}`,
+        getDomNode: () => domNode,
+        getPosition: () => ({
+          position: { lineNumber: r.start, column: 1 },
+          preference: [monaco.editor.ContentWidgetPositionPreference.ABOVE],
+        }),
+      }
+      ed.addContentWidget(widget)
+      widgetRef.current = [widget]
+    }
+
+    applyToSide(editorsRef.current.ours, ours, (h) => h.ours, 'ours', oursDecoRef, oursWidgetRef)
+    applyToSide(editorsRef.current.theirs, theirs, (h) => h.theirs, 'theirs', theirsDecoRef, theirsWidgetRef)
+  }, [t, applyHunkAt])
 
   /** Navigate to a specific hunk in the result editor. */
   const goToHunk = useCallback((idx: number) => {
@@ -203,7 +446,10 @@ export function MergeEditorModal({
     ed.setPosition({ lineNumber: range.start, column: 1 })
     ed.focus()
     setCurrentHunk(idx)
-  }, [])
+    currentHunkRef.current = idx
+    applyDecorations(ed, text, hunkList, idx)
+    applySideDecorations(hunkList, idx)
+  }, [applyDecorations, applySideDecorations])
 
   useEffect(() => {
     let cancelled = false
@@ -226,6 +472,7 @@ export function MergeEditorModal({
           return
         }
         const lang = languageFromPath(file)
+        sidesRef.current = { base: sides.base, ours: sides.ours, theirs: sides.theirs }
         setResultText(sides.working)
         initialRef.current = sides.working
         const initialHunks = parseConflictHunks(sides.working)
@@ -264,12 +511,36 @@ export function MergeEditorModal({
               setDirty(v !== initialRef.current)
               const newHunks = parseConflictHunks(v)
               setHunks(newHunks)
-              applyDecorations(ed, v, newHunks)
-              setCurrentHunk((prev) => Math.min(prev, Math.max(0, newHunks.length - 1)))
+              setCurrentHunk((prev) => {
+                const next = Math.min(prev, Math.max(0, newHunks.length - 1))
+                currentHunkRef.current = next
+                return next
+              })
+              applyDecorations(ed, v, newHunks, currentHunkRef.current)
+              applySideDecorations(newHunks, currentHunkRef.current)
+            })
+
+            // Track the active conflict by cursor position (WebStorm-style):
+            // the conflict containing the caret becomes the current one.
+            ed.onDidChangeCursorPosition((e) => {
+              const v = ed.getValue()
+              const list = parseConflictHunks(v)
+              const line = e.position.lineNumber
+              const idx = list.findIndex((h) => {
+                const r = hunkLineRange(v, h)
+                return line >= r.start && line <= r.end
+              })
+              if (idx >= 0 && idx !== currentHunkRef.current) {
+                currentHunkRef.current = idx
+                setCurrentHunk(idx)
+                applyDecorations(ed, v, list, idx)
+                applySideDecorations(list, idx)
+              }
             })
 
             // Apply initial decorations
-            applyDecorations(ed, sides.working, initialHunks)
+            applyDecorations(ed, sides.working, initialHunks, 0)
+            applySideDecorations(initialHunks, 0)
 
             // Sync scroll between panes
             const syncScroll = (source: monaco.editor.IStandaloneCodeEditor, targets: monaco.editor.IStandaloneCodeEditor[]) => {

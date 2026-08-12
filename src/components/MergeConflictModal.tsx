@@ -76,6 +76,10 @@ export function MergeConflictModal({
     (f) => f.path === selected,
   )
 
+  // Conflicts without MERGE_HEAD = stash-pop conflicts (e.g. the auto-stash
+  // restored before an update clashes with pulled changes).
+  const stashMode = !!status && !status.inProgress && status.files.length > 0
+
   const resolveSide = async (ours: boolean) => {
     if (!selected) return
     setBusy(true)
@@ -120,6 +124,34 @@ export function MergeConflictModal({
         message: commitMsg.trim() || null,
       })
       setConfirmCommit(false)
+      // The pre-pull auto-stash is restored after the merge commit; if THAT
+      // restores into conflicts there is no MERGE_HEAD — stay open in
+      // stash-pop mode so the user can resolve them too.
+      const next = await invoke<MergeStatus>('git_merge_status', {
+        path: projectPath,
+      }).catch(() => null)
+      if (next && next.conflictCount > 0 && !next.inProgress) {
+        setStatus(next)
+        setSelected(null)
+        await refreshMergeStatus()
+        setBusy(false)
+        return
+      }
+      await refreshGit()
+      await refreshMergeStatus()
+      onDone()
+      onClose()
+    } catch (e) {
+      setError(String(e))
+      setBusy(false)
+    }
+  }
+
+  const finishStash = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      await invoke<string>('git_stash_finish_pop', { path: projectPath })
       await refreshGit()
       await refreshMergeStatus()
       onDone()
@@ -131,10 +163,12 @@ export function MergeConflictModal({
   }
 
   const title = status
-    ? t('merge.title', {
-        incoming: status.incoming ?? '?',
-        current: status.current ?? '?',
-      })
+    ? stashMode
+      ? t('merge.stashTitle')
+      : t('merge.title', {
+          incoming: status.incoming ?? '?',
+          current: status.current ?? '?',
+        })
     : t('merge.titleLoading')
 
   return (
@@ -147,22 +181,36 @@ export function MergeConflictModal({
         closeOnEsc={!busy}
         footer={status ? (
           <div className="modal-actions merge-footer">
-            <button
-              type="button"
-              className="btn"
-              disabled={busy}
-              onClick={() => void abortMerge()}
-            >
-              {t('merge.abort')}
-            </button>
-            <button
-              type="button"
-              className="btn primary"
-              disabled={busy || (status.conflictCount ?? 0) > 0 || !status.inProgress}
-              onClick={() => setConfirmCommit(true)}
-            >
-              {t('merge.finish')}
-            </button>
+            {!stashMode && (
+              <button
+                type="button"
+                className="btn"
+                disabled={busy}
+                onClick={() => void abortMerge()}
+              >
+                {t('merge.abort')}
+              </button>
+            )}
+            {stashMode ? (
+              <button
+                type="button"
+                className="btn primary"
+                disabled={busy || status.conflictCount > 0}
+                onClick={() => void finishStash()}
+                title={t('merge.stashFinishHint')}
+              >
+                {t('merge.stashFinish')}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="btn primary"
+                disabled={busy || (status.conflictCount ?? 0) > 0 || !status.inProgress}
+                onClick={() => setConfirmCommit(true)}
+              >
+                {t('merge.finish')}
+              </button>
+            )}
           </div>
         ) : undefined}
       >
@@ -174,10 +222,12 @@ export function MergeConflictModal({
           <>
             <p className="muted merge-summary">
               {status.conflictCount > 0
-                ? t('merge.conflictSummary', { n: status.conflictCount })
+                ? stashMode
+                  ? t('merge.stashSummary', { n: status.conflictCount })
+                  : t('merge.conflictSummary', { n: status.conflictCount })
                 : status.inProgress
                   ? t('merge.pendingSummary', { n: status.files.length })
-                  : t('merge.noConflicts')}
+                  : t('merge.stashResolved')}
             </p>
             <div className="merge-file-list" role="listbox">
               {status.files.length === 0 ? (

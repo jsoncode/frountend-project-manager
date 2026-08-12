@@ -342,8 +342,15 @@ async fn git_fetch(path: String) -> Result<String, String> {
 }
 
 #[tauri::command(async)]
-async fn git_pull_branch(path: String, branch: String) -> Result<String, String> {
+async fn git_pull_branch(path: String, branch: String) -> Result<git::PullBranchResult, String> {
     tauri::async_runtime::spawn_blocking(move || git::git_pull_branch(&path, &branch))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command(async)]
+async fn git_pull_all(path: String) -> Result<git::PullBranchResult, String> {
+    tauri::async_runtime::spawn_blocking(move || git::git_pull_all(&path))
         .await
         .map_err(|e| e.to_string())?
 }
@@ -421,6 +428,13 @@ async fn git_merge_commit(
     message: Option<String>,
 ) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || git::git_merge_commit(&path, message))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command(async)]
+async fn git_stash_finish_pop(path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || git::git_stash_finish_pop(&path))
         .await
         .map_err(|e| e.to_string())?
 }
@@ -918,6 +932,7 @@ pub fn run() {
             git_delete_branch,
             git_fetch,
             git_pull_branch,
+            git_pull_all,
             git_merge_status,
             git_merge_start,
             git_merge_file_sides,
@@ -926,6 +941,7 @@ pub fn run() {
             git_merge_resolve_content,
             git_merge_abort,
             git_merge_commit,
+            git_stash_finish_pop,
             list_env_files,
             read_env_file,
             list_directory_entries,
