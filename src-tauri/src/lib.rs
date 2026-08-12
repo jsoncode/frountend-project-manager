@@ -728,24 +728,13 @@ fn pick_directory(app: AppHandle) -> Result<Option<String>, String> {
 }
 
 #[tauri::command]
-fn pick_executable(
-    app: AppHandle,
-    start_directory: Option<String>,
-) -> Result<Option<String>, String> {
-    let mut dialog = app
+fn pick_executable(app: AppHandle) -> Result<Option<String>, String> {
+    let file = app
         .dialog()
         .file()
         .set_title("Select IDE Executable")
-        .add_filter("Executable", &["exe", "cmd", "bat"]);
-    // Open at the currently configured exe's folder instead of an unrelated
-    // default location.
-    if let Some(dir) = start_directory.as_deref() {
-        let dir = dir.trim();
-        if !dir.is_empty() {
-            dialog = dialog.set_directory(dir);
-        }
-    }
-    let file = dialog.blocking_pick_file();
+        .add_filter("Executable", &["exe", "cmd", "bat"])
+        .blocking_pick_file();
     Ok(file.map(|p| p.to_string()))
 }
 

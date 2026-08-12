@@ -211,21 +211,36 @@ export function IdeSettingsModal({ inline, onClosePanel }: IdeSettingsModalProps
     setPickerQuery('')
   }
 
-  const browseExe = async (id: string, executable: string) => {
-    // Open the dialog in the folder of the exe currently in the input,
-    // not some unrelated default location.
+  /** Folder containing the configured executable — used as dialog start dir. */
+  const exeDirOf = (executable: string): string | undefined => {
     const dir = executable
       .trim()
       .replace(/\\/g, '/')
       .split('/')
       .slice(0, -1)
       .join('/')
-    const path = await invoke<string | null>('pick_executable', {
-      startDirectory: dir || undefined,
-    })
-    if (!path) return
-    const iconPath = await extractIcon(path)
-    update(id, { executable: path, ...(iconPath ? { iconPath } : {}) })
+    return dir || undefined
+  }
+
+  const browseExe = async (id: string, executable: string) => {
+    // Open File Explorer right at the folder of the exe in the input —
+    // same precise behavior as the project menu "Reveal in File Manager".
+    void id
+    const exe = executable.trim()
+    if (!exe) return
+    try {
+      // Reveal the exe itself when it exists (Explorer highlights it);
+      // fall back to opening its folder otherwise.
+      try {
+        await invoke('reveal_in_file_manager', { path: exe })
+      } catch {
+        const dir = exeDirOf(exe)
+        if (!dir) throw new Error(exe)
+        await invoke('reveal_in_file_manager', { path: dir })
+      }
+    } catch (e) {
+      showErrorLog(e)
+    }
   }
 
   const extractIconForIde = async (id: string, executable: string) => {
@@ -233,11 +248,18 @@ export function IdeSettingsModal({ inline, onClosePanel }: IdeSettingsModalProps
     if (iconPath) update(id, { iconPath })
   }
 
-  const browseIcon = async (id: string) => {
-    const path = await invoke<string | null>('pick_image')
-    if (!path) return
-    const cached = await invoke<string>('import_ide_icon', { sourcePath: path })
-    update(id, { iconPath: cached })
+  const browseIcon = async (id: string, ide: IdeConfig) => {
+    // Open File Explorer at the relevant folder: the icon's own folder when
+    // one is configured, otherwise the exe's folder.
+    void id
+    const target =
+      exeDirOf(ide.iconPath ?? '') ?? exeDirOf(ide.executable)
+    if (!target) return
+    try {
+      await invoke('reveal_in_file_manager', { path: target })
+    } catch (e) {
+      showErrorLog(e)
+    }
   }
 
   const onUploadPicked = async (file: File | undefined) => {
@@ -281,10 +303,10 @@ export function IdeSettingsModal({ inline, onClosePanel }: IdeSettingsModalProps
                     <button
                       type="button"
                       className="btn btn-sm btn-with-icon"
-                      onClick={() => void browseIcon(ide.id)}
+                      onClick={() => void browseIcon(ide.id, ide)}
                     >
                       <FolderOpen className="ui-icon" size={12} color="currentColor" aria-hidden />
-                      {t('ide.iconBrowse')}
+                      {t('open.inFileManager')}
                     </button>
                     <button
                       type="button"
@@ -381,8 +403,8 @@ export function IdeSettingsModal({ inline, onClosePanel }: IdeSettingsModalProps
                   <button
                     type="button"
                     className="btn btn-sm btn-with-icon"
-                    title={t('ide.iconBrowse')}
-                    aria-label={t('ide.iconBrowse')}
+                    title={t('open.inFileManager')}
+                    aria-label={t('open.inFileManager')}
                     onClick={() => void browseExe(ide.id, ide.executable)}
                   >
                     <FolderOpen className="ui-icon" size={14} color="currentColor" aria-hidden />
