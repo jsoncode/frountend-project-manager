@@ -139,11 +139,14 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         error: null,
       })
     } catch (e) {
-      // Keep UI usable; avoid sticky "加载失败" on first-launch races.
+      // Keep the last-good config on transient failures — falling back to
+      // EMPTY_CONFIG here would blank the IDE list in memory and a later
+      // save_config could persist that emptiness for real.
+      const prev = get().config
       set({
         loading: false,
         error: null,
-        config: EMPTY_CONFIG,
+        config: prev ?? EMPTY_CONFIG,
       })
       console.warn('load_config failed after retries', e)
     }
@@ -237,7 +240,23 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   clearProjectCache: async () => {
     await invoke('clear_all_project_cache')
     useWorkspaceStore.setState({ projectStatuses: {} })
-    await get().load()
+    // The backend only cleared history fields — mirror that in place so
+    // untouched settings (IDEs, workspaces, tags) can never be lost to a
+    // failed or partial full-config reload.
+    const current = get().config
+    if (current) {
+      set({
+        config: {
+          ...current,
+          commandHistory: {},
+          branchHistory: {},
+          branchFavorites: {},
+          searchHistory: [],
+        },
+      })
+    }
+    // Refresh from DB in the background (non-destructive on failure).
+    void get().load()
   },
   clearAiConversations: async () => {
     await invoke('clear_all_ai_conversations')
@@ -256,10 +275,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     if (!current) return
     const next = { ...current, editorTheme: themeId }
     if (isTauri()) {
-      const cfg = await invoke<AppConfig>('save_config', { cfg: next })
-      set({ config: cfg })
-    } else {
-      set({ config: next })
+      // save_config returns nothing — applying its (empty) result would null
+      // the whole config and blank the workspace list. Apply `next` instead.
+      await invoke('save_config', { cfg: next })
     }
+    set({ config: next })
   },
 }))

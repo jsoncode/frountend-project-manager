@@ -2683,6 +2683,8 @@ button.history-chip-main:hover {
 
 /* === VSCode-style settings layout === */
 .settings-modal-root {
+  /* Fixed height so the panel doesn't jump as categories change. */
+  height: 85vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;

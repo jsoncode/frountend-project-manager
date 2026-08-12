@@ -213,7 +213,9 @@ fn clear_all_project_cache(app: AppHandle) -> Result<(), String> {
     db::project_cache_clear_all()?;
     // Also clear project statuses stored in dedicated kv key.
     let _ = db::kv_set("project_statuses", "{}");
-    // Also clear history data stored in AppConfig (kv table).
+    // Only history-style fields are cleared. User-owned settings in the
+    // same blob — ides, workspaces, tags, locale, theme, projectAccess —
+    // MUST survive, so load-modify-save instead of rewriting defaults.
     let mut cfg = config::load_or_default(&app)?;
     cfg.command_history.clear();
     cfg.branch_history.clear();
@@ -726,13 +728,24 @@ fn pick_directory(app: AppHandle) -> Result<Option<String>, String> {
 }
 
 #[tauri::command]
-fn pick_executable(app: AppHandle) -> Result<Option<String>, String> {
-    let file = app
+fn pick_executable(
+    app: AppHandle,
+    start_directory: Option<String>,
+) -> Result<Option<String>, String> {
+    let mut dialog = app
         .dialog()
         .file()
         .set_title("Select IDE Executable")
-        .add_filter("Executable", &["exe", "cmd", "bat"])
-        .blocking_pick_file();
+        .add_filter("Executable", &["exe", "cmd", "bat"]);
+    // Open at the currently configured exe's folder instead of an unrelated
+    // default location.
+    if let Some(dir) = start_directory.as_deref() {
+        let dir = dir.trim();
+        if !dir.is_empty() {
+            dialog = dialog.set_directory(dir);
+        }
+    }
+    let file = dialog.blocking_pick_file();
     Ok(file.map(|p| p.to_string()))
 }
 

@@ -211,8 +211,18 @@ export function IdeSettingsModal({ inline, onClosePanel }: IdeSettingsModalProps
     setPickerQuery('')
   }
 
-  const browseExe = async (id: string) => {
-    const path = await invoke<string | null>('pick_executable')
+  const browseExe = async (id: string, executable: string) => {
+    // Open the dialog in the folder of the exe currently in the input,
+    // not some unrelated default location.
+    const dir = executable
+      .trim()
+      .replace(/\\/g, '/')
+      .split('/')
+      .slice(0, -1)
+      .join('/')
+    const path = await invoke<string | null>('pick_executable', {
+      startDirectory: dir || undefined,
+    })
     if (!path) return
     const iconPath = await extractIcon(path)
     update(id, { executable: path, ...(iconPath ? { iconPath } : {}) })
@@ -373,7 +383,7 @@ export function IdeSettingsModal({ inline, onClosePanel }: IdeSettingsModalProps
                     className="btn btn-sm btn-with-icon"
                     title={t('ide.iconBrowse')}
                     aria-label={t('ide.iconBrowse')}
-                    onClick={() => void browseExe(ide.id)}
+                    onClick={() => void browseExe(ide.id, ide.executable)}
                   >
                     <FolderOpen className="ui-icon" size={14} color="currentColor" aria-hidden />
                   </button>

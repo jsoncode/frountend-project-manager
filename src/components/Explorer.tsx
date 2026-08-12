@@ -1155,8 +1155,15 @@ export function Explorer() {
         <CommitModal
           projectPath={commitEntry.projectPath}
           projectName={findProjectName(commitEntry.projectPath)}
-          branch={selectedProject?.path === commitEntry.projectPath ? (useProjectStore.getState().git?.current ?? 'HEAD') : 'HEAD'}
-          paths={[commitEntry.path]}
+          branch={
+            selectedProject?.path === commitEntry.projectPath
+              ? (useProjectStore.getState().git?.current ?? 'HEAD')
+              : (projGitInfo?.path === commitEntry.projectPath
+                  ? (projGitInfo.info?.current ?? 'HEAD')
+                  : 'HEAD')
+          }
+          paths={commitEntry.path.toLowerCase() === commitEntry.projectPath.toLowerCase() ? undefined : [commitEntry.path]}
+          showPush={commitEntry.path.toLowerCase() === commitEntry.projectPath.toLowerCase()}
           onClose={() => setCommitEntry(null)}
           onDone={() => {
             setCommitEntry(null)

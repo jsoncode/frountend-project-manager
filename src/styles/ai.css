@@ -640,6 +640,14 @@
   background: rgba(34, 211, 238, 0.1);
 }
 
+.ai-model-editor-modal .modal-header,
+.ai-model-editor-modal .modal-body,
+.ai-model-editor-modal .modal-footer {
+  /* A bit more breathing room on the sides than the default 16px. */
+  padding-left: 22px;
+  padding-right: 22px;
+}
+
 .ai-model-editor-modal .ai-model-editor-fields,
 .ai-model-editor-fields {
   display: flex;

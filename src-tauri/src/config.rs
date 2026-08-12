@@ -48,10 +48,17 @@ pub struct AppConfig {
     /// UI language: "zh" | "en"
     #[serde(default = "default_locale")]
     pub locale: String,
+    /// Monaco editor color theme id
+    #[serde(default = "default_editor_theme")]
+    pub editor_theme: String,
 }
 
 fn default_locale() -> String {
     "zh".into()
+}
+
+fn default_editor_theme() -> String {
+    "vs-dark".into()
 }
 
 impl Default for AppConfig {
@@ -66,6 +73,7 @@ impl Default for AppConfig {
             search_history: Vec::new(),
             project_access: HashMap::new(),
             locale: default_locale(),
+            editor_theme: default_editor_theme(),
         }
     }
 }

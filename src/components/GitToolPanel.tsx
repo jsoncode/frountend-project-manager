@@ -15,7 +15,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react'
 import { useI18n } from '../i18n/useI18n'
 import { writeHostToTerminal } from '../lib/ptyHost'
-import type { BranchItem, GitStatus, MergeStatus, PullBranchResult } from '../lib/types'
+import type { BranchItem, GitStatus, MergeStatus } from '../lib/types'
 import { useProjectStore } from '../stores/projectStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useTerminalStore } from '../stores/terminalStore'
@@ -152,27 +152,29 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
 
   const pullBranch = async (branch: BranchItem) => {
     const name = localName(branch.name)
+    const isCurrent = !!git?.current && git.current === name
     setPulling(true)
     setBranchError(null)
-    echoTerm(`\r\n\x1b[36m$ git pull ${name}\x1b[0m\r\n`)
     try {
-      // Backend-driven pull: attempts the update even with local uncommitted
-      // changes (auto-stash) and reports conflicts structurally.
-      const res = await invoke<PullBranchResult>('git_pull_branch', {
-        path: selected.path,
-        branch: branch.name,
-      })
-      echoTerm(`\x1b[32m${res.message}\x1b[0m\r\n`)
-      if (res.status === 'conflicts' && res.merge) {
-        // Conflicts → resolve via the 3-way merge tool.
-        setMergeModal({ initial: res.merge })
+      // Run inside the real PTY so the shell streams git's own output and
+      // returns to a fresh prompt when done. Host-injected echoes left the
+      // text glued to the prompt line with no prompt ever coming back,
+      // making the terminal look stuck "printing logs".
+      if (isCurrent) {
+        // --autostash keeps dirty working trees from blocking the pull;
+        // conflicts are caught by the merge-status check below.
+        await runGitInTerm('git pull --autostash --prune')
+      } else {
+        // Fast-forward a non-checked-out branch without switching to it.
+        await runGitInTerm(
+          `git fetch origin ${JSON.stringify(`${name}:${name}`)}`,
+        )
       }
     } catch (e) {
-      // Surface the failure clearly — silent no-ops made users think the
-      // update succeeded when it never ran.
-      const msg = String(e)
-      setBranchError(msg)
-      echoTerm(`\x1b[31m${msg}\x1b[0m\r\n`)
+      // The command couldn't even be delivered to the shell — surface it.
+      // (git-side failures are already visible in the terminal output.)
+      setBranchError(String(e))
+      echoTerm(`\r\n\x1b[31m${String(e)}\x1b[0m\r\n`)
     }
     // Always refresh so project/branch badges reflect the real state.
     try {
