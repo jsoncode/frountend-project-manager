@@ -15,6 +15,9 @@ dist-ssr
 app-icon.png
 src-tauri/target
 
+# Offline NSIS toolchain (downloaded manually for scripts/setup-nsis.mjs)
+libs/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
