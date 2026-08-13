@@ -1,4 +1,6 @@
-import { ArrowRight, CheckCircle } from 'reicon-react'
+import { CheckCircleOutlined } from '@ant-design/icons'
+import { ArrowRight } from 'reicon-react'
+import { Button } from 'antd'
 import { invoke } from '@tauri-apps/api/core'
 import { useEffect, useState } from 'react'
 import { useI18n } from '../i18n/useI18n'
@@ -123,20 +125,19 @@ export function BranchSwitchModal({ branch, onClose }: Props) {
       closeOnEsc={false}
       className="branch-modal"
       footer={
-        <div className="modal-actions">
-          <button type="button" className="btn" onClick={onClose} disabled={switching}>
+        <>
+          <Button onClick={onClose} disabled={switching}>
             {t('branch.cancel')}
-          </button>
-          <button
-            type="button"
-            className="btn primary btn-with-icon"
+          </Button>
+          <Button
+            type="primary"
             disabled={switching || !selected}
             onClick={() => void doSwitch()}
+            icon={<CheckCircleOutlined />}
           >
-            <CheckCircle className="ui-icon" size={14} color="currentColor" aria-hidden />
             {switching ? t('branch.switching') : t('branch.confirm')}
-          </button>
-        </div>
+          </Button>
+        </>
       }
     >
       <p className="branch-switch-path">

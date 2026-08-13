@@ -31,6 +31,7 @@
     "allow-git-pull-all",
     "allow-git-push",
     "allow-git-commit",
+    "allow-git-log",
     "allow-git-merge-status",
     "allow-git-merge-start",
     "allow-git-merge-file-sides",

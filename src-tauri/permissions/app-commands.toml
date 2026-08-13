@@ -69,6 +69,11 @@ description = "Stage, commit and optionally push in one step"
 commands.allow = ["git_commit"]
 
 [[permission]]
+identifier = "allow-git-log"
+description = "Read structured git commit history for the log table"
+commands.allow = ["git_log"]
+
+[[permission]]
 identifier = "allow-git-merge-status"
 description = "Get in-progress merge status and conflict files"
 commands.allow = ["git_merge_status"]

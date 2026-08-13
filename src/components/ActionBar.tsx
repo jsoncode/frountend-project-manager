@@ -1,4 +1,5 @@
-import { X } from 'reicon-react'
+import { SearchOutlined } from '@ant-design/icons'
+import { Input, Segmented } from 'antd'
 import { useState, type ReactNode } from 'react'
 import { useI18n } from '../i18n/useI18n'
 import {
@@ -41,43 +42,31 @@ export function ActionBar() {
     <aside className="action-bar" aria-label={t('actionBar.title')}>
       <div className="action-bar-head">
         <h2 className="action-bar-title">{t('actionBar.title')}</h2>
-        <div className="action-bar-search">
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={t('actionBar.searchPlaceholder')}
-            aria-label={t('actionBar.searchPlaceholder')}
-          />
-          {query ? (
-            <button
-              type="button"
-              className="action-bar-search-clear"
-              aria-label={t('actionBar.clearSearch')}
-              onClick={() => setQuery('')}
-            >
-              <X className="ui-icon" size={12} color="currentColor" aria-hidden />
-            </button>
-          ) : null}
-        </div>
+        <Input
+          size="small"
+          allowClear
+          prefix={<SearchOutlined style={{ fontSize: 11, opacity: 0.7 }} />}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={t('actionBar.searchPlaceholder')}
+          aria-label={t('actionBar.searchPlaceholder')}
+          className="action-bar-search"
+        />
       </div>
 
-      <nav className="action-bar-tabs" aria-label={t('actionBar.tabs')}>
-        {TOOL_ORDER.map((id) => (
-          <button
-            key={id}
-            type="button"
-            className={`action-bar-tab${active === id ? ' active' : ''}`}
-            aria-selected={active === id}
-            onClick={() => {
-              setActiveTool(id)
-              persist()
-            }}
-          >
-            {t(TOOL_LABEL[id])}
-          </button>
-        ))}
-      </nav>
+      <Segmented
+        className="action-bar-tabs"
+        size="small"
+        value={active}
+        options={TOOL_ORDER.map((id) => ({
+          label: t(TOOL_LABEL[id]),
+          value: id,
+        }))}
+        onChange={(v) => {
+          setActiveTool(v as SideTool)
+          persist()
+        }}
+      />
 
       <div className="action-bar-body">{renderBody()}</div>
     </aside>

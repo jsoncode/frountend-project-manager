@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
+import { Button, Input } from 'antd'
 import { useState } from 'react'
 import { useI18n } from '../i18n/useI18n'
 import type { MergeStatus } from '../lib/types'
@@ -98,38 +99,30 @@ export function CommitModal({
       title={t('git.commitTitle')}
       onClose={onClose}
       footer={
-        <div className="modal-actions">
-          <button
-            type="button"
-            className="btn"
-            onClick={onClose}
-            disabled={busy}
-          >
+        <>
+          <Button onClick={onClose} disabled={busy}>
             {t('branch.cancel')}
-          </button>
+          </Button>
           {showPush && (
-            <button
-              type="button"
-              className="btn primary btn-with-icon"
+            <Button
+              type="primary"
               disabled={!commitMsg.trim() || busy}
               onClick={() => void doCommit(true)}
             >
               {busy && busyLabel === t('git.pushing')
                 ? busyLabel
                 : t('git.commitPush')}
-            </button>
+            </Button>
           )}
-          <button
-            type="button"
-            className="btn primary btn-with-icon"
+          <Button
             disabled={!commitMsg.trim() || busy}
             onClick={() => void doCommit(false)}
           >
             {busy && busyLabel === t('git.committing')
               ? busyLabel
               : t('git.ctx.commit').replace('…', '')}
-          </button>
-        </div>
+          </Button>
+        </>
       }
     >
       <p className="muted">
@@ -159,8 +152,7 @@ export function CommitModal({
           </div>
         </div>
       )}
-      <textarea
-        className="git-commit-input"
+      <Input.TextArea
         rows={4}
         value={commitMsg}
         onChange={(e) => {

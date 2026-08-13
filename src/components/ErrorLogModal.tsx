@@ -1,3 +1,4 @@
+import { Button } from 'antd'
 import { useState } from 'react'
 import { ModalShell } from './ModalShell'
 import { useI18n } from '../i18n/useI18n'
@@ -29,14 +30,14 @@ export function ErrorLogModal() {
       elevated
       className="error-log-modal"
       footer={
-        <div className="modal-actions">
-          <button type="button" className="btn" onClick={copyMessage}>
+        <>
+          <Button onClick={copyMessage}>
             {copied ? t('error.copied') : t('error.copy')}
-          </button>
-          <button type="button" className="btn primary" onClick={clear}>
+          </Button>
+          <Button type="primary" onClick={clear}>
             {t('settings.close')}
-          </button>
-        </div>
+          </Button>
+        </>
       }
     >
       <pre className="error-log-body">{message}</pre>

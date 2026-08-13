@@ -1,6 +1,7 @@
 import { createRoot } from 'react-dom/client'
 import App from './App'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { AntdProvider } from './theme/AntdProvider'
 
 /**
  * Main FPM window entry — never mounts AiApp.
@@ -16,6 +17,8 @@ if (!rootEl) {
 
 createRoot(rootEl).render(
   <ErrorBoundary>
-    <App />
+    <AntdProvider>
+      <App />
+    </AntdProvider>
   </ErrorBoundary>,
 )

@@ -1,0 +1,589 @@
+/*
+ * antd 6 融合层 —— 让 antd 控件融入 Frost Glass 视觉体系。
+ * 仅针对 antd 生成类（hashed:false，.ant-* 稳定）+ 少数过渡类名。
+ * 与 tokens.css / app.css 一起引入。
+ */
+
+/* ============ Modal（ModalShell） ============ */
+
+.modal-shell-root .ant-modal-mask {
+  background: rgba(3, 6, 12, 0.52);
+  backdrop-filter: blur(var(--blur));
+  -webkit-backdrop-filter: blur(var(--blur));
+}
+
+/* v6 默认 top:100 布局 → 改为 flex 垂直水平居中 */
+.modal-shell-root .ant-modal-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+/* 弹框本体：最大 85vh、弹性列布局（header/footer 固定，body 滚动） */
+.modal-shell-root .ant-modal {
+  top: 0;
+  margin: 0;
+  max-height: 85vh;
+  max-width: calc(100vw - 48px);
+  display: flex;
+  flex-direction: column;
+}
+
+/* v6 容器（.ant-modal-container 取代 v5 的 .ant-modal-content）：
+   玻璃质感 + 弹性列，子项 header/footer 收缩为 0，body 接管剩余空间 */
+.modal-shell-root .ant-modal-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-float), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(var(--blur-heavy));
+  -webkit-backdrop-filter: blur(var(--blur-heavy));
+}
+
+.modal-shell-root .ant-modal-header {
+  margin: 0;
+  /* 去上边距、加下边距：标题与弹框顶对齐，与正文留出呼吸空间 */
+  padding: 0 20px 16px;
+  border-bottom: none;
+  flex-shrink: 0;
+}
+
+.modal-shell-root .ant-modal-title {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* 自定义标题栏：标题与关闭按钮 flex 垂直居中对齐（不再用 antd 绝对定位的 close） */
+.modal-shell-root .modal-shell-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.modal-shell-root .modal-shell-title-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.modal-shell-root .modal-shell-close.ant-btn {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  color: var(--text);
+}
+
+.modal-shell-root .modal-shell-close.ant-btn:hover {
+  color: var(--cyan-soft);
+  background: var(--accent-soft);
+}
+
+.modal-shell-root .ant-modal-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 20px 20px;
+}
+
+.modal-shell-root .ant-modal-footer {
+  margin-top: 0;
+  padding: 4px 20px 16px;
+  flex-shrink: 0;
+}
+
+.error-log-modal .ant-modal-body {
+  max-height: 60vh;
+}
+
+/* 宽弹窗按各自内容需要扩宽（覆盖 ModalShell 的默认宽） */
+.file-diff-modal.ant-modal {
+  width: min(1400px, 96vw) !important;
+}
+
+.merge-diff-modal.ant-modal {
+  width: min(1200px, 96vw) !important;
+}
+
+.merge-editor-modal.ant-modal {
+  width: min(1600px, 98vw) !important;
+}
+
+/* 设置弹窗：固定 85vh 高度（wrap 提供垂直居中）+ 无内边距的 body
+   （内部 settings-layout 接管滚动） */
+.settings-modal-root.ant-modal {
+  height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-modal-root .ant-modal-container {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.settings-modal-root .ant-modal-body {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ============ 顶部栏 ============ */
+
+.topbar-icon-btn.ant-btn {
+  width: 28px;
+  height: 28px;
+}
+
+.topbar-end .ai-launch-btn.ant-btn {
+  height: 26px;
+  font-size: 12px;
+}
+
+/* ============ 搜索框（AutoComplete） ============ */
+
+.search-wrap .ant-select {
+  height: 26px !important;
+  background: rgba(255, 255, 255, 0.035) !important;
+  border-color: var(--border-dim) !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+  transition:
+    border-color 0.25s var(--ease),
+    box-shadow 0.25s var(--ease),
+    background 0.25s var(--ease);
+}
+
+.search-wrap .ant-select-input,
+.search-wrap .ant-select-placeholder {
+  font-size: 12px;
+}
+
+.search-wrap .ant-select-focused {
+  border-color: rgba(45, 212, 191, 0.45) !important;
+  background: rgba(45, 212, 191, 0.06) !important;
+  box-shadow:
+    0 0 0 3px rgba(45, 212, 191, 0.12),
+    0 0 20px rgba(45, 212, 191, 0.08) !important;
+}
+
+.search-suggest-popup.ant-select-dropdown {
+  background: rgba(12, 18, 30, 0.94);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-float);
+  backdrop-filter: blur(var(--blur));
+  -webkit-backdrop-filter: blur(var(--blur));
+}
+
+.search-suggest-popup .ant-select-item-option {
+  border-radius: 6px;
+}
+
+.search-suggest-popup .ant-select-item-option-disabled {
+  cursor: default;
+}
+
+.search-suggest-title {
+  padding: 6px 10px 2px;
+  font-size: 12px;
+  letter-spacing: 0.4px;
+}
+
+.search-suggest-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.search-suggest-pick {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-suggest-del.ant-btn {
+  width: 24px;
+  height: 24px;
+  opacity: 0.45;
+}
+
+.search-suggest-del.ant-btn:hover {
+  opacity: 1;
+  color: var(--danger);
+  background: transparent;
+}
+
+/* ============ 编辑器标签页（ProjectHeader → antd Tabs） ============ */
+
+.detail-header .editor-tabs.ant-tabs {
+  height: 32px;
+}
+
+.detail-header .editor-tabs .ant-tabs-nav {
+  margin: 0;
+}
+
+.detail-header .editor-tabs .ant-tabs-nav::before {
+  border-bottom: none;
+}
+
+.detail-header .editor-tabs .ant-tabs-tab {
+  height: 32px;
+  margin: 0 !important;
+  padding: 0 10px 0 14px !important;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+}
+
+.detail-header .editor-tabs .ant-tabs-tab.ant-tabs-tab-active {
+  background: rgba(255, 255, 255, 0.045) !important;
+}
+
+.detail-header .editor-tabs .ant-tabs-tab-btn {
+  font-size: 12px;
+}
+
+.detail-header .editor-tabs .ant-tabs-tab-remove {
+  margin-inline-start: 8px !important;
+  font-size: 11px;
+  opacity: 0;
+  transition: opacity 0.15s var(--ease);
+}
+
+.detail-header .editor-tabs .ant-tabs-tab:hover .ant-tabs-tab-remove {
+  opacity: 0.85;
+}
+
+.detail-header .editor-tabs .ant-tabs-tab-remove:hover {
+  opacity: 1;
+  color: var(--danger);
+}
+
+.detail-header .editor-tabs .ant-tabs-body {
+  display: none;
+}
+
+.detail-header .editor-tabs .editor-tab-label.is-dirty {
+  color: var(--text-bright);
+}
+
+/* ============ 下拉 / 选择浮层玻璃化 ============ */
+
+.ant-dropdown,
+.ant-select-dropdown {
+  backdrop-filter: blur(var(--blur));
+  -webkit-backdrop-filter: blur(var(--blur));
+}
+
+.ant-dropdown .ant-dropdown-menu {
+  background: transparent;
+  box-shadow: none;
+  padding: 4px;
+}
+
+.ant-dropdown .ant-dropdown-menu-item,
+.ant-dropdown .ant-dropdown-menu-submenu-title {
+  border-radius: 6px;
+}
+
+/* ============ 设置弹窗导航（antd Menu） ============ */
+
+.settings-nav .ant-menu {
+  background: transparent;
+  border-inline-end: none !important;
+  padding: 4px 6px;
+}
+
+.settings-nav .ant-menu .ant-menu-item {
+  height: 34px;
+  line-height: 34px;
+  margin-block: 2px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.settings-nav .ant-menu .ant-menu-item-selected {
+  background: var(--accent-soft);
+  color: var(--cyan-soft);
+}
+
+.settings-nav .ant-menu .ant-menu-item:not(.ant-menu-item-selected):hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* ============ 面板内 Segmented 工具条 ============ */
+
+.action-bar-tabs.ant-segmented {
+  display: flex;
+  width: 100%;
+  margin: 0;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border-dim);
+  border-radius: 0;
+  background: transparent;
+}
+
+.action-bar-tabs .ant-segmented-group {
+  width: 100%;
+}
+
+.action-bar-tabs .ant-segmented-item {
+  flex: 1;
+  text-align: center;
+}
+
+.pm-switch.ant-segmented {
+  width: 100%;
+  margin: 2px 0 10px;
+}
+
+/* ============ 输入控件在弹窗内的统一间距 ============ */
+
+.input-block.ant-input,
+.input-block.ant-input-affix-wrapper {
+  display: block;
+  width: 100%;
+  margin: 8px 0 0;
+}
+
+/* ============ 通用微调 ============ */
+
+/* antd <App> 在 #root 与应用根之间插了一层 div，必须透传全高布局。 */
+.ant-app {
+  height: 100%;
+}
+
+.ant-btn {
+  box-shadow: none;
+}
+
+.ant-tooltip .ant-tooltip-inner {
+  box-shadow: var(--shadow-float);
+}
+
+/* ============ Git 日志弹窗（GitLogModal） ============ */
+
+.git-log-modal.ant-modal {
+  width: min(1200px, 96vw) !important;
+}
+
+.git-log-hint {
+  margin: 2px 0 10px;
+  font-size: 12px;
+}
+
+.git-log-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 48px 0;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+/* 表格玻璃化：透明底、细边框、紧凑行高 */
+.git-log-modal .git-log-table .ant-table {
+  background: transparent;
+  font-size: 12px;
+}
+
+.git-log-modal .git-log-table .ant-table-container {
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.git-log-modal .git-log-table .ant-table-thead > tr > th {
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text-dim);
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--border-dim);
+  padding: 7px 12px;
+  user-select: none;
+}
+
+.git-log-modal .git-log-table .ant-table-tbody > tr > td {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 6px 12px;
+  color: var(--text);
+}
+
+.git-log-modal .git-log-table .ant-table-tbody > tr:hover > td {
+  background: rgba(45, 212, 191, 0.05);
+}
+
+.git-log-modal .git-log-table .ant-table-tbody > tr > td.ant-table-cell-row-expand {
+  cursor: pointer;
+  color: var(--text-dim);
+}
+
+.git-log-modal .git-log-table .ant-table-expanded-row > td {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.git-log-modal .git-log-table .ant-pagination {
+  margin: 10px 0 0;
+}
+
+.git-log-modal .git-log-table .ant-pagination-item,
+.git-log-modal .git-log-table .ant-pagination-prev,
+.git-log-modal .git-log-table .ant-pagination-next,
+.git-log-modal .git-log-table .ant-pagination-options .ant-select-selector {
+  background: transparent;
+  border-color: var(--border-dim);
+  color: var(--text-dim);
+}
+
+.git-log-modal .git-log-table .ant-pagination-item-active {
+  border-color: var(--cyan);
+}
+
+.git-log-modal .git-log-table .ant-pagination-item-active a {
+  color: var(--cyan-soft);
+}
+
+/* 哈希列：等宽字体 + 悬停复制 */
+.git-log-hash {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 5px;
+  border: none;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--cyan-soft);
+  font-family: var(--mono);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s var(--ease);
+}
+
+.git-log-hash:hover {
+  background: var(--accent-soft);
+}
+
+.git-log-copy-icon {
+  font-size: 11px;
+  opacity: 0.45;
+  transition: opacity 0.15s var(--ease);
+}
+
+.git-log-hash:hover .git-log-copy-icon,
+.git-log-copy-btn:hover .git-log-copy-icon {
+  opacity: 1;
+}
+
+.git-log-copy-ok {
+  font-size: 11px;
+  color: var(--ok);
+}
+
+/* 引用徽章（分支 / 标签） */
+.git-log-refs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.git-log-ref-chip {
+  padding: 0 6px;
+  font-size: 10px;
+  line-height: 17px;
+  border-radius: 4px;
+  border: 1px solid rgba(45, 212, 191, 0.3);
+  background: rgba(45, 212, 191, 0.08);
+  color: var(--cyan-soft);
+  white-space: nowrap;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.git-log-subject {
+  color: var(--text-bright);
+}
+
+.git-log-author,
+.git-log-date {
+  color: var(--text);
+}
+
+/* 展开的提交详情 */
+.git-log-detail {
+  padding: 4px 8px 4px 44px;
+}
+
+.git-log-detail-grid {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 6px 12px;
+  max-width: 900px;
+}
+
+.git-log-detail-row {
+  display: contents;
+}
+
+.git-log-detail-label {
+  color: var(--text-dim);
+  font-size: 11px;
+  padding-top: 2px;
+  text-align: right;
+}
+
+.git-log-detail-value {
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.6;
+  min-width: 0;
+  word-break: break-all;
+  white-space: pre-wrap;
+}
+
+.git-log-detail-value.mono {
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.git-log-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-left: 6px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  vertical-align: -4px;
+}
+
+.git-log-copy-btn:hover {
+  background: var(--accent-soft);
+  color: var(--cyan-soft);
+}
+
+.mono {
+  font-family: var(--mono);
+}

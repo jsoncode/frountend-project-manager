@@ -619,6 +619,97 @@ pub fn git_status(path: &str) -> Result<GitStatus, String> {
     })
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitLogEntry {
+    /// Full 40-char commit hash.
+    pub hash: String,
+    /// Abbreviated commit hash (git's default 7+ chars).
+    pub short_hash: String,
+    pub author_name: String,
+    pub author_email: String,
+    /// Author date, strict ISO 8601 (e.g. 2024-01-01T10:00:00+08:00).
+    pub author_date: String,
+    /// Committer date, strict ISO 8601.
+    pub committer_date: String,
+    /// First line of the commit message.
+    pub subject: String,
+    /// Rest of the commit message (empty when single-line).
+    pub body: String,
+    /// Ref decorations, e.g. "HEAD -> main, origin/main, tag: v1.0".
+    pub refs: String,
+    /// Parent hashes, space-separated (empty for the root commit).
+    pub parents: String,
+}
+
+/// Default number of commits shown in the log table.
+const DEFAULT_LOG_LIMIT: usize = 200;
+
+/// Structured `git log` for the log-viewer table. Returns rich per-commit
+/// fields (full + short hash, author, dates, subject, body, refs, parents)
+/// instead of the terminal's one-line rendering, so the UI can keep and
+/// display as much history information as possible.
+///
+/// `branch` falls back to HEAD; `limit` caps the entries (default 200).
+pub fn git_log(
+    path: &str,
+    branch: Option<&str>,
+    limit: Option<usize>,
+) -> Result<Vec<GitLogEntry>, String> {
+    require_git_repo(path)?;
+
+    let limit = limit.unwrap_or(DEFAULT_LOG_LIMIT).clamp(1, 1000);
+    let branch = branch.map(str::trim).filter(|b| !b.is_empty()).unwrap_or("HEAD");
+
+    // Records are delimited with the ASCII unit separator (0x1F) and records
+    // with the record separator (0x1E), so multi-line bodies survive intact.
+    let format = concat!(
+        "%x1e", "%H", "%x1f", "%h", "%x1f", "%an", "%x1f", "%ae", "%x1f", "%aI", "%x1f",
+        "%cI", "%x1f", "%s", "%x1f", "%b", "%x1f", "%D", "%x1f", "%P",
+    );
+
+    let pretty = format!("--pretty=format:{format}");
+    let output = git_command(path)
+        .args(["log", "-n", &limit.to_string(), &pretty, branch])
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    if !output.status.success() {
+        let err = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(if err.is_empty() {
+            format!("git log 失败: {branch}")
+        } else {
+            err
+        });
+    }
+
+    let mut entries = Vec::new();
+    for record in String::from_utf8_lossy(&output.stdout).split('\u{1e}') {
+        let record = record.trim();
+        if record.is_empty() {
+            continue;
+        }
+        let fields: Vec<&str> = record.split('\u{1f}').collect();
+        if fields.len() < 10 {
+            continue;
+        }
+        entries.push(GitLogEntry {
+            hash: fields[0].to_string(),
+            short_hash: fields[1].to_string(),
+            author_name: fields[2].to_string(),
+            author_email: fields[3].to_string(),
+            author_date: fields[4].to_string(),
+            committer_date: fields[5].to_string(),
+            subject: fields[6].to_string(),
+            body: fields[7].to_string(),
+            refs: fields[8].to_string(),
+            parents: fields[9].to_string(),
+        });
+    }
+
+    Ok(entries)
+}
+
 pub fn git_checkout(path: &str, branch: &str) -> Result<String, String> {
     let git_dir = std::path::Path::new(path).join(".git");
     if !git_dir.exists() {

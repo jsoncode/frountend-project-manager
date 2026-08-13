@@ -1,14 +1,14 @@
 import {
-  Add,
-  CodeScan,
-  Document,
-  FolderOpen,
-  Loader,
-  Refresh,
-  Trash,
-  Upload,
-  X,
-} from 'reicon-react'
+  CloseOutlined,
+  DeleteOutlined,
+  FolderOpenOutlined,
+  PlusOutlined,
+  ReloadOutlined,
+  SaveOutlined,
+  ScanOutlined,
+  UploadOutlined,
+} from '@ant-design/icons'
+import { Button, Input, Switch } from 'antd'
 import { invoke } from '@tauri-apps/api/core'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useI18n } from '../i18n/useI18n'
@@ -301,78 +301,73 @@ export function IdeSettingsModal({ inline, onClosePanel }: IdeSettingsModalProps
                 <div className="ide-icon-edit">
                   <IdeIcon iconPath={ide.iconPath} name={ide.name} size={36} />
                   <div className="ide-icon-actions">
-                    <button
-                      type="button"
-                      className="btn btn-sm btn-with-icon"
+                    <Button
+                      size="small"
+                      icon={<FolderOpenOutlined style={{ fontSize: 12 }} />}
                       onClick={() => void browseIcon(ide.id, ide)}
                     >
-                      <FolderOpen className="ui-icon" size={12} color="currentColor" aria-hidden />
                       {t('open.inFileManager')}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-sm btn-with-icon"
+                    </Button>
+                    <Button
+                      size="small"
+                      icon={<UploadOutlined style={{ fontSize: 12 }} />}
                       onClick={() => {
                         setUploadTarget(ide.id)
                         fileRef.current?.click()
                       }}
                     >
-                      <Upload className="ui-icon" size={12} color="currentColor" aria-hidden />
                       {t('ide.iconUpload')}
-                    </button>
+                    </Button>
                   {ide.iconPath && (
-                    <button
-                      type="button"
-                      className="btn btn-sm btn-with-icon"
+                    <Button
+                      size="small"
+                      icon={<CloseOutlined style={{ fontSize: 12 }} />}
                       onClick={() => update(ide.id, { iconPath: null })}
                     >
-                      <X className="ui-icon" size={12} color="currentColor" aria-hidden />
                       {t('ide.iconClear')}
-                    </button>
+                    </Button>
                   )}
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-with-icon"
+                  <Button
+                    size="small"
                     title={t('ide.iconFromExeHint')}
                     disabled={!ide.executable.trim()}
+                    icon={<ScanOutlined style={{ fontSize: 12 }} />}
                     onClick={() => void extractIconForIde(ide.id, ide.executable)}
                   >
-                    <CodeScan className="ui-icon" size={12} color="currentColor" aria-hidden />
                     {t('ide.iconFromExe')}
-                  </button>
+                  </Button>
                 </div>
                 </div>
                 <label className="ide-field" style={{ flex: 1 }}>
                   <span className="muted">{t('ide.name')}</span>
-                  <input
+                  <Input
                     value={ide.name}
                     onChange={(e) => update(ide.id, { name: e.target.value })}
                   />
                 </label>
                 <div className="ide-card-actions">
                   <label className="ide-enable">
-                    <input
-                      type="checkbox"
+                    <Switch
                       checked={ide.enabled}
-                      onChange={(e) =>
-                        update(ide.id, { enabled: e.target.checked })
-                      }
+                      onChange={(checked) => update(ide.id, { enabled: checked })}
                     />
-                    {t('ide.on')}
+                    <span onClick={() => update(ide.id, { enabled: !ide.enabled })}>
+                      {t('ide.on')}
+                    </span>
                   </label>
-                  <button
-                    type="button"
-                    className="btn btn-sm danger btn-with-icon"
+                  <Button
+                    size="small"
+                    danger
+                    icon={<DeleteOutlined style={{ fontSize: 12 }} />}
                     onClick={() => setPendingDelete(ide)}
                   >
-                    <Trash className="ui-icon" size={12} color="currentColor" aria-hidden />
                     {t('ide.del')}
-                  </button>
+                  </Button>
                 </div>
               </div>
               <label className="ide-field">
                 <span className="muted">{t('ide.iconPath')}</span>
-                <input
+                <Input
                   value={ide.iconPath ?? ''}
                   placeholder={t('ide.iconPathHint')}
                   onChange={(e) =>
@@ -395,26 +390,24 @@ export function IdeSettingsModal({ inline, onClosePanel }: IdeSettingsModalProps
               <label className="ide-field">
                 <span className="muted">{t('ide.executable')}</span>
                 <div className="ide-exe-row">
-                  <input
+                  <Input
                     value={ide.executable}
                     onChange={(e) =>
                       update(ide.id, { executable: e.target.value })
                     }
                   />
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-with-icon"
+                  <Button
+                    size="small"
                     title={t('open.inFileManager')}
                     aria-label={t('open.inFileManager')}
+                    icon={<FolderOpenOutlined style={{ fontSize: 14 }} />}
                     onClick={() => void browseExe(ide.id, ide.executable)}
-                  >
-                    <FolderOpen className="ui-icon" size={14} color="currentColor" aria-hidden />
-                  </button>
+                  />
                 </div>
               </label>
               <label className="ide-field">
                 <span className="muted">{t('ide.args')}</span>
-                <input
+                <Input
                   value={ide.argsTemplate}
                   onChange={(e) =>
                     update(ide.id, { argsTemplate: e.target.value })
@@ -430,60 +423,44 @@ export function IdeSettingsModal({ inline, onClosePanel }: IdeSettingsModalProps
   /** Add + Scan buttons used in both inline toolbar and modal actions */
   const addScanButtons = (
     <>
-      <button
-        type="button"
-        className="btn btn-sm btn-with-icon"
+      <Button
+        size="small"
         disabled={scanning}
+        icon={<PlusOutlined style={{ fontSize: 14 }} />}
         onClick={() => {
           setPickerQuery('')
           setPickerOpen(true)
         }}
       >
-        <Add className="ui-icon" size={14} color="currentColor" aria-hidden />
         {t('ide.add')}
-      </button>
-      <button
-        type="button"
-        className="btn btn-sm btn-with-icon"
+      </Button>
+      <Button
+        size="small"
         disabled={scanning}
+        loading={scanning}
+        icon={<ReloadOutlined style={{ fontSize: 14 }} />}
         onClick={() => void scanAndAddInstalled()}
       >
-        {scanning ? (
-          <Loader
-            className="ui-icon is-spinning"
-            size={14}
-            color="currentColor"
-            aria-hidden
-          />
-        ) : (
-          <Refresh
-            className="ui-icon"
-            size={14}
-            color="currentColor"
-            aria-hidden
-          />
-        )}
         {scanning ? t('ide.scanning') : t('ide.redetect')}
-      </button>
+      </Button>
     </>
   )
 
   const modalActions = (
-    <div className="modal-actions">
+    <>
       {addScanButtons}
-      <button type="button" className="btn" onClick={close} disabled={scanning}>
+      <Button onClick={close} disabled={scanning}>
         {t('ide.cancel')}
-      </button>
-      <button
-        type="button"
-        className="btn primary btn-with-icon"
+      </Button>
+      <Button
+        type="primary"
+        icon={<SaveOutlined style={{ fontSize: 14 }} />}
         disabled={scanning}
         onClick={() => void save()}
       >
-        <Document className="ui-icon" size={14} color="currentColor" aria-hidden />
         {t('ide.save')}
-      </button>
-    </div>
+      </Button>
+    </>
   )
 
   if (inline) {
@@ -493,16 +470,16 @@ export function IdeSettingsModal({ inline, onClosePanel }: IdeSettingsModalProps
           {content}
           <div className="ide-inline-toolbar">
             {addScanButtons}
-            <button
-              type="button"
-              className="btn btn-sm primary btn-with-icon"
+            <Button
+              size="small"
+              type="primary"
+              icon={<SaveOutlined style={{ fontSize: 14 }} />}
               style={{ marginLeft: 'auto' }}
               disabled={scanning || !draft}
               onClick={() => void save()}
             >
-              <Document className="ui-icon" size={14} color="currentColor" aria-hidden />
               {t('ide.save')}
-            </button>
+            </Button>
           </div>
         </div>
         {pickerOpen && (
@@ -525,22 +502,14 @@ export function IdeSettingsModal({ inline, onClosePanel }: IdeSettingsModalProps
             onClose={() => setPendingDelete(null)}
             closeOnEsc={false}
             footer={
-              <div className="modal-actions">
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => setPendingDelete(null)}
-                >
+              <>
+                <Button onClick={() => setPendingDelete(null)}>
                   {t('ide.cancel')}
-                </button>
-                <button
-                  type="button"
-                  className="btn danger"
-                  onClick={confirmDelete}
-                >
+                </Button>
+                <Button danger onClick={confirmDelete}>
                   {t('ide.del')}
-                </button>
-              </div>
+                </Button>
+              </>
             }
           >
             <p className="muted">
@@ -581,22 +550,14 @@ export function IdeSettingsModal({ inline, onClosePanel }: IdeSettingsModalProps
           onClose={() => setPendingDelete(null)}
           closeOnEsc={false}
           footer={
-            <div className="modal-actions">
-              <button
-                type="button"
-                className="btn"
-                onClick={() => setPendingDelete(null)}
-              >
+            <>
+              <Button onClick={() => setPendingDelete(null)}>
                 {t('ide.cancel')}
-              </button>
-              <button
-                type="button"
-                className="btn danger"
-                onClick={confirmDelete}
-              >
+              </Button>
+              <Button danger onClick={confirmDelete}>
                 {t('ide.del')}
-              </button>
-            </div>
+              </Button>
+            </>
           }
         >
           <p className="muted">
@@ -668,30 +629,27 @@ function IdePickerModal({
       onClose={onClose}
       className="ide-picker-modal"
       footer={
-        <div className="modal-actions ide-picker-actions">
-          <button type="button" className="btn btn-with-icon" onClick={onManual}>
-            <FolderOpen className="ui-icon" size={14} color="currentColor" aria-hidden />
+        <>
+          <Button icon={<FolderOpenOutlined style={{ fontSize: 14 }} />} onClick={onManual}>
             {t('ide.pickManual')}
-          </button>
-          <button type="button" className="btn btn-with-icon" onClick={onBlank}>
-            <Add className="ui-icon" size={14} color="currentColor" aria-hidden />
+          </Button>
+          <Button icon={<PlusOutlined style={{ fontSize: 14 }} />} onClick={onBlank}>
             {t('ide.pickBlank')}
-          </button>
-          <div className="ide-picker-actions-spacer" />
-          <button type="button" className="btn" onClick={onClose} disabled={resolving}>
+          </Button>
+          <Button style={{ marginLeft: 'auto' }} onClick={onClose} disabled={resolving}>
             {t('ide.cancel')}
-          </button>
-          <button
-            type="button"
-            className="btn primary btn-with-icon"
+          </Button>
+          <Button
+            type="primary"
+            icon={<SaveOutlined style={{ fontSize: 14 }} />}
             disabled={!canSavePath}
+            loading={resolving}
             onClick={handleSavePath}
             title={t('ide.pickPathHint')}
           >
-            <Document className="ui-icon" size={14} color="currentColor" aria-hidden />
             {resolving ? t('ide.scanning') : t('ide.pickSave')}
-          </button>
-        </div>
+          </Button>
+        </>
       }
     >
       <p className="muted">{t('ide.pickHint')}</p>
@@ -701,12 +659,12 @@ function IdePickerModal({
       <p className="muted" style={{ fontSize: 12, marginTop: -4 }}>
         {t('ide.pickPathHint')}
       </p>
-      <input
-        className="ide-pick-search"
+      <Input
         value={query}
         onChange={(e) => onQuery(e.target.value)}
         placeholder={t('ide.pickSearch')}
         autoFocus
+        style={{ marginTop: 10 }}
       />
       <div className="ide-pick-list">
         {loading && <div className="muted">{t('projects.scanning')}</div>}

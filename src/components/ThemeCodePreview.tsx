@@ -1,3 +1,4 @@
+import { Segmented } from 'antd'
 import { useEffect, useRef, useState } from 'react'
 import * as monaco from 'monaco-editor'
 import { setupMonacoEnvironment } from '../lib/monacoEnv'
@@ -149,16 +150,15 @@ export function ThemeCodePreview() {
   return (
     <div className="theme-code-preview">
       <div className="theme-code-preview-tabs">
-        {(Object.keys(SAMPLE_CODE) as Lang[]).map((lang) => (
-          <button
-            key={lang}
-            type="button"
-            className={`theme-code-preview-tab${activeLang === lang ? ' active' : ''}`}
-            onClick={() => setActiveLang(lang)}
-          >
-            {TAB_LABELS[lang]}
-          </button>
-        ))}
+        <Segmented
+          size="small"
+          value={activeLang}
+          onChange={(v) => setActiveLang(v as Lang)}
+          options={(Object.keys(SAMPLE_CODE) as Lang[]).map((lang) => ({
+            label: TAB_LABELS[lang],
+            value: lang,
+          }))}
+        />
         <span className="theme-code-preview-label muted">
           {t('settings.themePreviewLabel')}
         </span>

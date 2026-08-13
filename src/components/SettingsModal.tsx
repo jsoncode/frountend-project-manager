@@ -1,16 +1,17 @@
 import {
-  ChatRoundDots,
-  Database,
-  Language,
-  Monitor,
-  Search,
-  TerminalSquare,
-  Trash,
-  X,
-} from 'reicon-react'
-import { useMemo, useState } from 'react'
+  ConsoleSqlOutlined,
+  DatabaseOutlined,
+  DeleteOutlined,
+  LaptopOutlined,
+  RobotOutlined,
+  SearchOutlined,
+  SettingOutlined,
+} from '@ant-design/icons'
+import { Button, Input, Menu, Segmented } from 'antd'
+import { useMemo, useState, type ComponentType, type CSSProperties } from 'react'
 import * as monaco from 'monaco-editor'
 import { useI18n } from '../i18n/useI18n'
+import type { Locale } from '../i18n/messages'
 import { EDITOR_THEMS, applyEditorTheme, registerEditorThemes } from '../lib/monacoThemes'
 import { useSettingsStore } from '../stores/settingsStore'
 import { AiSettingsModal } from './AiSettingsModal'
@@ -34,12 +35,12 @@ function getThemePreviewColor(themeId: string): string {
   }
 }
 
-const CATEGORY_ICONS: Record<SettingsCategory, typeof Language> = {
-  general: Language,
-  ide: Monitor,
-  ai: ChatRoundDots,
-  jencli: TerminalSquare,
-  cache: Database,
+const CATEGORY_ICONS: Record<SettingsCategory, ComponentType<{ style?: CSSProperties }>> = {
+  general: SettingOutlined,
+  ide: LaptopOutlined,
+  ai: RobotOutlined,
+  jencli: ConsoleSqlOutlined,
+  cache: DatabaseOutlined,
 }
 
 /** Keywords per category for search filtering */
@@ -120,22 +121,14 @@ export function SettingsModal() {
                   <p className="muted">{t('settings.languageHint')}</p>
                 </div>
                 <div className="settings-row-control">
-                  <div className="lang-switch">
-                    <button
-                      type="button"
-                      className={`btn btn-sm ${locale === 'zh' ? 'primary' : ''}`}
-                      onClick={() => void setLocale('zh')}
-                    >
-                      {t('settings.zh')}
-                    </button>
-                    <button
-                      type="button"
-                      className={`btn btn-sm ${locale === 'en' ? 'primary' : ''}`}
-                      onClick={() => void setLocale('en')}
-                    >
-                      {t('settings.en')}
-                    </button>
-                  </div>
+                  <Segmented
+                    value={locale}
+                    onChange={(v) => void setLocale(v as Locale)}
+                    options={[
+                      { label: t('settings.zh'), value: 'zh' },
+                      { label: t('settings.en'), value: 'en' },
+                    ]}
+                  />
                 </div>
               </div>
             </div>
@@ -193,15 +186,16 @@ export function SettingsModal() {
                   <div className="cache-item-title">{t('settings.clearProjectCache')}</div>
                   <div className="muted">{t('settings.clearProjectCacheHint')}</div>
                 </div>
-                <button
-                  type="button"
-                  className="btn btn-sm danger btn-with-icon"
+                <Button
+                  size="small"
+                  danger
+                  icon={<DeleteOutlined style={{ fontSize: 14 }} />}
+                  loading={clearing === 'project'}
                   disabled={clearing !== null}
                   onClick={() => void handleClear('project')}
                 >
-                  <Trash className="ui-icon" size={14} color="currentColor" aria-hidden />
                   {clearing === 'project' ? t('settings.clearing') : t('settings.clear')}
-                </button>
+                </Button>
               </div>
 
               <div className="cache-item">
@@ -209,15 +203,16 @@ export function SettingsModal() {
                   <div className="cache-item-title">{t('settings.clearAiConversations')}</div>
                   <div className="muted">{t('settings.clearAiConversationsHint')}</div>
                 </div>
-                <button
-                  type="button"
-                  className="btn btn-sm danger btn-with-icon"
+                <Button
+                  size="small"
+                  danger
+                  icon={<DeleteOutlined style={{ fontSize: 14 }} />}
+                  loading={clearing === 'ai'}
                   disabled={clearing !== null}
                   onClick={() => void handleClear('ai')}
                 >
-                  <Trash className="ui-icon" size={14} color="currentColor" aria-hidden />
                   {clearing === 'ai' ? t('settings.clearing') : t('settings.clear')}
-                </button>
+                </Button>
               </div>
             </div>
           </>
@@ -232,23 +227,14 @@ export function SettingsModal() {
         <div className="settings-sidebar">
           {/* Search box */}
           <div className="settings-search-box">
-            <Search className="ui-icon" size={14} color="currentColor" aria-hidden />
-            <input
-              type="text"
+            <Input
+              variant="borderless"
+              allowClear
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t('settings.searchPlaceholder')}
+              prefix={<SearchOutlined style={{ fontSize: 13 }} />}
             />
-            {searchQuery && (
-              <button
-                type="button"
-                className="settings-search-clear"
-                onClick={() => setSearchQuery('')}
-                aria-label="clear"
-              >
-                <X className="ui-icon" size={12} color="currentColor" aria-hidden />
-              </button>
-            )}
           </div>
 
           {/* Category header */}
@@ -256,20 +242,20 @@ export function SettingsModal() {
 
           {/* Category nav */}
           <nav className="settings-nav">
-            {filteredCategories.map((cat) => {
-              const Icon = CATEGORY_ICONS[cat.id]
-              return (
-                <button
-                  key={cat.id}
-                  type="button"
-                  className={`settings-nav-item${effectiveCategory === cat.id ? ' active' : ''}`}
-                  onClick={() => setActiveCategory(cat.id)}
-                >
-                  <Icon className="ui-icon" size={15} color="currentColor" aria-hidden />
-                  <span>{cat.label}</span>
-                </button>
-              )
-            })}
+            <Menu
+              mode="vertical"
+              selectedKeys={[effectiveCategory]}
+              onClick={({ key }) => setActiveCategory(key as SettingsCategory)}
+              style={{ width: '100%', borderInlineEnd: 'none' }}
+              items={filteredCategories.map((cat) => {
+                const Icon = CATEGORY_ICONS[cat.id]
+                return {
+                  key: cat.id,
+                  icon: <Icon style={{ fontSize: 15 }} />,
+                  label: cat.label,
+                }
+              })}
+            />
             {filteredCategories.length === 0 && (
               <div className="settings-nav-empty">{t('settings.noMatch')}</div>
             )}

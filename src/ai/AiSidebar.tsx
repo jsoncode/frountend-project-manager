@@ -1,4 +1,5 @@
-import { ChatPlus, X } from 'reicon-react'
+import { DeleteOutlined, PlusOutlined } from '@ant-design/icons'
+import { Button } from 'antd'
 import { invoke } from '@tauri-apps/api/core'
 import { useMemo, useState } from 'react'
 import { ModalShell } from '../components/ModalShell'
@@ -67,19 +68,19 @@ export function AiSidebar() {
                 >
                   <span className="ai-sidebar-item-title">{c.title}</span>
                 </button>
-                <button
-                  type="button"
+                <Button
+                  type="text"
+                  size="small"
                   className="ai-sidebar-item-delete"
                   title={t('ai.delete')}
                   aria-label={t('ai.delete')}
                   disabled={generating}
+                  icon={<DeleteOutlined />}
                   onClick={(e) => {
                     e.stopPropagation()
                     void requestDelete(c)
                   }}
-                >
-                  <X className="ui-icon" size={14} color="currentColor" aria-hidden />
-                </button>
+                />
               </li>
             )
           })}
@@ -92,16 +93,15 @@ export function AiSidebar() {
     <aside className="ai-sidebar">
       <div className="ai-sidebar-header">
         <span className="ai-sidebar-title">{t('ai.title')}</span>
-        <button
-          type="button"
-          className="ai-btn ai-btn-sm ai-sidebar-new"
+        <Button
+          type="text"
+          className="ai-sidebar-new"
           disabled={generating}
           title={t('ai.newChat')}
           aria-label={t('ai.newChat')}
+          icon={<PlusOutlined style={{ fontSize: 18 }} />}
           onClick={() => void createConversation()}
-        >
-          <ChatPlus className="ui-icon" size={20} color="currentColor" aria-hidden />
-        </button>
+        />
       </div>
       <div className="ai-sidebar-groups">
         {conversations.length === 0 ? (
@@ -119,31 +119,28 @@ export function AiSidebar() {
           title={t('ai.deleteTitle')}
           onClose={() => setPendingDelete(null)}
           closeOnEsc={false}
+          footer={
+            <>
+              <Button onClick={() => setPendingDelete(null)}>
+                {t('branch.cancel')}
+              </Button>
+              <Button
+                danger
+                icon={<DeleteOutlined />}
+                onClick={() => {
+                  const id = pendingDelete.id
+                  setPendingDelete(null)
+                  void deleteConversation(id)
+                }}
+              >
+                {t('ai.delete')}
+              </Button>
+            </>
+          }
         >
           <p className="muted">
             {t('ai.deleteConfirm', { title: pendingDelete.title })}
           </p>
-          <div className="modal-actions">
-            <button
-              type="button"
-              className="btn"
-              onClick={() => setPendingDelete(null)}
-            >
-              {t('branch.cancel')}
-            </button>
-            <button
-              type="button"
-              className="btn danger btn-with-icon"
-              onClick={() => {
-                const id = pendingDelete.id
-                setPendingDelete(null)
-                void deleteConversation(id)
-              }}
-            >
-              <X className="ui-icon" size={14} color="currentColor" aria-hidden />
-              {t('ai.delete')}
-            </button>
-          </div>
         </ModalShell>
       ) : null}
     </aside>

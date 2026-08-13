@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import AiApp from './ai/AiApp'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { AntdProvider } from './theme/AntdProvider'
 
 /**
  * Dedicated AI window entry — always mounts AiApp.
@@ -15,7 +16,9 @@ if (!rootEl) {
 createRoot(rootEl).render(
   <StrictMode>
     <ErrorBoundary>
-      <AiApp />
+      <AntdProvider>
+        <AiApp />
+      </AntdProvider>
     </ErrorBoundary>
   </StrictMode>,
 )

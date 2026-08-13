@@ -1,13 +1,14 @@
 import {
-  Check,
-  ChevronDown,
-  ChevronRight,
-  Copy,
-  Pen,
-  Send,
-  Trash,
-  X,
-} from 'reicon-react'
+  CaretDownOutlined,
+  CaretRightOutlined,
+  CheckOutlined,
+  CloseOutlined,
+  CopyOutlined,
+  DeleteOutlined,
+  EditOutlined,
+  SendOutlined,
+} from '@ant-design/icons'
+import { Button, Input, Spin } from 'antd'
 import { useEffect, useRef, useState } from 'react'
 import { useI18n } from '../i18n/useI18n'
 import type { MessageKey } from '../i18n/messages'
@@ -110,9 +111,17 @@ export function AiMessageList() {
             >
               {hasReasoning ? (
                 <div className="ai-message-reasoning">
-                  <button
-                    type="button"
-                    className="ai-reasoning-toggle btn-with-icon"
+                  <Button
+                    type="text"
+                    size="small"
+                    className="ai-reasoning-toggle"
+                    icon={
+                      reasoningOpen ? (
+                        <CaretDownOutlined style={{ fontSize: 12 }} />
+                      ) : (
+                        <CaretRightOutlined style={{ fontSize: 12 }} />
+                      )
+                    }
                     onClick={() =>
                       setOpenReasoning((prev) => ({
                         ...prev,
@@ -120,23 +129,8 @@ export function AiMessageList() {
                       }))
                     }
                   >
-                    {reasoningOpen ? (
-                      <ChevronDown
-                        className="ui-icon"
-                        size={12}
-                        color="currentColor"
-                        aria-hidden
-                      />
-                    ) : (
-                      <ChevronRight
-                        className="ui-icon"
-                        size={12}
-                        color="currentColor"
-                        aria-hidden
-                      />
-                    )}
                     {t('ai.reasoning')}
-                  </button>
+                  </Button>
                   {reasoningOpen ? (
                     <pre className="ai-reasoning-body">{m.reasoning}</pre>
                   ) : null}
@@ -144,11 +138,11 @@ export function AiMessageList() {
               ) : null}
 
               {editing ? (
-                <textarea
+                <Input.TextArea
                   className="ai-message-edit"
-                  value={editDraft}
-                  rows={Math.min(12, Math.max(3, editDraft.split('\n').length))}
                   autoFocus
+                  autoSize={{ minRows: 3, maxRows: 12 }}
+                  value={editDraft}
                   onChange={(e) => setEditDraft(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Escape') {
@@ -166,6 +160,7 @@ export function AiMessageList() {
                   {m.content ||
                     (isStreaming ? (
                       <span className="ai-message-typing">
+                        <Spin size="small" style={{ marginRight: 6 }} />
                         {t('ai.generating')}
                       </span>
                     ) : (
@@ -205,95 +200,57 @@ export function AiMessageList() {
               <div className="ai-message-actions">
                 {editing ? (
                   <>
-                    <button
-                      type="button"
-                      className="ai-message-action"
+                    <Button
+                      type="text"
+                      size="small"
                       title={t('ai.cancelEdit')}
                       aria-label={t('ai.cancelEdit')}
+                      icon={<CloseOutlined />}
                       onClick={cancelEdit}
-                    >
-                      <X
-                        className="ui-icon"
-                        size={14}
-                        color="currentColor"
-                        aria-hidden
-                      />
-                    </button>
-                    <button
-                      type="button"
-                      className="ai-message-action"
+                    />
+                    <Button
+                      type="text"
+                      size="small"
                       title={t('ai.saveEdit')}
                       aria-label={t('ai.saveEdit')}
+                      icon={<SendOutlined />}
                       onClick={() => void saveEdit()}
-                    >
-                      <Send
-                        className="ui-icon"
-                        size={14}
-                        color="currentColor"
-                        aria-hidden
-                      />
-                    </button>
+                    />
                   </>
                 ) : (
                   <>
-                    <button
-                      type="button"
-                      className="ai-message-action"
+                    <Button
+                      type="text"
+                      size="small"
                       title={
                         copiedId === m.id ? t('ai.copied') : t('ai.copy')
                       }
                       aria-label={t('ai.copy')}
                       disabled={!m.content.trim()}
+                      icon={copiedId === m.id ? <CheckOutlined /> : <CopyOutlined />}
                       onClick={() => void copyMessage(m)}
-                    >
-                      {copiedId === m.id ? (
-                        <Check
-                          className="ui-icon"
-                          size={14}
-                          color="currentColor"
-                          aria-hidden
-                        />
-                      ) : (
-                        <Copy
-                          className="ui-icon"
-                          size={14}
-                          color="currentColor"
-                          aria-hidden
-                        />
-                      )}
-                    </button>
+                    />
                     {isUser ? (
                       <>
-                        <button
-                          type="button"
-                          className="ai-message-action"
+                        <Button
+                          type="text"
+                          size="small"
                           title={t('ai.editMessage')}
                           aria-label={t('ai.editMessage')}
                           disabled={generating}
+                          icon={<EditOutlined />}
                           onClick={() => startEdit(m)}
-                        >
-                          <Pen
-                            className="ui-icon"
-                            size={14}
-                            color="currentColor"
-                            aria-hidden
-                          />
-                        </button>
-                        <button
-                          type="button"
-                          className="ai-message-action danger"
+                        />
+                        <Button
+                          type="text"
+                          size="small"
+                          danger
                           title={t('ai.deleteMessage')}
                           aria-label={t('ai.deleteMessage')}
                           disabled={generating}
+                          icon={<DeleteOutlined />}
                           onClick={() => void deleteMessage(m.id)}
-                        >
-                          <Trash
-                            className="ui-icon"
-                            size={14}
-                            color="currentColor"
-                            aria-hidden
-                          />
-                        </button>
+                        />
                       </>
                     ) : null}
                   </>

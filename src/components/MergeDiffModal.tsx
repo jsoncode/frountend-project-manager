@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
+import { Button } from 'antd'
 import { useEffect, useRef, useState } from 'react'
 import * as monaco from 'monaco-editor'
 import { useI18n } from '../i18n/useI18n'
@@ -194,27 +195,26 @@ export function MergeDiffModal({ projectPath, file, onClose, onSaved }: Props) {
       className="merge-diff-modal"
       closeOnEsc={!busy}
       footer={
-        <div className="modal-actions">
+        <>
           {binary ? (
-            <button type="button" className="btn" onClick={onClose}>
+            <Button onClick={onClose}>
               {t('branch.cancel')}
-            </button>
+            </Button>
           ) : (
             <>
-              <button type="button" className="btn" disabled={busy} onClick={tryClose}>
+              <Button disabled={busy} onClick={tryClose}>
                 {t('branch.cancel')}
-              </button>
-              <button
-                type="button"
-                className="btn primary"
+              </Button>
+              <Button
+                type="primary"
                 disabled={busy}
                 onClick={() => void save()}
               >
                 {busy ? t('merge.saving') : t('merge.saveResolved')}
-              </button>
+              </Button>
             </>
           )}
-        </div>
+        </>
       }
     >
       {error && <div className="status-banner dirty">{error}</div>}
@@ -228,30 +228,27 @@ export function MergeDiffModal({ projectPath, file, onClose, onSaved }: Props) {
             <span className="muted">
               {t('merge.hunkRemaining', { n: hunkCount })}
             </span>
-            <button
-              type="button"
-              className="btn btn-sm"
+            <Button
+              size="small"
               disabled={busy || hunkCount === 0}
               onClick={() => applyChoice('ours')}
             >
               {t('merge.hunkOurs')}
-            </button>
-            <button
-              type="button"
-              className="btn btn-sm"
+            </Button>
+            <Button
+              size="small"
               disabled={busy || hunkCount === 0}
               onClick={() => applyChoice('theirs')}
             >
               {t('merge.hunkTheirs')}
-            </button>
-            <button
-              type="button"
-              className="btn btn-sm"
+            </Button>
+            <Button
+              size="small"
               disabled={busy || hunkCount === 0}
               onClick={() => applyChoice('both')}
             >
               {t('merge.hunkBoth')}
-            </button>
+            </Button>
           </div>
           <div className="merge-diff-panes">
             <div className="merge-diff-pane">

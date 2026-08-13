@@ -1,4 +1,6 @@
-import { Paperclip, Send, Stop, X } from 'reicon-react'
+import { CloseOutlined, SendOutlined, StopOutlined } from '@ant-design/icons'
+import { Button, Input } from 'antd'
+import { Paperclip } from 'reicon-react'
 import { useState, type KeyboardEvent } from 'react'
 import { useI18n } from '../i18n/useI18n'
 import { useAiStore } from '../stores/aiStore'
@@ -54,15 +56,14 @@ export function AiComposer() {
             {pendingAttachment.text.slice(0, 80)}
             {pendingAttachment.text.length > 80 ? '…' : ''}
           </span>
-          <button
-            type="button"
-            className="ai-btn ai-btn-sm"
+          <Button
+            type="text"
+            size="small"
             onClick={() => clearAttachment()}
             title={t('ai.removeAttachment')}
             aria-label={t('ai.removeAttachment')}
-          >
-            <X className="ui-icon" size={12} color="currentColor" aria-hidden />
-          </button>
+            icon={<CloseOutlined style={{ fontSize: 12 }} />}
+          />
         </div>
       ) : null}
 
@@ -97,9 +98,9 @@ export function AiComposer() {
       </div>
 
       <div className="ai-composer-row">
-        <textarea
+        <Input.TextArea
           className="ai-composer-input"
-          rows={2}
+          autoSize={{ minRows: 2, maxRows: 10 }}
           value={draft}
           disabled={generating}
           placeholder={
@@ -111,24 +112,22 @@ export function AiComposer() {
           onKeyDown={onKeyDown}
         />
         {generating ? (
-          <button
-            type="button"
-            className="ai-btn ai-btn-danger btn-with-icon"
+          <Button
+            danger
+            icon={<StopOutlined />}
             onClick={() => void stopGeneration()}
           >
-            <Stop className="ui-icon" size={14} color="currentColor" aria-hidden />
             {t('ai.stop')}
-          </button>
+          </Button>
         ) : (
-          <button
-            type="button"
-            className="ai-btn ai-btn-primary btn-with-icon"
+          <Button
+            type="primary"
+            icon={<SendOutlined />}
             disabled={!canSend}
             onClick={onSend}
           >
-            <Send className="ui-icon" size={14} color="currentColor" aria-hidden />
             {t('ai.send')}
-          </button>
+          </Button>
         )}
       </div>
     </footer>

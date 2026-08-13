@@ -1,4 +1,6 @@
-import { Atom, Refresh } from 'reicon-react'
+import { ReloadOutlined } from '@ant-design/icons'
+import { Button } from 'antd'
+import { Atom } from 'reicon-react'
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 
 type Props = { children: ReactNode }
@@ -28,14 +30,12 @@ export class ErrorBoundary extends Component<Props, State> {
         <p style={{ color: 'var(--text-bright)', marginBottom: 12 }}>
           界面遇到问题，点击恢复即可继续使用。
         </p>
-        <button
-          type="button"
-          className="btn btn-with-icon"
+        <Button
+          icon={<ReloadOutlined />}
           onClick={() => this.setState({ error: null })}
         >
-          <Refresh className="ui-icon" size={14} color="currentColor" aria-hidden />
           恢复界面
-        </button>
+        </Button>
       </div>
     )
   }

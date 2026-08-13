@@ -1,5 +1,13 @@
-import { Search, Trash, X } from 'reicon-react'
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { DeleteOutlined } from '@ant-design/icons'
+import { AutoComplete, Button } from 'antd'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentRef,
+  type KeyboardEvent,
+} from 'react'
 import { useI18n } from '../i18n/useI18n'
 import type { HistoryItem } from '../lib/types'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -16,9 +24,7 @@ export function SearchBox({ autofocus = false }: { autofocus?: boolean }) {
   const touchSearchHistory = useSettingsStore((s) => s.touchSearchHistory)
   const deleteHistory = useSettingsStore((s) => s.deleteHistory)
   const [open, setOpen] = useState(false)
-  const [hi, setHi] = useState(0)
-  const wrapRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<ComponentRef<typeof AutoComplete>>(null)
   const { t } = useI18n()
 
   useEffect(() => {
@@ -33,18 +39,6 @@ export function SearchBox({ autofocus = false }: { autofocus?: boolean }) {
     if (!q) return list.slice(0, 8)
     return list.filter((v) => v.toLowerCase().includes(q)).slice(0, 8)
   }, [history, search])
-
-  useEffect(() => {
-    const onDoc = (e: MouseEvent) => {
-      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', onDoc)
-    return () => document.removeEventListener('mousedown', onDoc)
-  }, [])
-
-  useEffect(() => {
-    setHi(0)
-  }, [picks, open])
 
   const applySearch = (value: string) => {
     setSearch(value.trim())
@@ -63,99 +57,79 @@ export function SearchBox({ autofocus = false }: { autofocus?: boolean }) {
   }
 
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'ArrowDown' && open && picks.length > 0) {
+    if (e.key === 'Enter' && !open && search) {
       e.preventDefault()
-      setHi((i) => (i + 1) % picks.length)
+      applySearch(search)
       return
     }
-    if (e.key === 'ArrowUp' && open && picks.length > 0) {
+    if (e.key === 'Escape' && search && !e.defaultPrevented) {
       e.preventDefault()
-      setHi((i) => (i - 1 + picks.length) % picks.length)
-      return
-    }
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      if (open && picks[hi]) pickHistory(picks[hi]!)
-      else applySearch(search)
-      return
-    }
-    if (e.key === 'Escape') {
-      if (search) {
-        e.preventDefault()
-        clear()
-        return
-      }
-      setOpen(false)
+      clear()
     }
   }
 
-  return (
-    <div className="search-wrap" ref={wrapRef}>
-      <Search
-        className="search-leading-icon"
-        size={12}
-        color="currentColor"
-        aria-hidden
-      />
-      <input
-        ref={inputRef}
-        className="search"
-        value={search}
-        onChange={(e) => {
-          setSearch(e.target.value)
-          setOpen(true)
-        }}
-        onFocus={() => setOpen(true)}
-        onKeyDown={onKeyDown}
-        placeholder={t('top.search')}
-        autoComplete="off"
-      />
-      {search.length > 0 && (
-        <Tooltip title={t('top.searchClear')} placement="bottom">
-          <button
-            type="button"
-            className="search-clear"
-            aria-label={t('top.searchClear')}
-            onClick={clear}
-          >
-            <X className="ui-icon" size={14} color="currentColor" aria-hidden />
-          </button>
-        </Tooltip>
-      )}
-      {open && picks.length > 0 && (
-        <div className="search-suggest" role="listbox">
-          <div className="search-suggest-title muted">{t('top.searchHistory')}</div>
-          {picks.map((item, idx) => (
-            <div
-              key={item}
-              className={`search-suggest-item ${idx === hi ? 'active' : ''}`}
-              role="option"
-              aria-selected={idx === hi}
-            >
-              <button
-                type="button"
-                className="search-suggest-pick"
-                onMouseEnter={() => setHi(idx)}
-                onClick={() => pickHistory(item)}
+  const options = useMemo(
+    () => [
+      ...(picks.length > 0
+        ? [
+            {
+              value: '__search-history-title__',
+              disabled: true,
+              label: (
+                <div className="search-suggest-title muted">
+                  {t('top.searchHistory')}
+                </div>
+              ),
+            },
+          ]
+        : []),
+      ...picks.map((item) => ({
+        value: item,
+        label: (
+          <div className="search-suggest-item">
+            <span className="search-suggest-pick">{item}</span>
+            <Tooltip title={t('top.searchHistoryDel')}>
+              <Button
+                type="text"
+                size="small"
+                className="search-suggest-del"
+                aria-label={t('top.searchHistoryDel')}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  void deleteHistory('', 'search', item)
+                }}
               >
-                {item}
-              </button>
-              <Tooltip title={t('top.searchHistoryDel')} placement="bottom">
-                <button
-                  type="button"
-                  className="search-suggest-del"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    void deleteHistory('', 'search', item)
-                  }}
-                >
-                  <Trash className="ui-icon" size={12} color="currentColor" aria-hidden />
-                </button>
-              </Tooltip>
-            </div>
-          ))}
-        </div>
-      )}
+                <DeleteOutlined style={{ fontSize: 12 }} />
+              </Button>
+            </Tooltip>
+          </div>
+        ),
+      })),
+    ],
+    [picks, t, deleteHistory],
+  )
+
+  return (
+    <div className="search-wrap">
+      <AutoComplete
+        ref={inputRef}
+        value={search}
+        options={options}
+        open={open && picks.length > 0}
+        onDropdownVisibleChange={setOpen}
+        onChange={(v) => {
+          setSearch(v)
+        }}
+        onSelect={pickHistory}
+        onKeyDown={onKeyDown}
+        filterOption={false}
+        notFoundContent={null}
+        allowClear
+        onClear={clear}
+        placeholder={t('top.search')}
+        popupClassName="search-suggest-popup"
+      />
     </div>
   )
 }

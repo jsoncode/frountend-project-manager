@@ -189,20 +189,6 @@
   flex-shrink: 0;
 }
 
-.ai-model-select {
-  min-width: 180px;
-  max-width: 320px;
-  flex: 1;
-  height: 30px;
-  padding: 0 10px;
-  border: 1px solid var(--border-dim);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.035);
-  color: var(--text-bright);
-  font-family: inherit;
-  font-size: 12.5px;
-}
-
 .ai-messages {
   flex: 1;
   min-height: 0;
@@ -332,36 +318,6 @@
   justify-content: flex-end;
 }
 
-.ai-message-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  margin: 0;
-  padding: 0;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text);
-  cursor: pointer;
-}
-
-.ai-message-action:hover:not(:disabled) {
-  color: var(--cyan);
-  background: rgba(34, 211, 238, 0.1);
-}
-
-.ai-message-action.danger:hover:not(:disabled) {
-  color: var(--danger);
-  background: rgba(248, 113, 113, 0.12);
-}
-
-.ai-message-action:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
 .ai-message-typing {
   opacity: 0.6;
   font-style: italic;
@@ -481,68 +437,9 @@
   line-height: 1.45;
 }
 
-.ai-composer-input:disabled,
-.ai-model-select:disabled {
+.ai-composer-input:disabled {
   opacity: 0.7;
   cursor: not-allowed;
-}
-
-.ai-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--text-bright);
-  padding: 6px 10px;
-  cursor: pointer;
-  font-family: inherit;
-  font-size: 13px;
-  white-space: nowrap;
-  border-radius: var(--radius-sm);
-}
-
-.ai-btn-sm {
-  padding: 4px 6px;
-  font-size: 12px;
-  border: none;
-  background: transparent;
-}
-
-.ai-btn-sm:not(:disabled):hover {
-  background: rgba(34, 211, 238, 0.12);
-  border-color: transparent;
-}
-
-.ai-btn-sm.ai-btn-danger:not(:disabled):hover {
-  background: rgba(248, 113, 113, 0.12);
-  border-color: transparent;
-}
-
-.ai-btn-primary {
-  border-color: var(--cyan);
-  color: var(--cyan);
-  background: rgba(34, 211, 238, 0.1);
-}
-
-.ai-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.ai-btn:not(:disabled):hover {
-  border-color: var(--cyan);
-  color: var(--cyan);
-}
-
-.ai-btn-danger {
-  border-color: #f87171;
-  color: #f87171;
-}
-
-.ai-btn-danger:not(:disabled):hover {
-  background: rgba(248, 113, 113, 0.12);
 }
 
 .ai-model-list {
@@ -624,25 +521,9 @@
   flex-wrap: nowrap;
 }
 
-.ai-icon-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  padding: 0;
-  flex-shrink: 0;
-}
-
-.ai-icon-btn.is-active {
-  color: var(--cyan);
-  border-color: rgba(34, 211, 238, 0.45);
-  background: rgba(34, 211, 238, 0.1);
-}
-
-.ai-model-editor-modal .modal-header,
-.ai-model-editor-modal .modal-body,
-.ai-model-editor-modal .modal-footer {
+.ai-model-editor-modal .ant-modal-header,
+.ai-model-editor-modal .ant-modal-body,
+.ai-model-editor-modal .ant-modal-footer {
   /* A bit more breathing room on the sides than the default 16px. */
   padding-left: 22px;
   padding-right: 22px;
@@ -660,59 +541,6 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-}
-
-.ai-field input,
-.ai-field-select {
-  width: 100%;
-  background: var(--bg-0);
-  border: 1px solid var(--border);
-  color: var(--text-bright);
-  padding: 8px 10px;
-  box-sizing: border-box;
-  font-family: inherit;
-  font-size: 13px;
-  color-scheme: dark;
-  border-radius: var(--radius-sm);
-}
-
-.ai-field-secret {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.ai-field-secret input {
-  padding-right: 38px;
-}
-
-.ai-field-secret-toggle {
-  position: absolute;
-  right: 4px;
-  top: 50%;
-  transform: translateY(-50%);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  margin: 0;
-  padding: 0;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text);
-  cursor: pointer;
-}
-
-.ai-field-secret-toggle:hover {
-  color: var(--cyan);
-  background: rgba(34, 211, 238, 0.1);
-}
-
-.ai-field-select option {
-  background: var(--bg-1);
-  color: var(--text-bright);
 }
 
 .ai-settings-toolbar {
@@ -758,8 +586,7 @@
 }
 
 .ai-message,
-.ai-attachment-chip,
-.ai-model-select {
+.ai-attachment-chip {
   border-radius: var(--radius-md);
 }
 

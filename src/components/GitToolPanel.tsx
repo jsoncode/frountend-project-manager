@@ -1,3 +1,4 @@
+import { CheckCircleOutlined, LoadingOutlined, ReloadOutlined } from '@ant-design/icons'
 import {
   Add,
   ArrowDown,
@@ -12,6 +13,7 @@ import {
   Star,
   Trash,
 } from 'reicon-react'
+import { Button, Checkbox, Input } from 'antd'
 import { invoke } from '@tauri-apps/api/core'
 import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react'
 import { useI18n } from '../i18n/useI18n'
@@ -28,6 +30,7 @@ import { useTerminalStore } from '../stores/terminalStore'
 import { showErrorLog } from '../stores/errorLogStore'
 import { CommitModal } from './CommitModal'
 import { ContextMenuPortal } from './ContextMenuPortal'
+import { GitLogModal } from './GitLogModal'
 import { HistoryChips } from './HistoryChips'
 import { MergeConflictModal } from './MergeConflictModal'
 import { ModalShell } from './ModalShell'
@@ -76,6 +79,7 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
   const [menu, setMenu] = useState<MenuState | null>(null)
   const [historyMenu, setHistoryMenu] = useState<HistoryMenuState | null>(null)
   const [commitTarget, setCommitTarget] = useState<string | null>(null)
+  const [logBranch, setLogBranch] = useState<string | null>(null)
   const [createState, setCreateState] = useState<CreateState | null>(null)
   const [deleteState, setDeleteState] = useState<DeleteState | null>(null)
   const [checking, setChecking] = useState(false)
@@ -450,29 +454,15 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
   return (
     <>
       <div className="git-toolbar">
-        <button
-          type="button"
-          className="btn btn-sm primary btn-with-icon"
+        <Button
+          type="primary"
+          size="small"
           disabled={checking || pulling}
           onClick={() => void checkUpdates()}
+          icon={checking ? <LoadingOutlined /> : <ReloadOutlined />}
         >
-          {checking ? (
-            <Loader
-              className="ui-icon is-spinning"
-              size={14}
-              color="currentColor"
-              aria-hidden
-            />
-          ) : (
-            <Refresh
-              className="ui-icon"
-              size={14}
-              color="currentColor"
-              aria-hidden
-            />
-          )}
           {checking ? t('git.checking') : t('git.checkUpdates')}
-        </button>
+        </Button>
       </div>
       {notice && (
         <div
@@ -684,8 +674,9 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
             type="button"
             role="menuitem"
             onClick={() => {
-              const branch = menu.branch.name
-              runGit(`git log --format="%h %s (%ar)" -10 ${branch}`)
+              // Structured log table modal (full hash / author / dates /
+              // message / refs) instead of a terminal dump.
+              setLogBranch(menu.branch.name)
               setMenu(null)
             }}
           >
@@ -817,23 +808,26 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
         />
       )}
 
+      {logBranch && (
+        <GitLogModal
+          projectPath={selected.path}
+          projectName={selected.folderName}
+          branch={logBranch}
+          onClose={() => setLogBranch(null)}
+        />
+      )}
+
       {createState && (
         <ModalShell
           title={t('git.newBranchTitle')}
           onClose={() => setCreateState(null)}
           footer={
-            <div className="modal-actions">
-              <button
-                type="button"
-                className="btn"
-                onClick={() => setCreateState(null)}
-                disabled={branchBusy}
-              >
+            <>
+              <Button onClick={() => setCreateState(null)} disabled={branchBusy}>
                 {t('branch.cancel')}
-              </button>
-              <button
-                type="button"
-                className="btn primary"
+              </Button>
+              <Button
+                type="primary"
                 disabled={
                   branchBusy ||
                   !createState.name.trim() ||
@@ -842,14 +836,14 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
                 onClick={() => void doCreateBranch()}
               >
                 {branchBusy ? t('git.creatingBranch') : t('git.ctx.newBranch')}
-              </button>
-            </div>
+              </Button>
+            </>
           }
         >
           <p className="muted">
             {t('git.newBranchHint', { name: createState.from })}
           </p>
-          <input
+          <Input
             className="input-block"
             value={createState.name}
             onChange={(e) => {
@@ -857,8 +851,8 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
               setCreateState((s) => (s ? { ...s, name: e.target.value } : s))
             }}
             onFocus={(e) => e.currentTarget.select()}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !createNameTaken && createState.name.trim()) {
+            onPressEnter={() => {
+              if (!createNameTaken && createState.name.trim()) {
                 void doCreateBranch()
               }
             }}
@@ -884,24 +878,18 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
           onClose={() => setDeleteState(null)}
           closeOnEsc={false}
           footer={
-            <div className="modal-actions">
-              <button
-                type="button"
-                className="btn"
-                onClick={() => setDeleteState(null)}
-                disabled={branchBusy}
-              >
+            <>
+              <Button onClick={() => setDeleteState(null)} disabled={branchBusy}>
                 {t('branch.cancel')}
-              </button>
-              <button
-                type="button"
-                className="btn danger"
+              </Button>
+              <Button
+                danger
                 disabled={branchBusy}
                 onClick={() => void doDeleteBranch()}
               >
                 {branchBusy ? t('git.deletingBranch') : t('git.ctx.deleteBranch')}
-              </button>
-            </div>
+              </Button>
+            </>
           }
         >
           <p className="muted">
@@ -914,18 +902,17 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
                 })}
           </p>
           {deleteState.branch.isRemote && (
-            <label className="checkbox-row" style={{ marginTop: 10 }}>
-              <input
-                type="checkbox"
-                checked={deleteState.alsoLocal}
-                onChange={(e) =>
-                  setDeleteState((s) =>
-                    s ? { ...s, alsoLocal: e.target.checked } : s,
-                  )
-                }
-              />
-              <span>{t('git.deleteAlsoLocal')}</span>
-            </label>
+            <Checkbox
+              style={{ marginTop: 10 }}
+              checked={deleteState.alsoLocal}
+              onChange={(e) =>
+                setDeleteState((s) =>
+                  s ? { ...s, alsoLocal: e.target.checked } : s,
+                )
+              }
+            >
+              {t('git.deleteAlsoLocal')}
+            </Checkbox>
           )}
           {branchError && (
             <div className="status-banner dirty" style={{ marginTop: 10 }}>
@@ -942,32 +929,24 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
           closeOnEsc={false}
           className="branch-modal"
           footer={
-            <div className="modal-actions">
-              <button
-                type="button"
-                className="btn"
+            <>
+              <Button
                 onClick={() => setDirtyConfirm(null)}
                 disabled={!!switchingBranch}
               >
                 {t('branch.cancel')}
-              </button>
-              <button
-                type="button"
-                className="btn primary btn-with-icon"
+              </Button>
+              <Button
+                type="primary"
                 disabled={!!switchingBranch}
                 onClick={() => void doDirtySwitch()}
+                icon={<CheckCircleOutlined />}
               >
-                <CheckCircle
-                  className="ui-icon"
-                  size={14}
-                  color="currentColor"
-                  aria-hidden
-                />
                 {switchingBranch
                   ? t('branch.switching')
                   : t('branch.confirm')}
-              </button>
-            </div>
+              </Button>
+            </>
           }
         >
           <p className="branch-switch-path">

@@ -1,4 +1,12 @@
-import { Play, Refresh, Search, Shield, Trash, Tree } from 'reicon-react'
+import {
+  DeleteOutlined,
+  PlayCircleOutlined,
+  ReloadOutlined,
+  SafetyCertificateOutlined,
+  SearchOutlined,
+  UnorderedListOutlined,
+} from '@ant-design/icons'
+import { Segmented } from 'antd'
 import { useState, type MouseEvent } from 'react'
 import type { MessageKey } from '../i18n/messages'
 import { useI18n } from '../i18n/useI18n'
@@ -9,19 +17,21 @@ import { ContextMenuPortal } from './ContextMenuPortal'
 import { HistoryChips } from './HistoryChips'
 import { Tooltip } from './Tooltip'
 
-type CommonCmd = { key: MessageKey; icon: typeof Play; cmd: (pm: string) => string }
-
 /** Package managers selectable per project in the commands section. */
 const PM_NAMES = ['npm', 'pnpm', 'yarn'] as const
 type PmName = (typeof PM_NAMES)[number]
 
-const COMMON_COMMANDS: CommonCmd[] = [
-  { key: 'cmd.outdated', icon: Search, cmd: (pm) => `${pm} outdated` },
-  { key: 'cmd.update', icon: Refresh, cmd: (pm) => `${pm} update` },
-  { key: 'cmd.updateLatest', icon: Refresh, cmd: (pm) => `${pm} update --latest` },
-  { key: 'cmd.list', icon: Tree, cmd: (pm) => `${pm} list --depth 3` },
-  { key: 'cmd.audit', icon: Shield, cmd: (pm) => `${pm} audit` },
-  { key: 'cmd.storePrune', icon: Trash, cmd: (pm) => `${pm} store prune` },
+const COMMON_COMMANDS: {
+  key: MessageKey
+  icon: typeof SearchOutlined
+  cmd: (pm: string) => string
+}[] = [
+  { key: 'cmd.outdated', icon: SearchOutlined, cmd: (pm) => `${pm} outdated` },
+  { key: 'cmd.update', icon: ReloadOutlined, cmd: (pm) => `${pm} update` },
+  { key: 'cmd.updateLatest', icon: ReloadOutlined, cmd: (pm) => `${pm} update --latest` },
+  { key: 'cmd.list', icon: UnorderedListOutlined, cmd: (pm) => `${pm} list --depth 3` },
+  { key: 'cmd.audit', icon: SafetyCertificateOutlined, cmd: (pm) => `${pm} audit` },
+  { key: 'cmd.storePrune', icon: DeleteOutlined, cmd: (pm) => `${pm} store prune` },
 ]
 
 /** npm/pnpm/yarn scripts — shown inside the action bar. */
@@ -85,24 +95,13 @@ export function CommandPanel({ filterQuery = '' }: { filterQuery?: string }) {
       <div className="pane-sub">
         {t('cmd.title')} · {pm}
       </div>
-      <div
+      <Segmented
         className="pm-switch"
-        role="group"
-        aria-label={t('cmd.pm')}
-        title={t('cmd.pm')}
-      >
-        {PM_NAMES.map((name) => (
-          <button
-            key={name}
-            type="button"
-            className={`pm-switch-btn${pm === name ? ' active' : ''}`}
-            aria-pressed={pm === name}
-            onClick={() => void setProjectPm(selected.path, name)}
-          >
-            {name}
-          </button>
-        ))}
-      </div>
+        size="small"
+        value={pm}
+        options={PM_NAMES.map((name) => ({ label: name, value: name }))}
+        onChange={(v) => void setProjectPm(selected.path, v as PmName)}
+      />
       <div className="script-list">
         {scripts.map((name) => (
           <Tooltip key={name} title={details.summary.scripts[name]}>
@@ -113,7 +112,7 @@ export function CommandPanel({ filterQuery = '' }: { filterQuery?: string }) {
                 void runScript(selected.path, selected.folderName, pm, name)
               }
             >
-              <Play className="ui-icon" size={11} color="currentColor" aria-hidden />
+              <PlayCircleOutlined style={{ fontSize: 12 }} />
               <span className="script-list-name">{name}</span>
             </button>
           </Tooltip>
@@ -137,7 +136,7 @@ export function CommandPanel({ filterQuery = '' }: { filterQuery?: string }) {
                 className="script-list-item btn-with-icon"
                 onClick={() => void runRaw(selected.path, selected.folderName, command)}
               >
-                <Icon className="ui-icon" size={11} color="currentColor" aria-hidden />
+                <Icon style={{ fontSize: 12 }} />
                 <span className="script-list-name">{t(c.key)}</span>
                 <span className="script-list-cmd muted">{command}</span>
               </button>
@@ -161,7 +160,7 @@ export function CommandPanel({ filterQuery = '' }: { filterQuery?: string }) {
               setCtxMenu(null)
             }}
           >
-            <Trash size={14} color="currentColor" />
+            <DeleteOutlined style={{ fontSize: 14 }} />
             {t('history.delete')}
           </button>
         </ContextMenuPortal>

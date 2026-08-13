@@ -68,7 +68,7 @@ function syncSelectionAfterClose(closedProjectPath?: string) {
     }
   }
 
-  const projectPath = closedProjectPath || useProjectPathFallback()
+  const projectPath = closedProjectPath || projectPathFallback()
   if (projectPath) {
     const workspaces =
       useSettingsStore.getState().config?.workspaces ?? []
@@ -81,7 +81,7 @@ function syncSelectionAfterClose(closedProjectPath?: string) {
   }
 }
 
-function useProjectPathFallback(): string | null {
+function projectPathFallback(): string | null {
   const tabs = useEditorStore.getState().tabs
   if (tabs[0]) return tabs[0].projectPath
   const sel = useExplorerStore.getState().selection

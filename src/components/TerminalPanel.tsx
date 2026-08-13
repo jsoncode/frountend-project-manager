@@ -1,4 +1,5 @@
-import { Add, TerminalSquare, X } from 'reicon-react'
+import { CloseOutlined, ConsoleSqlOutlined, PlusOutlined } from '@ant-design/icons'
+import { Button } from 'antd'
 import { useEffect, useState } from 'react'
 import { useI18n } from '../i18n/useI18n'
 import { findWorkspaceForPath } from '../lib/workspacePath'
@@ -144,20 +145,22 @@ export function TerminalPanel({
                   requestClose(s.id)
                 }}
               >
-                <X className="ui-icon" size={12} color="currentColor" aria-hidden />
+                <CloseOutlined style={{ fontSize: 11 }} />
               </span>
             </button>
           ))}
         </div>
         <Tooltip title={t('term.new')}>
-          <button
-            type="button"
+          <Button
+            type="text"
+            size="small"
             className="terminal-tab add"
             disabled={!selected}
             onClick={addTerminal}
+            aria-label={t('term.new')}
           >
-            <Add className="ui-icon" size={14} color="currentColor" aria-hidden />
-          </button>
+            <PlusOutlined style={{ fontSize: 13 }} />
+          </Button>
         </Tooltip>
       </div>
 
@@ -167,10 +170,14 @@ export function TerminalPanel({
             {selected ? t('term.emptySelected') : t('term.emptyNoProject')}
           </span>
           {selected && (
-            <button type="button" className="btn btn-sm primary btn-with-icon" onClick={addTerminal}>
-              <TerminalSquare className="ui-icon" size={14} color="currentColor" aria-hidden />
+            <Button
+              type="primary"
+              size="small"
+              icon={<ConsoleSqlOutlined style={{ fontSize: 13 }} />}
+              onClick={addTerminal}
+            >
               {t('term.create')}
-            </button>
+            </Button>
           )}
         </div>
       )}
@@ -192,18 +199,14 @@ export function TerminalPanel({
           onClose={() => setPendingCloseId(null)}
           closeOnEsc={false}
           footer={
-            <div className="modal-actions">
-              <button type="button" className="btn" onClick={() => setPendingCloseId(null)}>
+            <>
+              <Button onClick={() => setPendingCloseId(null)}>
                 {t('branch.cancel')}
-              </button>
-              <button
-                type="button"
-                className="btn danger"
-                onClick={() => void confirmCloseRunning()}
-              >
+              </Button>
+              <Button danger onClick={() => void confirmCloseRunning()}>
                 {t('term.closeRunningConfirm')}
-              </button>
-            </div>
+              </Button>
+            </>
           }
         >
           <p className="muted">

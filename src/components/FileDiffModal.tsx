@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
+import { Button } from 'antd'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import * as monaco from 'monaco-editor'
 import { useI18n } from '../i18n/useI18n'
@@ -162,15 +163,14 @@ export function FileDiffModal({ projectPath, filePath, compareFilePath, onClose 
         {/* Navigation toolbar */}
         {!loading && !error && (
           <div className="diff-toolbar">
-            <button
-              type="button"
-              className="btn btn-sm"
+            <Button
+              size="small"
               onClick={goToPrevChange}
               disabled={totalChanges === 0}
               title={t('diff.prevChange')}
             >
               ↑ {t('diff.prev')}
-            </button>
+            </Button>
             <span className="diff-nav-info muted">
               {totalChanges > 0
                 ? t('diff.changeCount', {
@@ -179,15 +179,14 @@ export function FileDiffModal({ projectPath, filePath, compareFilePath, onClose 
                   })
                 : t('diff.noChanges')}
             </span>
-            <button
-              type="button"
-              className="btn btn-sm"
+            <Button
+              size="small"
               onClick={goToNextChange}
               disabled={totalChanges === 0}
               title={t('diff.nextChange')}
             >
               {t('diff.next')} ↓
-            </button>
+            </Button>
           </div>
         )}
 

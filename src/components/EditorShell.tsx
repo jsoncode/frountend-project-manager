@@ -1,3 +1,4 @@
+import { Button } from 'antd'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useI18n } from '../i18n/useI18n'
 import { readTextFile, writeTextFile } from '../lib/editorFs'
@@ -180,14 +181,13 @@ export function EditorShell() {
               <div className="muted" style={{ marginTop: 8 }}>
                 {activeDoc.error}
               </div>
-              <button
-                type="button"
-                className="btn btn-sm"
+              <Button
+                size="small"
                 style={{ marginTop: 12 }}
                 onClick={retryLoad}
               >
                 {t('editor.retry')}
-              </button>
+              </Button>
             </div>
           </div>
         )}

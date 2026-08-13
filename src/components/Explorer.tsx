@@ -1,3 +1,4 @@
+import { Button } from 'antd'
 import {
   ArrowDown,
   ArrowRight,
@@ -49,6 +50,7 @@ import { CommitModal } from './CommitModal'
 import { ContextMenuPortal } from './ContextMenuPortal'
 import { FileDiffModal } from './FileDiffModal'
 import { FileIcon } from './FileIcon'
+import { GitLogModal } from './GitLogModal'
 import { MergeConflictModal } from './MergeConflictModal'
 import { ModalShell } from './ModalShell'
 import { OpenWithMenu } from './OpenWithMenu'
@@ -121,6 +123,8 @@ export function Explorer() {
   const [branchSwitchTarget, setBranchSwitchTarget] = useState<{ projectPath: string; branch: string } | null>(null)
   // Merge conflicts produced by a context-menu pull (opens the 3-way tool).
   const [pullMerge, setPullMerge] = useState<{ projectPath: string; initial: MergeStatus | null } | null>(null)
+  // Projects whose "view log" (git log table modal) is open.
+  const [logTarget, setLogTarget] = useState<{ path: string; branch: string } | null>(null)
   const [gitLoading, setGitLoading] = useState(false)
   // Projects whose "view status" (git status in terminal) is still running.
   const [statusChecking, setStatusChecking] = useState<Set<string>>(() => new Set())
@@ -1188,12 +1192,9 @@ export function Explorer() {
                 const path = menu.path
                 const branch = projGitCurrent ?? 'HEAD'
                 setMenu(null)
-                void withGitOp(path, async () => {
-                  // Run `git log` in the terminal; wait for the shell prompt
-                  // so the row spinner clears once the command finishes.
-                  const id = await projRunGit(path, `git log --format="%h %s (%ar)" -10 ${branch}`)
-                  await useTerminalStore.getState().waitUntilIdle(id, 10_000)
-                })
+                // Open the structured log table (full hash / author / dates /
+                // message / refs) instead of dumping a few lines in the terminal.
+                setLogTarget({ path, branch })
               }}
             >
               <Document className="ui-icon" size={14} color="currentColor" aria-hidden />
@@ -1491,6 +1492,15 @@ export function Explorer() {
         />
       )}
 
+      {logTarget && (
+        <GitLogModal
+          projectPath={logTarget.path}
+          projectName={findProjectName(logTarget.path)}
+          branch={logTarget.branch}
+          onClose={() => setLogTarget(null)}
+        />
+      )}
+
       {pullMerge && (
         <MergeConflictModal
           projectPath={pullMerge.projectPath}
@@ -1548,23 +1558,15 @@ export function Explorer() {
           onClose={() => setPendingRemove(null)}
           closeOnEsc={false}
           footer={
-            <div className="modal-actions">
-              <button
-                type="button"
-                className="btn"
-                onClick={() => setPendingRemove(null)}
-              >
+            <>
+              <Button onClick={() => setPendingRemove(null)}>
                 {t('branch.cancel')}
-              </button>
-              <button
-                type="button"
-                className="btn danger btn-with-icon"
-                onClick={() => void confirmRemove()}
-              >
+              </Button>
+              <Button danger onClick={() => void confirmRemove()}>
                 <Trash className="ui-icon" size={14} color="currentColor" aria-hidden />
                 {t('ws.remove')}
-              </button>
-            </div>
+              </Button>
+            </>
           }
         >
           <p className="muted">
@@ -1598,17 +1600,12 @@ export function Explorer() {
           onClose={() => setPendingDelete(null)}
           closeOnEsc={false}
           footer={
-            <div className="modal-actions">
-              <button
-                type="button"
-                className="btn"
-                onClick={() => setPendingDelete(null)}
-              >
+            <>
+              <Button onClick={() => setPendingDelete(null)}>
                 {t('branch.cancel')}
-              </button>
-              <button
-                type="button"
-                className="btn danger btn-with-icon"
+              </Button>
+              <Button
+                danger
                 onClick={() => {
                   const target = pendingDelete
                   setPendingDelete(null)
@@ -1618,8 +1615,8 @@ export function Explorer() {
               >
                 <Trash className="ui-icon" size={14} color="currentColor" aria-hidden />
                 {t('fs.delete')}
-              </button>
-            </div>
+              </Button>
+            </>
           }
         >
           <p className="muted">
@@ -1636,17 +1633,12 @@ export function Explorer() {
           onClose={() => setBranchSwitchTarget(null)}
           closeOnEsc={false}
           footer={
-            <div className="modal-actions">
-              <button
-                type="button"
-                className="btn"
-                onClick={() => setBranchSwitchTarget(null)}
-              >
+            <>
+              <Button onClick={() => setBranchSwitchTarget(null)}>
                 {t('branch.cancel')}
-              </button>
-              <button
-                type="button"
-                className="btn primary btn-with-icon"
+              </Button>
+              <Button
+                type="primary"
                 onClick={() => {
                   if (!branchSwitchTarget) return
                   const { projectPath, branch } = branchSwitchTarget
@@ -1664,8 +1656,8 @@ export function Explorer() {
               >
                 <ArrowRight className="ui-icon" size={14} color="currentColor" aria-hidden />
                 {t('branch.confirm')}
-              </button>
-            </div>
+              </Button>
+            </>
           }
         >
           <p className="muted">

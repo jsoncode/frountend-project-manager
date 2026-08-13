@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
+import { Button, Input } from 'antd'
 import { useCallback, useEffect, useState } from 'react'
 import { useI18n } from '../i18n/useI18n'
 import type { MergeFileEntry, MergeStatus } from '../lib/types'
@@ -180,38 +181,34 @@ export function MergeConflictModal({
         className="merge-conflict-modal"
         closeOnEsc={!busy}
         footer={status ? (
-          <div className="modal-actions merge-footer">
+          <>
             {!stashMode && (
-              <button
-                type="button"
-                className="btn"
+              <Button
                 disabled={busy}
                 onClick={() => void abortMerge()}
               >
                 {t('merge.abort')}
-              </button>
+              </Button>
             )}
             {stashMode ? (
-              <button
-                type="button"
-                className="btn primary"
+              <Button
+                type="primary"
                 disabled={busy || status.conflictCount > 0}
                 onClick={() => void finishStash()}
                 title={t('merge.stashFinishHint')}
               >
                 {t('merge.stashFinish')}
-              </button>
+              </Button>
             ) : (
-              <button
-                type="button"
-                className="btn primary"
+              <Button
+                type="primary"
                 disabled={busy || (status.conflictCount ?? 0) > 0 || !status.inProgress}
                 onClick={() => setConfirmCommit(true)}
               >
                 {t('merge.finish')}
-              </button>
+              </Button>
             )}
-          </div>
+          </>
         ) : undefined}
       >
         {error && <div className="status-banner dirty">{error}</div>}
@@ -258,30 +255,28 @@ export function MergeConflictModal({
               )}
             </div>
             <div className="merge-actions-row">
-              <button
-                type="button"
-                className="btn btn-sm"
+              <Button
+                size="small"
                 disabled={busy || !selectedEntry?.conflict}
                 onClick={() => void resolveSide(true)}
               >
                 {t('merge.useOurs')}
-              </button>
-              <button
-                type="button"
-                className="btn btn-sm"
+              </Button>
+              <Button
+                size="small"
                 disabled={busy || !selectedEntry?.conflict}
                 onClick={() => void resolveSide(false)}
               >
                 {t('merge.useTheirs')}
-              </button>
-              <button
-                type="button"
-                className="btn btn-sm primary"
+              </Button>
+              <Button
+                size="small"
+                type="primary"
                 disabled={busy || !selectedEntry?.conflict}
                 onClick={() => selected && setDiffFile(selected)}
               >
                 {t('merge.openDiff')}
-              </button>
+              </Button>
             </div>
           </>
         )}
@@ -306,29 +301,25 @@ export function MergeConflictModal({
           elevated
           closeOnEsc={!busy}
           footer={
-            <div className="modal-actions">
-              <button
-                type="button"
-                className="btn"
+            <>
+              <Button
                 disabled={busy}
                 onClick={() => setConfirmCommit(false)}
               >
                 {t('branch.cancel')}
-              </button>
-              <button
-                type="button"
-                className="btn primary"
+              </Button>
+              <Button
+                type="primary"
                 disabled={busy}
                 onClick={() => void finishMerge()}
               >
                 {busy ? t('merge.finishing') : t('merge.finish')}
-              </button>
-            </div>
+              </Button>
+            </>
           }
         >
           <p className="muted">{t('merge.finishHint')}</p>
-          <textarea
-            className="merge-commit-input"
+          <Input.TextArea
             rows={3}
             value={commitMsg}
             onChange={(e) => setCommitMsg(e.target.value)}

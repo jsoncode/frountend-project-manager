@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
+import { Button } from 'antd'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import * as monaco from 'monaco-editor'
 import { useI18n } from '../i18n/useI18n'
@@ -647,32 +648,29 @@ export function MergeEditorModal({
       className="merge-editor-modal"
       closeOnEsc={!busy}
       footer={
-        <div className="modal-actions">
+        <>
           {binary ? (
-            <button type="button" className="btn" onClick={onClose}>
+            <Button onClick={onClose}>
               {t('branch.cancel')}
-            </button>
+            </Button>
           ) : (
             <>
-              <button
-                type="button"
-                className="btn"
+              <Button
                 disabled={busy}
                 onClick={tryClose}
               >
                 {t('branch.cancel')}
-              </button>
-              <button
-                type="button"
-                className="btn primary"
+              </Button>
+              <Button
+                type="primary"
                 disabled={busy}
                 onClick={() => void save()}
               >
                 {busy ? t('merge.saving') : t('merge.saveResolved')}
-              </button>
+              </Button>
             </>
           )}
-        </div>
+        </>
       }
     >
       {error && <div className="status-banner dirty">{error}</div>}
@@ -689,52 +687,47 @@ export function MergeEditorModal({
                 : t('merge.noConflicts')}
             </span>
             <div style={{ flex: 1 }} />
-            <button
-              type="button"
-              className="btn btn-sm"
+            <Button
+              size="small"
               disabled={busy || hunkCount === 0 || currentHunk <= 0}
               onClick={prevConflict}
               title={t('merge.prevConflict')}
             >
               ↑ {t('merge.prevConflict')}
-            </button>
-            <button
-              type="button"
-              className="btn btn-sm"
+            </Button>
+            <Button
+              size="small"
               disabled={busy || hunkCount === 0 || currentHunk >= hunkCount - 1}
               onClick={nextConflict}
               title={t('merge.nextConflict')}
             >
               {t('merge.nextConflict')} ↓
-            </button>
+            </Button>
             <span className="merge-editor-toolbar-sep" />
-            <button
-              type="button"
-              className="btn btn-sm"
+            <Button
+              size="small"
               disabled={busy || hunkCount === 0}
               onClick={() => applyChoice('ours')}
               title={t('merge.hunkOurs')}
             >
               ← {t('merge.hunkOurs')}
-            </button>
-            <button
-              type="button"
-              className="btn btn-sm"
+            </Button>
+            <Button
+              size="small"
               disabled={busy || hunkCount === 0}
               onClick={() => applyChoice('theirs')}
               title={t('merge.hunkTheirs')}
             >
               {t('merge.hunkTheirs')} →
-            </button>
-            <button
-              type="button"
-              className="btn btn-sm"
+            </Button>
+            <Button
+              size="small"
               disabled={busy || hunkCount === 0}
               onClick={() => applyChoice('both')}
               title={t('merge.hunkBoth')}
             >
               {t('merge.hunkBoth')}
-            </button>
+            </Button>
           </div>
 
           <div className="merge-editor-panes">
@@ -745,14 +738,13 @@ export function MergeEditorModal({
                   {t('merge.paneOurs')}
                 </span>
                 <div className="merge-editor-pane-actions">
-                  <button
-                    type="button"
-                    className="btn btn-sm"
+                  <Button
+                    size="small"
                     onClick={acceptAllOurs}
                     title={t('diff.acceptLeft')}
                   >
                     {t('diff.acceptLeft')} →
-                  </button>
+                  </Button>
                 </div>
               </div>
               <div className="merge-editor-pane-body" ref={oursRef} />
@@ -775,14 +767,13 @@ export function MergeEditorModal({
                   {t('merge.paneTheirs')}
                 </span>
                 <div className="merge-editor-pane-actions">
-                  <button
-                    type="button"
-                    className="btn btn-sm"
+                  <Button
+                    size="small"
                     onClick={acceptAllTheirs}
                     title={t('diff.acceptRight')}
                   >
                     ← {t('diff.acceptRight')}
-                  </button>
+                  </Button>
                 </div>
               </div>
               <div className="merge-editor-pane-body" ref={theirsRef} />

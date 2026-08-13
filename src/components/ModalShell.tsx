@@ -1,21 +1,19 @@
-import { X } from 'reicon-react'
+import { CloseOutlined } from '@ant-design/icons'
+import { Button, Modal } from 'antd'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { useEffect, type MouseEvent, type ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { useI18n } from '../i18n/useI18n'
 import { isTauri } from '../lib/tauri'
 import { Tooltip } from './Tooltip'
 
 /**
  * Start a native window drag when the user presses on the backdrop area
- * (the dim region around the modal). Clicks inside the modal content are
- * excluded so form controls and scroll areas keep working normally.
- * Double-click toggles maximize, matching the titlebar behaviour.
+ * (the dim region around the modal). Double-click toggles maximize,
+ * matching the titlebar behaviour.
  */
-function onBackdropMouseDown(e: MouseEvent) {
+function onMaskMouseDown(e: globalThis.MouseEvent) {
   if (!isTauri()) return
   if (e.button !== 0) return
-  // Only drag when clicking the backdrop itself, not the modal content.
-  if (e.target !== e.currentTarget) return
   if (e.detail === 2) {
     void getCurrentWindow().toggleMaximize()
     return
@@ -42,6 +40,8 @@ type Props = {
   closeOnEsc?: boolean
 }
 
+let modalSeq = 0
+
 /** Backdrop does not dismiss — close via the header × button (or footer actions). */
 export function ModalShell({
   title,
@@ -54,46 +54,53 @@ export function ModalShell({
   nested,
   closeOnEsc = true,
 }: Props) {
+  const rootClass = useRef(`modal-shell-${++modalSeq}`).current
+  const zIndex = nested ? 1200 : elevated ? 1100 : 1000
   const { t } = useI18n()
-  const stackClass = nested ? ' nested' : elevated ? ' elevated' : ''
 
+  // Wire the native window drag onto the antd mask element once mounted.
   useEffect(() => {
-    if (!closeOnEsc) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      e.preventDefault()
-      e.stopPropagation()
-      onClose()
-    }
-    window.addEventListener('keydown', onKey, true)
-    return () => window.removeEventListener('keydown', onKey, true)
-  }, [closeOnEsc, onClose])
+    if (!isTauri()) return
+    const mask = document.querySelector<HTMLElement>(
+      `.${rootClass} .ant-modal-mask`,
+    )
+    if (!mask) return
+    mask.addEventListener('mousedown', onMaskMouseDown)
+    return () => mask.removeEventListener('mousedown', onMaskMouseDown)
+  }, [rootClass])
 
   return (
-    <div className={`modal-backdrop${stackClass}`} onMouseDown={onBackdropMouseDown}>
-      <div className={`modal ${wide ? 'modal-wide' : ''} ${className}`.trim()}>
-        <div className="modal-header">
-          <h3>{title}</h3>
+    <Modal
+      rootClassName={`modal-shell-root ${rootClass}`}
+      className={`modal-shell ${className}`.trim()}
+      open
+      // 自定义标题栏（flex 布局，关闭按钮与标题垂直居中对齐）
+      closable={false}
+      title={
+        <div className="modal-shell-title-row">
+          <span className="modal-shell-title-text">{title}</span>
           <Tooltip title={t('settings.close')}>
-            <button
-              type="button"
-              className="modal-close"
+            <Button
+              type="text"
+              size="small"
+              className="modal-shell-close"
               aria-label={t('settings.close')}
               onClick={onClose}
             >
-              <X className="ui-icon" size={16} color="currentColor" aria-hidden />
-            </button>
+              <CloseOutlined style={{ fontSize: 13 }} />
+            </Button>
           </Tooltip>
         </div>
-        <div className="modal-body">
-          {children}
-        </div>
-        {footer && (
-          <div className="modal-footer">
-            {footer}
-          </div>
-        )}
-      </div>
-    </div>
+      }
+      onCancel={onClose}
+      footer={footer ?? null}
+      width={wide ? 960 : 720}
+      zIndex={zIndex}
+      maskClosable={false}
+      keyboard={closeOnEsc}
+      destroyOnHidden
+    >
+      {children}
+    </Modal>
   )
 }

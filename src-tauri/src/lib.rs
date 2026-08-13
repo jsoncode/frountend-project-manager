@@ -378,6 +378,17 @@ async fn git_commit(
 }
 
 #[tauri::command(async)]
+async fn git_log(
+    path: String,
+    branch: Option<String>,
+    limit: Option<usize>,
+) -> Result<Vec<git::GitLogEntry>, String> {
+    tauri::async_runtime::spawn_blocking(move || git::git_log(&path, branch.as_deref(), limit))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command(async)]
 async fn git_merge_status(path: String) -> Result<git::MergeStatus, String> {
     tauri::async_runtime::spawn_blocking(move || git::git_merge_status(&path))
         .await
@@ -962,6 +973,7 @@ pub fn run() {
             git_pull_all,
             git_push,
             git_commit,
+            git_log,
             git_merge_status,
             git_merge_start,
             git_merge_file_sides,

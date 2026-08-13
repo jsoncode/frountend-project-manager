@@ -82,6 +82,27 @@ export type GitStatusEntry = {
   label: string
 }
 
+export type GitLogEntry = {
+  /** Full 40-char commit hash. */
+  hash: string
+  /** Abbreviated commit hash (git's default 7+ chars). */
+  shortHash: string
+  authorName: string
+  authorEmail: string
+  /** Author date, strict ISO 8601. */
+  authorDate: string
+  /** Committer date, strict ISO 8601. */
+  committerDate: string
+  /** First line of the commit message. */
+  subject: string
+  /** Rest of the commit message (empty when single-line). */
+  body: string
+  /** Ref decorations, e.g. "HEAD -> main, origin/main, tag: v1.0". */
+  refs: string
+  /** Parent hashes, space-separated (empty for the root commit). */
+  parents: string
+}
+
 export type GitStatus = {
   clean: boolean
   current?: string | null

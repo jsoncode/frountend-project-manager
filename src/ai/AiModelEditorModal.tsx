@@ -1,4 +1,5 @@
-import { Eye, EyeClosed, Save } from 'reicon-react'
+import { SaveOutlined } from '@ant-design/icons'
+import { Button, Input, Select, Switch } from 'antd'
 import { useState } from 'react'
 import { ModalShell } from '../components/ModalShell'
 import { useI18n } from '../i18n/useI18n'
@@ -45,7 +46,6 @@ export function AiModelEditorModal({ initial, onClose, onSave }: Props) {
   const [draft, setDraft] = useState<AiModel>(() => ({ ...initial }))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [showToken, setShowToken] = useState(false)
 
   const patch = (next: Partial<AiModel>) => {
     setDraft((prev) => ({ ...prev, ...next }))
@@ -77,20 +77,17 @@ export function AiModelEditorModal({ initial, onClose, onSave }: Props) {
       nested
       className="ai-model-editor-modal"
       footer={
-        <div className="modal-actions">
-          <button type="button" className="ai-btn" onClick={onClose}>
-            {t('settings.close')}
-          </button>
-          <button
-            type="button"
-            className="ai-btn ai-btn-primary btn-with-icon"
+        <>
+          <Button onClick={onClose}>{t('settings.close')}</Button>
+          <Button
+            type="primary"
+            icon={<SaveOutlined />}
             disabled={saving}
             onClick={() => void save()}
           >
-            <Save className="ui-icon" size={14} color="currentColor" aria-hidden />
             {t('ai.save')}
-          </button>
-        </div>
+          </Button>
+        </>
       }
     >
       <p className="muted" style={{ marginTop: 0 }}>
@@ -99,14 +96,14 @@ export function AiModelEditorModal({ initial, onClose, onSave }: Props) {
       <div className="ai-model-editor-fields">
         <label className="ai-field">
           <span className="muted">{t('ai.modelRemark')}</span>
-          <input
+          <Input
             value={draft.remark}
             onChange={(e) => patch({ remark: e.target.value })}
           />
         </label>
         <label className="ai-field">
           <span className="muted">{t('ai.modelBaseUrl')}</span>
-          <input
+          <Input
             value={draft.baseUrl}
             placeholder="https://api.openai.com/v1"
             onChange={(e) => patch({ baseUrl: e.target.value })}
@@ -114,68 +111,34 @@ export function AiModelEditorModal({ initial, onClose, onSave }: Props) {
         </label>
         <label className="ai-field">
           <span className="muted">{t('ai.modelName')}</span>
-          <input
+          <Input
             value={draft.modelName}
             onChange={(e) => patch({ modelName: e.target.value })}
           />
         </label>
         <label className="ai-field">
           <span className="muted">{t('ai.modelToken')}</span>
-          <div className="ai-field-secret">
-            <input
-              type={showToken ? 'text' : 'password'}
-              autoComplete="off"
-              value={draft.token}
-              onChange={(e) => patch({ token: e.target.value })}
-            />
-            <button
-              type="button"
-              className="ai-field-secret-toggle"
-              aria-label={
-                showToken ? t('ai.hideToken') : t('ai.showToken')
-              }
-              title={showToken ? t('ai.hideToken') : t('ai.showToken')}
-              onClick={() => setShowToken((v) => !v)}
-            >
-              {showToken ? (
-                <EyeClosed
-                  className="ui-icon"
-                  size={16}
-                  color="currentColor"
-                  aria-hidden
-                />
-              ) : (
-                <Eye
-                  className="ui-icon"
-                  size={16}
-                  color="currentColor"
-                  aria-hidden
-                />
-              )}
-            </button>
-          </div>
+          <Input.Password
+            autoComplete="off"
+            value={draft.token}
+            onChange={(e) => patch({ token: e.target.value })}
+          />
         </label>
         <label className="ai-field">
           <span className="muted">{t('ai.modelType')}</span>
-          <select
-            className="ai-field-select"
+          <Select
             value={draft.type}
-            onChange={(e) =>
-              patch({ type: e.target.value as AiModelType })
-            }
-          >
-            {MODEL_TYPES.map((type) => (
-              <option key={type} value={type}>
-                {t(TYPE_LABEL_KEYS[type])}
-              </option>
-            ))}
-          </select>
+            options={MODEL_TYPES.map((type) => ({
+              value: type,
+              label: t(TYPE_LABEL_KEYS[type]),
+            }))}
+            onChange={(v) => patch({ type: v as AiModelType })}
+          />
         </label>
         <label className="ai-enable">
-          <input
-            type="checkbox"
+          <Switch
             checked={draft.active}
-            onChange={(e) => patch({ active: e.target.checked })}
+            onChange={(checked) => patch({ active: checked })}
           />
           {t('ai.modelActive')}
         </label>

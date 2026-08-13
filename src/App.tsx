@@ -17,6 +17,7 @@ import { useTerminalStore } from './stores/terminalStore'
 import { useWorkspaceStore } from './stores/workspaceStore'
 import './styles/tokens.css'
 import './styles/app.css'
+import './styles/antd-overrides.css'
 import './styles/ai.css'
 
 export default function App() {

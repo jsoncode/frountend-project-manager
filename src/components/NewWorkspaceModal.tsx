@@ -1,3 +1,4 @@
+import { Button, Input, type InputRef } from 'antd'
 import { useEffect, useRef, useState } from 'react'
 import { useI18n } from '../i18n/useI18n'
 import { createNewWorkspace } from '../lib/workspaceActions'
@@ -11,7 +12,7 @@ export function NewWorkspaceModal() {
   const close = useWorkspaceUiStore((s) => s.closeNewWorkspace)
   const [newName, setNewName] = useState('')
   const [busy, setBusy] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<InputRef>(null)
 
   useEffect(() => {
     if (!open) return
@@ -44,36 +45,28 @@ export function NewWorkspaceModal() {
         if (!busy) close()
       }}
       footer={
-        <div className="modal-actions">
-          <button
-            type="button"
-            className="btn"
-            disabled={busy}
-            onClick={close}
-          >
+        <>
+          <Button disabled={busy} onClick={close}>
             {t('branch.cancel')}
-          </button>
-          <button
-            type="button"
-            className="btn primary"
+          </Button>
+          <Button
+            type="primary"
             disabled={busy || !newName.trim()}
             onClick={() => void confirmCreate()}
           >
             {t('menu.newWorkspaceNext')}
-          </button>
-        </div>
+          </Button>
+        </>
       }
     >
       <p className="muted">{t('menu.newWorkspaceHint')}</p>
-      <input
+      <Input
         ref={inputRef}
         className="input-block"
         value={newName}
         placeholder={t('menu.newWorkspacePlaceholder')}
         onChange={(e) => setNewName(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') void confirmCreate()
-        }}
+        onPressEnter={() => void confirmCreate()}
         disabled={busy}
       />
     </ModalShell>

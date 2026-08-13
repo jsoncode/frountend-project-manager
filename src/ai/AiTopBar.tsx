@@ -1,4 +1,5 @@
-import { Settings } from 'reicon-react'
+import { SettingOutlined } from '@ant-design/icons'
+import { Button, Select } from 'antd'
 import { useState } from 'react'
 import { Tooltip } from '../components/Tooltip'
 import { useI18n } from '../i18n/useI18n'
@@ -16,35 +17,28 @@ export function AiTopBar() {
   return (
     <>
       <header className="ai-topbar">
-        <select
-          className="ai-model-select"
+        <Select
           aria-label={t('ai.selectModel')}
-          value={selectedModelId ?? ''}
+          value={selectedModelId ?? undefined}
           disabled={activeModels.length === 0}
-          onChange={(e) => {
-            const v = e.target.value
-            setSelectedModelId(v || null)
-          }}
-        >
-          {activeModels.length === 0 ? (
-            <option value="">{t('ai.noActiveModels')}</option>
-          ) : (
-            activeModels.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.remark.trim() || m.modelName}
-              </option>
-            ))
-          )}
-        </select>
+          placeholder={
+            activeModels.length === 0 ? t('ai.noActiveModels') : undefined
+          }
+          options={activeModels.map((m) => ({
+            value: m.id,
+            label: m.remark.trim() || m.modelName,
+          }))}
+          onChange={(v) => setSelectedModelId(v ?? null)}
+          style={{ flex: 1, minWidth: 180, maxWidth: 320 }}
+        />
         <Tooltip title={t('ai.settings')} placement="bottom">
-          <button
-            type="button"
-            className="ai-btn ai-btn-sm ai-topbar-settings"
+          <Button
+            type="text"
+            className="ai-topbar-settings"
             aria-label={t('ai.settings')}
+            icon={<SettingOutlined style={{ fontSize: 18 }} />}
             onClick={() => setSettingsOpen(true)}
-          >
-            <Settings className="ui-icon" size={20} color="currentColor" aria-hidden />
-          </button>
+          />
         </Tooltip>
       </header>
       {settingsOpen ? (

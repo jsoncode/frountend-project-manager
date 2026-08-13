@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { Button, Input, type InputRef } from 'antd'
+import { useEffect, useRef, useState } from 'react'
 import { useI18n } from '../i18n/useI18n'
 import { ModalShell } from './ModalShell'
 
@@ -17,17 +18,18 @@ export function RenameModal({ initial, selectStem, onSubmit, onClose }: Props) {
   const [value, setValue] = useState(initial)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<InputRef>(null)
 
   useEffect(() => {
     const el = inputRef.current
-    if (!el) return
-    el.focus()
+    const native = el?.nativeElement as HTMLInputElement | null
+    if (!native) return
+    native.focus()
     if (selectStem) {
       const dot = initial.lastIndexOf('.')
-      el.setSelectionRange(0, dot > 0 ? dot : initial.length)
+      native.setSelectionRange(0, dot > 0 ? dot : initial.length)
     } else {
-      el.select()
+      native.select()
     }
   }, [initial, selectStem])
 
@@ -50,43 +52,29 @@ export function RenameModal({ initial, selectStem, onSubmit, onClose }: Props) {
     }
   }
 
-  const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      void submit()
-    }
-  }
-
   return (
     <ModalShell
       title={t('fs.rename')}
       onClose={onClose}
       footer={
-        <div className="modal-actions">
-          <button type="button" className="btn" onClick={onClose}>
-            {t('branch.cancel')}
-          </button>
-          <button
-            type="button"
-            className="btn primary"
-            disabled={busy}
-            onClick={() => void submit()}
-          >
+        <>
+          <Button onClick={onClose}>{t('branch.cancel')}</Button>
+          <Button type="primary" disabled={busy} onClick={() => void submit()}>
             {t('fs.rename')}
-          </button>
-        </div>
+          </Button>
+        </>
       }
     >
       <label className="muted" style={{ display: 'block', marginBottom: 6 }}>
         {t('fs.newName')}
       </label>
-      <input
+      <Input
         ref={inputRef}
         className="input-block"
         value={value}
         disabled={busy}
         onChange={(e) => setValue(e.target.value)}
-        onKeyDown={onKeyDown}
+        onPressEnter={() => void submit()}
       />
       {error && <p className="branch-menu-error" style={{ marginTop: 8 }}>{error}</p>}
     </ModalShell>

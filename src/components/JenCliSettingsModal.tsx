@@ -1,4 +1,6 @@
-import { Settings, TerminalSquare } from 'reicon-react'
+import { SettingOutlined } from '@ant-design/icons'
+import { Button, Input, Segmented, Select, Switch } from 'antd'
+import { TerminalSquare } from 'reicon-react'
 import { invoke } from '@tauri-apps/api/core'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useI18n } from '../i18n/useI18n'
@@ -294,80 +296,61 @@ function JenCliServersManageModal({
       className="jen-cli-servers-modal"
       closeOnEsc={!saving}
       footer={
-        <div className="modal-actions">
-          <button
-            type="button"
-            className="btn"
+        <>
+          <Button
             disabled={saving}
             onClick={() => void resetExample()}
           >
             {t('jenCli.resetExample')}
-          </button>
-          <button type="button" className="btn" disabled={saving} onClick={onClose}>
+          </Button>
+          <Button disabled={saving} onClick={onClose}>
             {t('branch.cancel')}
-          </button>
-          <button
-            type="button"
-            className="btn primary"
+          </Button>
+          <Button
+            type="primary"
             disabled={saving}
             onClick={() => void save()}
           >
             {saving ? t('jenCli.saving') : t('jenCli.saveServers')}
-          </button>
-        </div>
+          </Button>
+        </>
       }
     >
       <p className="muted" style={{ marginTop: 0 }}>
         {t('jenCli.serversHint')}
       </p>
       <div className="jen-cli-mode-tabs">
-        <button
-          type="button"
-          className={`btn btn-sm${mode === 'form' ? ' primary' : ''}`}
-          onClick={() => {
-            if (mode === 'json') applyJsonToForm()
-            setMode('form')
+        <Segmented
+          value={mode}
+          onChange={(v) => {
+            const next = v as 'form' | 'json'
+            if (next === 'json' && mode === 'form') syncJsonFromForm()
+            if (next === 'form' && mode === 'json') applyJsonToForm()
+            setMode(next)
           }}
-        >
-          {t('jenCli.serversModeForm')}
-        </button>
-        <button
-          type="button"
-          className={`btn btn-sm${mode === 'json' ? ' primary' : ''}`}
-          onClick={() => {
-            if (mode === 'form') syncJsonFromForm()
-            setMode('json')
-          }}
-        >
-          {t('jenCli.serversModeJson')}
-        </button>
+          options={[
+            { label: t('jenCli.serversModeForm'), value: 'form' },
+            { label: t('jenCli.serversModeJson'), value: 'json' },
+          ]}
+        />
       </div>
 
       {mode === 'form' && (
         <>
           <label className="field-label">
             {t('jenCli.defaultServer')}
-            <select
-              className="input-block"
+            <Select
+              style={{ width: '100%' }}
               value={defaultServer}
-              onChange={(e) => setDefaultServer(e.target.value)}
-            >
-              {aliases.length === 0 ? (
-                <option value="">{t('jenCli.serversEmpty')}</option>
-              ) : (
-                aliases.map((a) => (
-                  <option key={a} value={a}>
-                    {a}
-                  </option>
-                ))
-              )}
-            </select>
+              onChange={(v) => setDefaultServer(v)}
+              options={aliases.map((a) => ({ value: a, label: a }))}
+              placeholder={aliases.length === 0 ? t('jenCli.serversEmpty') : undefined}
+            />
           </label>
           <div className="jen-cli-server-list">
             {rows.map((row, idx) => (
               <div key={idx} className="jen-cli-server-card">
-                <input
-                  className="input-block"
+                <Input
                   placeholder="alias"
                   value={row.alias}
                   onChange={(e) => {
@@ -377,8 +360,7 @@ function JenCliServersManageModal({
                     )
                   }}
                 />
-                <input
-                  className="input-block"
+                <Input
                   placeholder="baseUrl"
                   value={row.baseUrl}
                   onChange={(e) => {
@@ -388,8 +370,7 @@ function JenCliServersManageModal({
                     )
                   }}
                 />
-                <input
-                  className="input-block"
+                <Input
                   placeholder="username"
                   value={row.username}
                   onChange={(e) => {
@@ -399,8 +380,7 @@ function JenCliServersManageModal({
                     )
                   }}
                 />
-                <input
-                  className="input-block"
+                <Input
                   placeholder="apiToken"
                   type="password"
                   value={row.apiToken}
@@ -411,19 +391,18 @@ function JenCliServersManageModal({
                     )
                   }}
                 />
-                <button
-                  type="button"
-                  className="btn btn-sm danger"
+                <Button
+                  size="small"
+                  danger
                   onClick={() => setRows((rs) => rs.filter((_, i) => i !== idx))}
                 >
                   {t('jenCli.removeServer')}
-                </button>
+                </Button>
               </div>
             ))}
           </div>
-          <button
-            type="button"
-            className="btn btn-sm"
+          <Button
+            size="small"
             style={{ marginTop: 8 }}
             onClick={() =>
               setRows((rs) => [
@@ -433,14 +412,14 @@ function JenCliServersManageModal({
             }
           >
             {t('jenCli.addServer')}
-          </button>
+          </Button>
         </>
       )}
 
       {mode === 'json' && (
         <>
           <p className="muted">{t('jenCli.serversJsonHint')}</p>
-          <textarea
+          <Input.TextArea
             className="jen-cli-json-editor user-select-text"
             spellCheck={false}
             value={jsonText}
@@ -628,36 +607,21 @@ export function JenCliSettingsModal({ inline, onClosePanel }: JenCliSettingsModa
               <h4>{t('jenCli.serversTitle')}</h4>
               <p className="muted">{t('jenCli.serverSelectHint')}</p>
               <div className="jen-cli-server-select-row">
-                <select
-                  className="input-block"
+                <Select
+                  style={{ width: '100%' }}
                   value={defaultServer}
                   disabled={saving || aliases.length === 0}
-                  onChange={(e) => void selectDefaultServer(e.target.value)}
-                >
-                  {aliases.length === 0 ? (
-                    <option value="">{t('jenCli.serversEmpty')}</option>
-                  ) : (
-                    aliases.map((a) => (
-                      <option key={a} value={a}>
-                        {a}
-                      </option>
-                    ))
-                  )}
-                </select>
+                  onChange={(v) => void selectDefaultServer(v)}
+                  options={aliases.map((a) => ({ value: a, label: a }))}
+                  placeholder={aliases.length === 0 ? t('jenCli.serversEmpty') : undefined}
+                />
                 <Tooltip title={t('jenCli.manageServers')}>
-                  <button
-                    type="button"
-                    className="btn btn-sm jen-cli-server-gear"
+                  <Button
+                    size="small"
                     aria-label={t('jenCli.manageServers')}
+                    icon={<SettingOutlined style={{ fontSize: 14 }} />}
                     onClick={() => setServersOpen(true)}
-                  >
-                    <Settings
-                      className="ui-icon"
-                      size={14}
-                      color="currentColor"
-                      aria-hidden
-                    />
-                  </button>
+                  />
                 </Tooltip>
               </div>
             </section>
@@ -668,28 +632,27 @@ export function JenCliSettingsModal({ inline, onClosePanel }: JenCliSettingsModa
               <div className="jen-cli-grid">
                 <label className="field-label">
                   --job
-                  <input
-                    className="input-block"
+                  <Input
                     value={cliJob}
                     onChange={(e) => setCliJob(e.target.value)}
                   />
                 </label>
                 <label className="field-label">
                   --interval
-                  <input
-                    className="input-block"
+                  <Input
                     type="number"
                     value={cliInterval}
                     onChange={(e) => setCliInterval(Number(e.target.value))}
                   />
                 </label>
                 <label className="checkbox-row">
-                  <input
-                    type="checkbox"
+                  <Switch
                     checked={cliConsole}
-                    onChange={(e) => setCliConsole(e.target.checked)}
+                    onChange={setCliConsole}
                   />
-                  {t('jenCli.consoleDefault')}
+                  <span onClick={() => setCliConsole(!cliConsole)}>
+                    {t('jenCli.consoleDefault')}
+                  </span>
                 </label>
               </div>
 
@@ -703,8 +666,7 @@ export function JenCliSettingsModal({ inline, onClosePanel }: JenCliSettingsModa
               <div className="jen-cli-kv-list">
                 {paramRows.map((row) => (
                   <div key={row.id} className="jen-cli-kv-row">
-                    <input
-                      className="input-block"
+                    <Input
                       placeholder="key"
                       value={row.key}
                       onChange={(e) => {
@@ -716,8 +678,7 @@ export function JenCliSettingsModal({ inline, onClosePanel }: JenCliSettingsModa
                         )
                       }}
                     />
-                    <input
-                      className="input-block"
+                    <Input
                       placeholder="value"
                       value={row.value}
                       onChange={(e) => {
@@ -729,22 +690,21 @@ export function JenCliSettingsModal({ inline, onClosePanel }: JenCliSettingsModa
                         )
                       }}
                     />
-                    <button
-                      type="button"
-                      className="btn btn-sm danger"
+                    <Button
+                      size="small"
+                      danger
                       onClick={() =>
                         setParamRows((rs) => rs.filter((r) => r.id !== row.id))
                       }
                     >
                       {t('jenCli.removeParam')}
-                    </button>
+                    </Button>
                   </div>
                 ))}
               </div>
-              <div className="modal-actions" style={{ marginTop: 8 }}>
-                <button
-                  type="button"
-                  className="btn btn-sm"
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end', marginTop: 8 }}>
+                <Button
+                  size="small"
                   onClick={() =>
                     setParamRows((rs) => [
                       ...rs,
@@ -753,10 +713,9 @@ export function JenCliSettingsModal({ inline, onClosePanel }: JenCliSettingsModa
                   }
                 >
                   {t('jenCli.addParam')}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-sm"
+                </Button>
+                <Button
+                  size="small"
                   onClick={() =>
                     setParamRows(
                       DEFAULT_PARAM_SEED.map((s) => ({ id: newId(), ...s })),
@@ -764,15 +723,15 @@ export function JenCliSettingsModal({ inline, onClosePanel }: JenCliSettingsModa
                   }
                 >
                   {t('jenCli.resetParams')}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-sm primary"
+                </Button>
+                <Button
+                  size="small"
+                  type="primary"
                   disabled={saving}
                   onClick={() => void saveDefaults()}
                 >
                   {t('jenCli.saveDefaults')}
-                </button>
+                </Button>
               </div>
             </section>
 
@@ -793,13 +752,14 @@ export function JenCliSettingsModal({ inline, onClosePanel }: JenCliSettingsModa
               <h4>{t('jenCli.pathTitle')}</h4>
               <p className="muted">{t('jenCli.pathHint')}</p>
               <label className="checkbox-row">
-                <input
-                  type="checkbox"
+                <Switch
                   checked={pathEnabled}
                   disabled={saving}
-                  onChange={(e) => void togglePath(e.target.checked)}
+                  onChange={(v) => void togglePath(v)}
                 />
-                {t('jenCli.pathEnable')}
+                <span onClick={() => void togglePath(!pathEnabled)}>
+                  {t('jenCli.pathEnable')}
+                </span>
               </label>
               <p className="muted" style={{ fontSize: 12 }}>
                 {t('jenCli.shimPath', { path: state.paths.shimDir })}
@@ -811,11 +771,11 @@ export function JenCliSettingsModal({ inline, onClosePanel }: JenCliSettingsModa
   )
 
   const contentFooter = (
-    <div className="modal-actions">
-      <button type="button" className="btn" onClick={handleClose}>
+    <>
+      <Button onClick={handleClose}>
         {t('settings.close')}
-      </button>
-    </div>
+      </Button>
+    </>
   )
 
   if (inline) {

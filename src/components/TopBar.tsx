@@ -1,6 +1,7 @@
 import { Atom, ChatRoundDots, Settings } from 'reicon-react'
 import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
+import { Button } from 'antd'
 import type { MouseEvent } from 'react'
 import { useI18n } from '../i18n/useI18n'
 import { isTauri } from '../lib/tauri'
@@ -14,7 +15,7 @@ import { WindowControls } from './WindowControls'
 
 /** Interactive chrome — must not start a window drag. */
 const NO_DRAG_CLOSEST =
-  'button, input, a, select, textarea, label, .search-wrap, .title-menu, .window-controls'
+  'button, input, a, select, textarea, label, .search-wrap, .title-menu, .window-controls, .ant-select, .ant-dropdown-trigger'
 
 export function TopBar() {
   const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace)
@@ -69,24 +70,25 @@ export function TopBar() {
       </div>
       <div className="topbar-end">
         <Tooltip title={t('top.settings')} placement="bottom">
-          <button
-            type="button"
-            className="btn icon-only"
+          <Button
+            type="text"
+            className="topbar-icon-btn"
             aria-label={t('top.settings')}
             onClick={() => setSettingsOpen(true)}
           >
             <Settings className="ui-icon" size={16} color="currentColor" aria-hidden />
-          </button>
+          </Button>
         </Tooltip>
         <Tooltip title={t('top.aiTitle')} placement="bottom">
-          <button
-            type="button"
-            className="btn primary btn-with-icon ai-launch-btn"
+          <Button
+            type="primary"
+            size="small"
+            className="ai-launch-btn"
             onClick={openAi}
           >
             <ChatRoundDots className="ui-icon" size={15} color="currentColor" aria-hidden />
             {t('top.ai')}
-          </button>
+          </Button>
         </Tooltip>
         <WindowControls />
       </div>

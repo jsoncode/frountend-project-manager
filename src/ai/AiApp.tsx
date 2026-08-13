@@ -7,6 +7,7 @@ import { AiSidebar } from './AiSidebar'
 import { AiTopBar } from './AiTopBar'
 import '../styles/tokens.css'
 import '../styles/app.css'
+import '../styles/antd-overrides.css'
 import '../styles/ai.css'
 
 export default function AiApp() {
