@@ -29,6 +29,11 @@ type ProjectState = {
   refresh: () => Promise<void>
   refreshGit: (opts?: { fetch?: boolean }) => Promise<void>
   refreshGitStatus: () => Promise<void>
+  /** Full git re-check for one project (used on project expand). */
+  refreshProjectGitStatus: (
+    projectPath: string,
+    opts?: { fetch?: boolean },
+  ) => Promise<void>
   refreshMergeStatus: () => Promise<void>
 }
 
@@ -202,6 +207,49 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       set({
         gitStatus: null,
         gitDecorations: EMPTY_GIT_DECORATIONS,
+      })
+    }
+  },
+  /**
+   * Full git re-check for one project — used when a project is expanded so
+   * the 待提交/待拉取 badges stay as real-time as possible. Best-effort
+   * `git fetch` runs first so "behind" counts reflect the latest remote tips
+   * (offline repos simply keep their last refs), then branches + status +
+   * merge are fetched. Always syncs the workspaceStore summary (explorer
+   * badges); when the project is the selected one, projectStore state is
+   * synced too (branch panel, file decorations, merge modal).
+   * Pass `opts.fetch === false` when refs are already fresh (pull / checkout
+   * / explicit fetch) to skip the network round-trip.
+   */
+  refreshProjectGitStatus: async (projectPath, opts) => {
+    if (opts?.fetch !== false) {
+      await invoke('git_fetch', { path: projectPath }).catch(() => {})
+    }
+    const [git, gitStatus, mergeStatus] = await Promise.all([
+      invoke<GitInfo | null>('git_branches', { path: projectPath }).catch(() => null),
+      invoke<GitStatus>('git_status', { path: projectPath }).catch(() => null),
+      invoke<MergeStatus>('git_merge_status', { path: projectPath }).catch(() => null),
+    ])
+    const rawBranch = git?.current ?? gitStatus?.current
+    const currentBranch =
+      rawBranch && rawBranch !== 'HEAD' ? rawBranch : undefined
+    const behind = maxBranchBehind(git)
+    useWorkspaceStore.getState().updateProjectStatus(projectPath, {
+      gitInfo: git,
+      gitStatus,
+      currentBranch,
+      changedFiles: gitStatus ? gitStatus.entries.length : undefined,
+      behind,
+    })
+    const ps = get()
+    if (ps.selected?.path === projectPath) {
+      set({
+        git,
+        gitStatus,
+        mergeStatus,
+        gitDecorations: gitStatus
+          ? buildGitDecorationIndex(projectPath, gitStatus.entries)
+          : ps.gitDecorations,
       })
     }
   },

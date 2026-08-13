@@ -26,7 +26,6 @@ import {
 } from 'react'
 import { useI18n } from '../i18n/useI18n'
 import {
-  buildGitDecorationIndex,
   normalizeFsPath,
   toProjectRelative,
   unquoteGitPath,
@@ -488,37 +487,41 @@ export function Explorer() {
     }
   }, [])
 
-  /** Refresh git info after branch switch and sync to workspaceStore cache. */
+  /**
+   * Refresh git info after branch switch / pull / checkout and sync to
+   * workspaceStore cache. These ops already have fresh refs locally, so the
+   * network fetch is skipped.
+   */
   const refreshProjGitAfterSwitch = async (projectPath: string) => {
     try {
-      const [info, status] = await Promise.all([
-        invoke<GitInfo | null>('git_branches', { path: projectPath }).catch(() => null),
-        invoke<GitStatus>('git_status', { path: projectPath }).catch(() => null),
-      ])
-      const rawBranch = info?.current ?? status?.current
-      const currentBranch = (rawBranch && rawBranch !== 'HEAD') ? rawBranch : undefined
-      // Same derivation as the scan so the badge and branch panel agree.
-      const behind = maxBranchBehind(info)
-      useWorkspaceStore.getState().updateProjectStatus(projectPath, {
-        gitInfo: info,
-        gitStatus: status,
-        currentBranch,
-        changedFiles: status ? status.entries.length : undefined,
-        behind,
-      })
-      // Also update projGitInfo so the context menu reflects new state
+      await useProjectStore
+        .getState()
+        .refreshProjectGitStatus(projectPath, { fetch: false })
+      // Context menu reads gitInfo from local state — pick up the fresh one.
+      const info =
+        useWorkspaceStore.getState().projectStatuses[projectPath]?.gitInfo ??
+        null
       setProjGitInfo({ path: projectPath, info })
-      // If this is the currently selected project, sync projectStore too (ActionBar branch panel)
-      const ps = useProjectStore.getState()
-      if (ps.selected?.path === projectPath) {
-        useProjectStore.setState({
-          git: info ?? null,
-          gitStatus: status,
-          gitDecorations: status ? buildGitDecorationIndex(projectPath, status.entries) : ps.gitDecorations,
-        })
-      }
     } catch {
       // ignore
+    }
+  }
+
+  /**
+   * On project expand: re-check the project's git state (fetch-first, best
+   * effort) so the 待提交/待拉取 badges reflect the latest remote tips; the
+   * row spinner shows while it runs.
+   */
+  const refreshExpandedGit = async (projectPath: string) => {
+    setStatusChecking((prev) => new Set(prev).add(projectPath))
+    try {
+      await useProjectStore.getState().refreshProjectGitStatus(projectPath)
+    } finally {
+      setStatusChecking((prev) => {
+        const next = new Set(prev)
+        next.delete(projectPath)
+        return next
+      })
     }
   }
 
@@ -574,14 +577,14 @@ export function Explorer() {
         el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       }, 50)
     }
-    if (willOpen) {
+    if (willOpen || fromSearch) {
       expandOnlyProject(workspace, p.path)
       void loadDir(p.path, true)
-    } else if (!fromSearch) {
-      setExpanded((prev: string[]) => prev.filter((x) => x !== id))
+      // Fresh git status (fetch-first) so the badges show current
+      // 待提交/待拉取 counts the moment the project is expanded.
+      void refreshExpandedGit(p.path)
     } else {
-      expandOnlyProject(workspace, p.path)
-      void loadDir(p.path, true)
+      setExpanded((prev: string[]) => prev.filter((x) => x !== id))
     }
   }
 
