@@ -11,6 +11,12 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
+    watch: {
+      // Never watch Rust build output: cargo relinks app_lib.dll while the
+      // previous instance may still hold it, and watching that file crashes
+      // the dev server with EBUSY (killing `tauri dev`).
+      ignored: ['**/src-tauri/target/**'],
+    },
   },
   optimizeDeps: {
     include: ['monaco-editor'],

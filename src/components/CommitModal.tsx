@@ -14,6 +14,8 @@ type Props = {
   paths?: string[]
   /** Show a "Commit & Push" button in addition to "Commit". */
   showPush?: boolean
+  /** Fired when the backend commit/push operation starts / finishes. */
+  onBusyChange?: (busy: boolean) => void
   onClose: () => void
   onDone: () => void
 }
@@ -23,6 +25,7 @@ export function CommitModal({
   branch,
   paths,
   showPush,
+  onBusyChange,
   onClose,
   onDone,
 }: Props) {
@@ -39,6 +42,7 @@ export function CommitModal({
     if (!msg || busy) return
     setBusy(true)
     setBusyLabel(push ? t('git.pushing') : t('git.committing'))
+    onBusyChange?.(true)
 
     try {
       // Backend-driven: stage → commit → optional push in one call,
@@ -68,6 +72,7 @@ export function CommitModal({
     } finally {
       setBusy(false)
       setBusyLabel('')
+      onBusyChange?.(false)
     }
   }
 

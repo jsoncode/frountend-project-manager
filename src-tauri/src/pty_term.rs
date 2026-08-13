@@ -94,6 +94,7 @@ fn shell_command(cwd: &Path) -> CommandBuilder {
 
 fn kill_session_locked(map: &mut HashMap<String, PtySession>, terminal_id: &str) -> bool {
     if let Some(mut session) = map.remove(terminal_id) {
+        log::info!("[pty] killing session {terminal_id}");
         let _ = session.killer.kill();
         true
     } else {
@@ -126,6 +127,7 @@ pub fn spawn(
 
     let cwd_path = Path::new(&cwd);
     if !cwd_path.is_dir() {
+        log::error!("[pty] spawn {terminal_id}: 工作目录无效: {cwd}");
         return Err(format!("工作目录无效: {cwd}"));
     }
 
@@ -137,14 +139,21 @@ pub fn spawn(
             pixel_width: 0,
             pixel_height: 0,
         })
-        .map_err(|e| format!("打开 PTY 失败: {e}"))?;
+        .map_err(|e| {
+            log::error!("[pty] spawn {terminal_id}: openpty 失败: {e}");
+            format!("打开 PTY 失败: {e}")
+        })?;
 
     let mut cmd = shell_command(cwd_path);
     crate::jen_cli::apply_pty_env(&app, &mut cmd);
     let mut child = pair
         .slave
         .spawn_command(cmd)
-        .map_err(|e| format!("启动 shell 失败: {e}"))?;
+        .map_err(|e| {
+            log::error!("[pty] spawn {terminal_id}: 启动 shell 失败: {e}");
+            format!("启动 shell 失败: {e}")
+        })?;
+    log::info!("[pty] spawn {terminal_id}: shell started, cwd={cwd}");
 
     let killer = child.clone_killer();
     let mut reader = pair
@@ -214,8 +223,14 @@ pub fn spawn(
     thread::spawn(move || {
         let code = match child.wait() {
             Ok(status) => Some(status.exit_code()),
-            Err(_) => None,
+            Err(e) => {
+                log::error!("[pty] {tid_wait}: wait 失败: {e}");
+                None
+            }
         };
+        if let Some(c) = code {
+            log::warn!("[pty] {tid_wait}: shell exited with code {c}");
+        }
         {
             let mut map = SESSIONS.lock();
             map.remove(&tid_wait);
