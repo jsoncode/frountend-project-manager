@@ -59,6 +59,16 @@ description = "Update every branch that has pending commits"
 commands.allow = ["git_pull_all"]
 
 [[permission]]
+identifier = "allow-git-push"
+description = "Push the current or a given branch"
+commands.allow = ["git_push"]
+
+[[permission]]
+identifier = "allow-git-commit"
+description = "Stage, commit and optionally push in one step"
+commands.allow = ["git_commit"]
+
+[[permission]]
 identifier = "allow-git-merge-status"
 description = "Get in-progress merge status and conflict files"
 commands.allow = ["git_merge_status"]

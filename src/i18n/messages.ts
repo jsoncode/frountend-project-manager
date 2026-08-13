@@ -7,6 +7,9 @@ const zh = {
   'app.selectProject': '从左侧资源管理器选择项目或文件。',
   'app.tauriOnly': '请通过 pnpm tauri:dev 启动桌面应用',
   'error.logTitle': '错误日志',
+  'error.gitFailed': 'Git 操作失败',
+  'error.copy': '复制',
+  'error.copied': '已复制',
 
   'top.search': '⌕ 跨工作区搜索项目…',
   'top.settings': '设置',
@@ -496,6 +499,9 @@ const en: Record<MessageKey, string> = {
   'app.selectProject': 'Select a project or file in the explorer.',
   'app.tauriOnly': 'Please launch via pnpm tauri:dev',
   'error.logTitle': 'Error log',
+  'error.gitFailed': 'Git operation failed',
+  'error.copy': 'Copy',
+  'error.copied': 'Copied',
 
   'top.search': '⌕ search across workspaces…',
   'top.settings': 'Settings',

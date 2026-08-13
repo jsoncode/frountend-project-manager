@@ -1,9 +1,8 @@
 import { invoke } from '@tauri-apps/api/core'
 import { useState } from 'react'
 import { useI18n } from '../i18n/useI18n'
-import { writeHostToTerminal } from '../lib/ptyHost'
 import type { MergeStatus } from '../lib/types'
-import { useTerminalStore } from '../stores/terminalStore'
+import { showErrorLog } from '../stores/errorLogStore'
 import { MergeConflictModal } from './MergeConflictModal'
 import { ModalShell } from './ModalShell'
 
@@ -21,7 +20,6 @@ type Props = {
 
 export function CommitModal({
   projectPath,
-  projectName,
   branch,
   paths,
   showPush,
@@ -34,46 +32,7 @@ export function CommitModal({
   const [mergeModal, setMergeModal] = useState<MergeStatus | null>(null)
   const { t } = useI18n()
 
-  const ensureRunTarget = useTerminalStore((s) => s.ensureRunTarget)
-  const runInSession = useTerminalStore((s) => s.runInSession)
-  const waitUntilIdle = useTerminalStore((s) => s.waitUntilIdle)
-
   const hasPaths = paths && paths.length > 0
-
-  /** Run a git command in the PTY and wait for the prompt. */
-  const runGitInTerm = async (command: string) => {
-    const id = ensureRunTarget(projectPath, projectName)
-    await runInSession(id, projectPath, command)
-    await waitUntilIdle(id)
-  }
-
-  const echoTerm = (text: string) => {
-    const id = ensureRunTarget(projectPath, projectName, { allowBusy: true })
-    writeHostToTerminal(id, text)
-  }
-
-  const buildCommitCommands = (msg: string, push: boolean): string[] => {
-    const quoted = JSON.stringify(msg)
-    const cmds: string[] = []
-
-    // Stage
-    if (hasPaths) {
-      const escaped = paths!.map((p) => JSON.stringify(p)).join(' ')
-      cmds.push(`git add ${escaped}`)
-    } else {
-      cmds.push('git add -A')
-    }
-
-    // Commit
-    cmds.push(`git commit -m ${quoted}`)
-
-    // Push (optional)
-    if (push) {
-      cmds.push('git push')
-    }
-
-    return cmds
-  }
 
   const doCommit = async (push: boolean) => {
     const msg = commitMsg.trim()
@@ -82,11 +41,14 @@ export function CommitModal({
     setBusyLabel(push ? t('git.pushing') : t('git.committing'))
 
     try {
-      const cmds = buildCommitCommands(msg, push)
-      const chain = cmds.join('; if ($?) { ') + ' }'.repeat(cmds.length - 1)
-
-      echoTerm(`\r\n\x1b[36m$ ${cmds.join(' && ')}\x1b[0m\r\n`)
-      await runGitInTerm(chain)
+      // Backend-driven: stage → commit → optional push in one call,
+      // no terminal session required.
+      await invoke<string>('git_commit', {
+        path: projectPath,
+        message: msg,
+        paths: paths ?? [],
+        push,
+      })
 
       // Check for merge conflicts after commit (unlikely but possible with hooks)
       const status = await invoke<MergeStatus>('git_merge_status', {
@@ -100,7 +62,9 @@ export function CommitModal({
 
       onDone()
     } catch (e) {
-      echoTerm(`\r\n\x1b[31m${String(e)}\x1b[0m\r\n`)
+      // Failure details go to the dedicated copyable error modal;
+      // the commit modal stays open so the message can be retried.
+      showErrorLog(e, t('error.gitFailed'))
     } finally {
       setBusy(false)
       setBusyLabel('')
@@ -194,7 +158,9 @@ export function CommitModal({
         className="git-commit-input"
         rows={4}
         value={commitMsg}
-        onChange={(e) => setCommitMsg(e.target.value)}
+        onChange={(e) => {
+          setCommitMsg(e.target.value)
+        }}
         placeholder={t('git.commitPlaceholder')}
         disabled={busy}
         autoFocus

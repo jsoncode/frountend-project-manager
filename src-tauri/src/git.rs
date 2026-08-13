@@ -433,6 +433,105 @@ pub fn git_fetch(path: &str) -> Result<String, String> {
     })
 }
 
+/// Push the current branch (or a given branch) without a terminal.
+/// No upstream configured → retries once with `-u origin HEAD`.
+pub fn git_push(path: &str, branch: Option<&str>) -> Result<String, String> {
+    require_git_repo(path)?;
+
+    let output = match branch.map(str::trim).filter(|b| !b.is_empty()) {
+        Some(b) => {
+            let local = normalize_branch_name(b);
+            let spec = format!("{local}:{local}");
+            git_command(path)
+                .args(["push", "-u", "origin", &spec])
+                .output()
+                .map_err(|e| e.to_string())?
+        }
+        None => git_command(path)
+            .args(["push"])
+            .output()
+            .map_err(|e| e.to_string())?,
+    };
+
+    if output.status.success() {
+        return Ok(pretty_push_output(&output));
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    // Current branch without upstream → configure it and retry once.
+    if branch.is_none()
+        && (stderr.contains("has no upstream branch") || stderr.contains("--set-upstream"))
+    {
+        let retry = git_command(path)
+            .args(["push", "-u", "origin", "HEAD"])
+            .output()
+            .map_err(|e| e.to_string())?;
+        if retry.status.success() {
+            return Ok(pretty_push_output(&retry));
+        }
+        let err = String::from_utf8_lossy(&retry.stderr).trim().to_string();
+        return Err(if err.is_empty() { "git push 失败".into() } else { err });
+    }
+
+    let err = stderr.trim().to_string();
+    Err(if err.is_empty() { "git push 失败".into() } else { err })
+}
+
+fn pretty_push_output(output: &std::process::Output) -> String {
+    let msg = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let msg = msg.trim().to_string();
+    if msg.is_empty() {
+        "push ok".into()
+    } else {
+        msg
+    }
+}
+
+/// Stage → commit → optional push, all in one backend call (no terminal).
+/// Empty `paths` stages everything (`git add -A`).
+pub fn git_commit(
+    path: &str,
+    message: &str,
+    paths: &[String],
+    push: bool,
+) -> Result<String, String> {
+    require_git_repo(path)?;
+    let message = message.trim();
+    if message.is_empty() {
+        return Err("提交信息为空".into());
+    }
+
+    let mut add_args: Vec<String> = vec!["add".into()];
+    if paths.is_empty() {
+        add_args.push("-A".into());
+    } else {
+        add_args.push("--".into());
+        add_args.extend(paths.iter().cloned());
+    }
+    let add_refs: Vec<&str> = add_args.iter().map(String::as_str).collect();
+    run_git_collect(path, &add_refs).map_err(|e| format!("git add 失败：{e}"))?;
+
+    let commit_out = run_git_collect(path, &["commit", "-m", message])
+        .map_err(|e| format!("git commit 失败：{e}"))?;
+    let commit_note = commit_out.trim().to_string();
+    let mut notes = vec![if commit_note.is_empty() {
+        "commit ok".to_string()
+    } else {
+        commit_note
+    }];
+
+    if push {
+        git_push(path, None)?;
+        notes.push("已推送到远程".into());
+    }
+
+    Ok(notes.join("；"))
+}
+
 pub fn git_status(path: &str) -> Result<GitStatus, String> {
     // Accept both repo roots and nested folders inside a work tree.
     let inside = git_command(path)

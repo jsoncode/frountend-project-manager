@@ -10,6 +10,7 @@ import {
   ChevronRight,
   Document,
   Folder2,
+  Loader,
   Pen,
   Refresh,
   Trash,
@@ -37,6 +38,7 @@ import {
   shortWorkspaceName,
 } from '../lib/workspacePath'
 import { useExplorerStore } from '../stores/explorerStore'
+import { showErrorLog } from '../stores/errorLogStore'
 import { useProjectStore } from '../stores/projectStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useTerminalStore } from '../stores/terminalStore'
@@ -273,15 +275,6 @@ export function Explorer() {
     void useTerminalStore.getState().runRaw(projectPath, name, command)
   }
 
-  const projRunGitInTerm = async (projectPath: string, command: string) => {
-    const proj = findProject(projectPath)
-    const name = proj?.folderName ?? projectPath.split('/').pop() ?? projectPath
-    const { ensureRunTarget, runInSession, waitUntilIdle } = useTerminalStore.getState()
-    const id = ensureRunTarget(projectPath, name)
-    await runInSession(id, projectPath, command)
-    await waitUntilIdle(id)
-  }
-
   const fetchProjGitInfo = useCallback(async (projectPath: string) => {
     // First check workspaceStore cache (populated by scanAllProjectStatuses or selectProject)
     const cached = useWorkspaceStore.getState().projectStatuses[projectPath]
@@ -354,7 +347,7 @@ export function Explorer() {
         setBranchSwitchTarget({ projectPath, branch: branchName })
       }
     } catch (e) {
-      projRunGit(projectPath, `echo "${String(e)}"`)
+      showErrorLog(e, t('error.gitFailed'))
     }
   }
 
@@ -771,7 +764,7 @@ export function Explorer() {
                           )}
                         </span>
                         {isScanning ? (
-                          <Refresh
+                          <Loader
                             className="explorer-icon ui-icon is-spinning"
                             size={14}
                             color="currentColor"
@@ -852,7 +845,11 @@ export function Explorer() {
               setMenu(null)
             }}
           >
-            <Refresh className={`ui-icon${scanningWorkspaces[menu.path] ? ' is-spinning' : ''}`} size={14} color="currentColor" aria-hidden />
+            {scanningWorkspaces[menu.path] ? (
+              <Loader className="ui-icon is-spinning" size={14} color="currentColor" aria-hidden />
+            ) : (
+              <Refresh className="ui-icon" size={14} color="currentColor" aria-hidden />
+            )}
             {scanningWorkspaces[menu.path] ? t('ws.scanningStatuses') : t('ws.checkAllStatus')}
           </button>
           <button
@@ -936,7 +933,8 @@ export function Explorer() {
               setMenu(null)
               void (async () => {
                 try {
-                  await projRunGitInTerm(menu.path, 'git fetch --all --prune')
+                  // Backend-driven fetch — no terminal session needed.
+                  await invoke<string>('git_fetch', { path: menu.path })
                 } catch { /* ignore */ }
                 // Remote tips changed — refresh cached counts so the badge updates.
                 await refreshProjGitAfterSwitch(menu.path)
@@ -953,7 +951,6 @@ export function Explorer() {
             onClick={() => {
               setMenu(null)
               void (async () => {
-                const projName = findProjectName(menu.path)
                 try {
                   // Backend-driven update-all: fast-forwards every pending
                   // branch (auto-stash for the current one) so the project
@@ -963,14 +960,9 @@ export function Explorer() {
                   })
                   if (res.status === 'conflicts' && res.merge) {
                     setPullMerge({ projectPath: menu.path, initial: res.merge })
-                  } else if (projName) {
-                    // Echo the outcome so a blocked/failed pull is never silent.
-                    useTerminalStore.getState().runRaw(menu.path, projName, `echo "${res.message}"`)
                   }
                 } catch (e) {
-                  if (projName) {
-                    useTerminalStore.getState().runRaw(menu.path, projName, `echo "更新失败：${String(e)}"`)
-                  }
+                  showErrorLog(e, t('error.gitFailed'))
                 }
                 // Recompute behind counts and sync every cache.
                 await refreshProjGitAfterSwitch(menu.path)
@@ -993,7 +985,15 @@ export function Explorer() {
             className="btn-with-icon"
             onClick={() => {
               setMenu(null)
-              projRunGit(menu.path, 'git push')
+              void (async () => {
+                try {
+                  // Backend-driven push (auto `-u` when no upstream yet).
+                  await invoke<string>('git_push', { path: menu.path, branch: null })
+                } catch (e) {
+                  showErrorLog(e, t('error.gitFailed'))
+                }
+                await refreshProjGitAfterSwitch(menu.path)
+              })()
             }}
           >
             <ArrowUp className="ui-icon" size={14} color="currentColor" aria-hidden />
@@ -1044,7 +1044,7 @@ export function Explorer() {
               )}
               {gitLoading && (
                 <span className="muted" style={{ fontSize: 10, padding: '2px 8px' }}>
-                  <Refresh className="ui-icon is-spinning" size={10} color="currentColor" aria-hidden />
+                  <Loader className="ui-icon is-spinning" size={10} color="currentColor" aria-hidden />
                   {t('ws.scanningStatuses')}
                 </span>
               )}
@@ -1052,7 +1052,7 @@ export function Explorer() {
           )}
           {!projGitInfo && gitLoading && (
             <span className="muted" style={{ fontSize: 10, padding: '2px 8px' }}>
-              <Refresh className="ui-icon is-spinning" size={10} color="currentColor" aria-hidden />
+              <Loader className="ui-icon is-spinning" size={10} color="currentColor" aria-hidden />
               {t('ws.scanningStatuses')}
             </span>
           )}
@@ -1283,7 +1283,7 @@ export function Explorer() {
                       await useSettingsStore.getState().touchBranchHistory(projectPath, branch)
                       await refreshProjGitAfterSwitch(projectPath)
                     } catch (e) {
-                      projRunGit(projectPath, `echo "${String(e)}"`)
+                      showErrorLog(e, t('error.gitFailed'))
                     }
                   })()
                 }}

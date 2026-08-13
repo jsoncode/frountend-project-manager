@@ -358,6 +358,27 @@ async fn git_pull_all(path: String) -> Result<git::PullBranchResult, String> {
 }
 
 #[tauri::command(async)]
+async fn git_push(path: String, branch: Option<String>) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || git::git_push(&path, branch.as_deref()))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command(async)]
+async fn git_commit(
+    path: String,
+    message: String,
+    paths: Vec<String>,
+    push: bool,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        git::git_commit(&path, &message, &paths, push)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command(async)]
 async fn git_merge_status(path: String) -> Result<git::MergeStatus, String> {
     tauri::async_runtime::spawn_blocking(move || git::git_merge_status(&path))
         .await
@@ -935,6 +956,8 @@ pub fn run() {
             git_fetch,
             git_pull_branch,
             git_pull_all,
+            git_push,
+            git_commit,
             git_merge_status,
             git_merge_start,
             git_merge_file_sides,

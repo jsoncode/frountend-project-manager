@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { useEffect, useState } from 'react'
 import { useI18n } from '../i18n/useI18n'
 import type { GitStatus } from '../lib/types'
+import { showErrorLog } from '../stores/errorLogStore'
 import { useProjectStore } from '../stores/projectStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { ModalShell } from './ModalShell'
@@ -20,7 +21,14 @@ export function BranchSwitchModal({ branch, onClose }: Props) {
   const [loading, setLoading] = useState(true)
   const [switching, setSwitching] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Git failures go to the copyable error modal; this flag only exits
+  // the clean auto-switch progress view so the user can retry.
+  const [failed, setFailed] = useState(false)
   const { t } = useI18n()
+
+  const showGitError = (e: unknown) => {
+    showErrorLog(e, t('error.gitFailed'))
+  }
 
   const doSwitch = async () => {
     if (!selected) return
@@ -35,7 +43,7 @@ export function BranchSwitchModal({ branch, onClose }: Props) {
       await refresh()
       onClose()
     } catch (e) {
-      setError(String(e))
+      showGitError(e)
       setSwitching(false)
       setLoading(false)
     }
@@ -68,7 +76,8 @@ export function BranchSwitchModal({ branch, onClose }: Props) {
             if (!cancelled) onClose()
           } catch (e) {
             if (!cancelled) {
-              setError(String(e))
+              showGitError(e)
+              setFailed(true)
               setSwitching(false)
               setLoading(false)
             }
@@ -79,7 +88,7 @@ export function BranchSwitchModal({ branch, onClose }: Props) {
       })
       .catch((e) => {
         if (!cancelled) {
-          setError(String(e))
+          showGitError(e)
           setLoading(false)
         }
       })
@@ -90,7 +99,7 @@ export function BranchSwitchModal({ branch, onClose }: Props) {
   }, [selected, branch, t])
 
   // Clean auto-switch: keep a lightweight progress shell until done/error.
-  if (loading || (status?.clean && !error)) {
+  if (loading || (status?.clean && !error && !failed)) {
     return (
       <ModalShell
         title={t('branch.confirmTitle')}
@@ -103,11 +112,6 @@ export function BranchSwitchModal({ branch, onClose }: Props) {
             ? t('branch.switching')
             : t('branch.checking')}
         </p>
-        {error && (
-          <div className="status-banner dirty" style={{ marginTop: 10 }}>
-            {error}
-          </div>
-        )}
       </ModalShell>
     )
   }

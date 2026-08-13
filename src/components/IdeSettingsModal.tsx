@@ -3,6 +3,7 @@ import {
   CodeScan,
   Document,
   FolderOpen,
+  Loader,
   Refresh,
   Trash,
   Upload,
@@ -447,12 +448,21 @@ export function IdeSettingsModal({ inline, onClosePanel }: IdeSettingsModalProps
         disabled={scanning}
         onClick={() => void scanAndAddInstalled()}
       >
-        <Refresh
-          className={`ui-icon${scanning ? ' is-spinning' : ''}`}
-          size={14}
-          color="currentColor"
-          aria-hidden
-        />
+        {scanning ? (
+          <Loader
+            className="ui-icon is-spinning"
+            size={14}
+            color="currentColor"
+            aria-hidden
+          />
+        ) : (
+          <Refresh
+            className="ui-icon"
+            size={14}
+            color="currentColor"
+            aria-hidden
+          />
+        )}
         {scanning ? t('ide.scanning') : t('ide.redetect')}
       </button>
     </>

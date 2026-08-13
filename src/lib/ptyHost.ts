@@ -42,6 +42,10 @@ export function unregisterPtyTerminal(id: string) {
   }
 }
 
+export function hasPtyTerminal(id: string): boolean {
+  return entries.has(id)
+}
+
 export function markPtyReady(id: string) {
   entries.get(id)?.resolveReady()
 }

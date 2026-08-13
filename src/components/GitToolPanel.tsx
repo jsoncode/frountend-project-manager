@@ -6,6 +6,7 @@ import {
   BranchDown,
   CheckCircle,
   Document,
+  Loader,
   Pen,
   Refresh,
   Star,
@@ -14,11 +15,17 @@ import {
 import { invoke } from '@tauri-apps/api/core'
 import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react'
 import { useI18n } from '../i18n/useI18n'
-import { writeHostToTerminal } from '../lib/ptyHost'
-import type { BranchItem, GitStatus, MergeStatus } from '../lib/types'
+import type {
+  BranchItem,
+  GitStatus,
+  MergeStartResult,
+  MergeStatus,
+  PullBranchResult,
+} from '../lib/types'
 import { useProjectStore } from '../stores/projectStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useTerminalStore } from '../stores/terminalStore'
+import { showErrorLog } from '../stores/errorLogStore'
 import { CommitModal } from './CommitModal'
 import { ContextMenuPortal } from './ContextMenuPortal'
 import { HistoryChips } from './HistoryChips'
@@ -59,9 +66,6 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
   const setHistoryPinned = useSettingsStore((s) => s.setHistoryPinned)
   const deleteHistory = useSettingsStore((s) => s.deleteHistory)
   const runRaw = useTerminalStore((s) => s.runRaw)
-  const ensureRunTarget = useTerminalStore((s) => s.ensureRunTarget)
-  const runInSession = useTerminalStore((s) => s.runInSession)
-  const waitUntilIdle = useTerminalStore((s) => s.waitUntilIdle)
   const [switchingBranch, setSwitchingBranch] = useState<string | null>(null)
   const [dirtyConfirm, setDirtyConfirm] = useState<{
     branch: string
@@ -76,10 +80,27 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
   const [deleteState, setDeleteState] = useState<DeleteState | null>(null)
   const [checking, setChecking] = useState(false)
   const [pulling, setPulling] = useState(false)
+  const [notice, setNotice] = useState<{
+    kind: 'ok' | 'error'
+    text: string
+  } | null>(null)
+  const noticeTimer = useRef<number | null>(null)
   const [mergeModal, setMergeModal] = useState<{
     initial: MergeStatus | null
   } | null>(null)
   const { t } = useI18n()
+
+  /** Lightweight inline feedback for backend-driven git operations. */
+  const showNotice = (kind: 'ok' | 'error', text: string) => {
+    setNotice({ kind, text })
+    if (noticeTimer.current) window.clearTimeout(noticeTimer.current)
+    noticeTimer.current = window.setTimeout(() => setNotice(null), 6000)
+  }
+
+  /** Git failures go to a dedicated copyable modal instead of a toast. */
+  const showGitError = (e: unknown) => {
+    showErrorLog(e, t('error.gitFailed'))
+  }
 
   // Auto-show merge modal when mergeStatus is updated externally (e.g. from terminal listener after pull)
   const autoMergeShownRef = useRef<string | null>(null)
@@ -112,20 +133,6 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
     void runRaw(selected.path, selected.folderName, command)
   }
 
-  /** Run a git command in the real PTY (native colors) and wait for the prompt. */
-  const runGitInTerm = async (command: string) => {
-    const id = ensureRunTarget(selected.path, selected.folderName)
-    await runInSession(id, selected.path, command)
-    await waitUntilIdle(id)
-  }
-
-  const echoTerm = (text: string) => {
-    const id = ensureRunTarget(selected.path, selected.folderName, {
-      allowBusy: true,
-    })
-    writeHostToTerminal(id, text)
-  }
-
   const checkUpdates = async () => {
     if (checking) return
     setChecking(true)
@@ -152,29 +159,24 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
 
   const pullBranch = async (branch: BranchItem) => {
     const name = localName(branch.name)
-    const isCurrent = !!git?.current && git.current === name
     setPulling(true)
     setBranchError(null)
     try {
-      // Run inside the real PTY so the shell streams git's own output and
-      // returns to a fresh prompt when done. Host-injected echoes left the
-      // text glued to the prompt line with no prompt ever coming back,
-      // making the terminal look stuck "printing logs".
-      if (isCurrent) {
-        // --autostash keeps dirty working trees from blocking the pull;
-        // conflicts are caught by the merge-status check below.
-        await runGitInTerm('git pull --autostash --prune')
+      // Backend-driven update: current branch gets a real pull (auto-stash),
+      // other branches fast-forward via fetch — no terminal involved and
+      // conflicts are reported structurally for the merge modal.
+      const res = await invoke<PullBranchResult>('git_pull_branch', {
+        path: selected.path,
+        branch: name,
+      })
+      if (res.status === 'conflicts' && res.merge) {
+        setMergeModal({ initial: res.merge })
+        showNotice('error', res.message)
       } else {
-        // Fast-forward a non-checked-out branch without switching to it.
-        await runGitInTerm(
-          `git fetch origin ${JSON.stringify(`${name}:${name}`)}`,
-        )
+        showNotice('ok', res.message)
       }
     } catch (e) {
-      // The command couldn't even be delivered to the shell — surface it.
-      // (git-side failures are already visible in the terminal output.)
-      setBranchError(String(e))
-      echoTerm(`\r\n\x1b[31m${String(e)}\x1b[0m\r\n`)
+      showGitError(e)
     }
     // Always refresh so project/branch badges reflect the real state.
     try {
@@ -198,18 +200,18 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
 
   const startMerge = async (ref: string) => {
     try {
-      await runGitInTerm(
-        `git merge --no-commit --no-ff ${JSON.stringify(ref)}`,
-      )
-      await refreshGit()
-      const status = await invoke<MergeStatus>('git_merge_status', {
+      const res = await invoke<MergeStartResult>('git_merge_start', {
         path: selected.path,
-      }).catch(() => null)
-      if (status && (status.inProgress || status.conflictCount > 0)) {
-        setMergeModal({ initial: status })
+        gitRef: ref,
+      })
+      await refreshGit()
+      if (res.merge && (res.merge.inProgress || res.merge.conflictCount > 0)) {
+        setMergeModal({ initial: res.merge })
+      } else {
+        showNotice('ok', res.message)
       }
     } catch (e) {
-      echoTerm(`\r\n\x1b[31m${String(e)}\x1b[0m\r\n`)
+      showGitError(e)
       await refreshMergeStatus().catch(() => undefined)
     }
   }
@@ -217,10 +219,13 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
   const abortMergeFromMenu = async () => {
     if (!window.confirm(t('merge.abortConfirm'))) return
     try {
-      await runGitInTerm('git merge --abort')
+      const msg = await invoke<string>('git_merge_abort', {
+        path: selected.path,
+      })
+      showNotice('ok', msg)
       await refreshGit()
     } catch (e) {
-      echoTerm(`\r\n\x1b[31m${String(e)}\x1b[0m\r\n`)
+      showGitError(e)
     }
   }
 
@@ -240,22 +245,18 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
     setBranchBusy(true)
     setBranchError(null)
     const from = createState.from
-    echoTerm(
-      `\r\n\x1b[36m$ git switch -c ${name} ← ${from} && git push -u origin ${name}\x1b[0m\r\n`,
-    )
     try {
       const msg = await invoke<string>('git_create_branch', {
         path: selected.path,
         name,
         from,
       })
-      echoTerm(`\x1b[32m${msg}\x1b[0m\r\n`)
+      showNotice('ok', msg)
       setCreateState(null)
       await refreshGit()
     } catch (e) {
       const err = String(e)
-      setBranchError(err)
-      echoTerm(`\x1b[31m${err}\x1b[0m\r\n`)
+      showGitError(err)
       await refreshGit().catch(() => undefined)
       // Already switched (or created) — close so the user isn't stuck retrying create.
       if (err.includes('已切换') || err.includes('已创建')) {
@@ -271,10 +272,6 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
     setBranchBusy(true)
     setBranchError(null)
     const { branch, alsoLocal } = deleteState
-    const label = branch.isRemote
-      ? `origin/${localName(branch.name)}`
-      : localName(branch.name)
-    echoTerm(`\r\n\x1b[36m$ git delete ${label}\x1b[0m\r\n`)
     try {
       const msg = await invoke<string>('git_delete_branch', {
         path: selected.path,
@@ -282,13 +279,11 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
         isRemote: branch.isRemote,
         alsoLocal: branch.isRemote ? alsoLocal : false,
       })
-      echoTerm(`\x1b[32m${msg}\x1b[0m\r\n`)
+      showNotice('ok', msg)
       setDeleteState(null)
       await refreshGit()
     } catch (e) {
-      const err = String(e)
-      setBranchError(err)
-      echoTerm(`\x1b[31m${err}\x1b[0m\r\n`)
+      showGitError(e)
     } finally {
       setBranchBusy(false)
     }
@@ -335,7 +330,7 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
         setDirtyConfirm({ branch: branchName, status: s })
       }
     } catch (e) {
-      echoTerm(`\r\n\x1b[31m${String(e)}\x1b[0m\r\n`)
+      showGitError(e)
     } finally {
       setSwitchingBranch(null)
     }
@@ -354,7 +349,7 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
         .touchBranchHistory(selected.path, dirtyConfirm.branch)
       await refreshGit()
     } catch (e) {
-      echoTerm(`\r\n\x1b[31m${String(e)}\x1b[0m\r\n`)
+      showGitError(e)
     } finally {
       setSwitchingBranch(null)
       setDirtyConfirm(null)
@@ -390,7 +385,7 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
         >
           <span className="branch-mark" aria-hidden>
             {isSwitching ? (
-              <Refresh
+              <Loader
                 className="ui-icon is-spinning"
                 size={12}
                 color="currentColor"
@@ -461,15 +456,32 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
           disabled={checking || pulling}
           onClick={() => void checkUpdates()}
         >
-          <Refresh
-            className={`ui-icon${checking ? ' is-spinning' : ''}`}
-            size={14}
-            color="currentColor"
-            aria-hidden
-          />
+          {checking ? (
+            <Loader
+              className="ui-icon is-spinning"
+              size={14}
+              color="currentColor"
+              aria-hidden
+            />
+          ) : (
+            <Refresh
+              className="ui-icon"
+              size={14}
+              color="currentColor"
+              aria-hidden
+            />
+          )}
           {checking ? t('git.checking') : t('git.checkUpdates')}
         </button>
       </div>
+      {notice && (
+        <div
+          className={`status-banner ${notice.kind === 'ok' ? 'clean' : 'dirty'}`}
+          style={{ marginTop: 8, whiteSpace: 'pre-wrap' }}
+        >
+          {notice.text}
+        </div>
+      )}
       <HistoryChips
         title={t('git.history')}
         items={filteredBranchHistory}
@@ -566,12 +578,20 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
               role="menuitem"
               onClick={() => {
                 const name = localName(menu.branch.name)
-                runGit(
-                  isMenuCurrent
-                    ? 'git push'
-                    : `git push -u origin ${JSON.stringify(name)}:${name}`,
-                )
+                const target = isMenuCurrent ? null : name
                 setMenu(null)
+                void (async () => {
+                  try {
+                    const msg = await invoke<string>('git_push', {
+                      path: selected.path,
+                      branch: target,
+                    })
+                    showNotice('ok', msg)
+                  } catch (e) {
+                    showGitError(e)
+                  }
+                  await refreshGit().catch(() => undefined)
+                })()
               }}
             >
               <ArrowUp size={14} color="currentColor" />
@@ -586,11 +606,11 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
                 setMenu(null)
                 void (async () => {
                   try {
-                    await runGitInTerm('git fetch --all --prune')
-                    await refreshGit()
+                    await invoke<string>('git_fetch', { path: selected.path })
                   } catch (e) {
-                    echoTerm(`\r\n\x1b[31m${String(e)}\x1b[0m\r\n`)
+                    showGitError(e)
                   }
+                  await refreshGit().catch(() => undefined)
                 })()
               }}
             >
