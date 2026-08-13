@@ -52,7 +52,7 @@ const zh = {
 
   'open.withIde': '用 {name} 打开',
   'open.inIde': '用 IDE 打开',
-  'open.inFileManager': '在文件管理器中打开',
+  'open.inFileManager': '打开目录',
   'open.noIde': '无可用 IDE，请先在设置中配置',
   'open.needPath': '请先选择项目或工作区',
 
@@ -156,7 +156,7 @@ const zh = {
   'term.ctx.feedAi': '添加到 Ai对话',
   'term.ctx.copyPath': '复制地址',
   'term.ctx.openFile': '打开文件',
-  'term.ctx.revealPath': '在资源管理器中打开',
+  'term.ctx.revealPath': '打开目录',
   'term.aiAnalyze': 'AI 分析',
   'term.aiChat': 'Ai Chat',
   'term.aiAnalyzeHint': '检测到警告/错误日志',
