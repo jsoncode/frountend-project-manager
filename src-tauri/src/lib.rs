@@ -733,6 +733,11 @@ fn touch_project_access(app: AppHandle, project_path: String) -> Result<AppConfi
 }
 
 #[tauri::command]
+fn set_project_pm(app: AppHandle, project_path: String, pm: String) -> Result<AppConfig, String> {
+    config::set_project_pm(&app, &project_path, &pm)
+}
+
+#[tauri::command]
 fn set_locale(app: AppHandle, locale: String) -> Result<AppConfig, String> {
     config::set_locale(&app, &locale)
 }
@@ -997,6 +1002,7 @@ pub fn run() {
             touch_branch_history,
             touch_search_history,
             touch_project_access,
+            set_project_pm,
             set_history_pinned,
             delete_history,
             set_locale,

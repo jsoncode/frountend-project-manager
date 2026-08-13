@@ -15,6 +15,7 @@ const EMPTY_CONFIG: AppConfig = {
   branchFavorites: {},
   searchHistory: [],
   projectAccess: {},
+  projectPms: {},
   locale: 'zh',
   editorTheme: 'vs-dark',
 }
@@ -63,6 +64,7 @@ function normalizeConfig(cfg: AppConfig): AppConfig {
     branchFavorites: cfg.branchFavorites ?? EMPTY_BRANCH_FAVORITES,
     searchHistory: cfg.searchHistory ?? EMPTY_HISTORY,
     projectAccess: cfg.projectAccess ?? EMPTY_ACCESS,
+    projectPms: cfg.projectPms ?? {},
     locale: cfg.locale === 'en' ? 'en' : 'zh',
     editorTheme: cfg.editorTheme ?? 'vs-dark',
   }
@@ -83,6 +85,8 @@ type SettingsState = {
   touchBranchHistory: (projectPath: string, branch: string) => Promise<void>
   touchSearchHistory: (query: string) => Promise<void>
   touchProjectAccess: (projectPath: string) => Promise<void>
+  /** Remember the package manager choice for one project. */
+  setProjectPm: (projectPath: string, pm: string) => Promise<void>
   setHistoryPinned: (
     projectPath: string,
     kind: HistoryKind,
@@ -218,6 +222,24 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       return
     }
     const cfg = await invoke<AppConfig>('touch_project_access', { projectPath })
+    set({ config: cfg })
+  },
+  setProjectPm: async (projectPath, pm) => {
+    if (!isTauri()) {
+      const current = get().config
+      if (!current) return
+      set({
+        config: {
+          ...current,
+          projectPms: { ...(current.projectPms ?? {}), [projectPath]: pm },
+        },
+      })
+      return
+    }
+    const cfg = await invoke<AppConfig>('set_project_pm', {
+      projectPath,
+      pm,
+    })
     set({ config: cfg })
   },
   setHistoryPinned: async (projectPath, kind, value, pinned) => {

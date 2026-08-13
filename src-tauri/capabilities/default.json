@@ -65,6 +65,7 @@
     "allow-touch-branch-history",
     "allow-touch-search-history",
     "allow-touch-project-access",
+    "allow-set-project-pm",
     "allow-set-history-pinned",
     "core:window:allow-center",
     "core:window:allow-minimize",

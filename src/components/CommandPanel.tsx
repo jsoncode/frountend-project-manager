@@ -11,6 +11,10 @@ import { Tooltip } from './Tooltip'
 
 type CommonCmd = { key: MessageKey; icon: typeof Play; cmd: (pm: string) => string }
 
+/** Package managers selectable per project in the commands section. */
+const PM_NAMES = ['npm', 'pnpm', 'yarn'] as const
+type PmName = (typeof PM_NAMES)[number]
+
 const COMMON_COMMANDS: CommonCmd[] = [
   { key: 'cmd.outdated', icon: Search, cmd: (pm) => `${pm} outdated` },
   { key: 'cmd.update', icon: Refresh, cmd: (pm) => `${pm} update` },
@@ -27,6 +31,7 @@ export function CommandPanel({ filterQuery = '' }: { filterQuery?: string }) {
   const runScript = useTerminalStore((s) => s.runScript)
   const runRaw = useTerminalStore((s) => s.runRaw)
   const config = useSettingsStore((s) => s.config)
+  const setProjectPm = useSettingsStore((s) => s.setProjectPm)
   const { t } = useI18n()
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; value: string; originalValue: string } | null>(null)
 
@@ -39,7 +44,12 @@ export function CommandPanel({ filterQuery = '' }: { filterQuery?: string }) {
 
   // Keep package.json scripts key order (do not re-sort).
   const scripts = Object.keys(details.summary.scripts).filter(match)
-  const pm = details.packageManager
+  // Effective package manager: per-project cached choice, default pnpm.
+  const cachedPm = config?.projectPms?.[selected.path]
+  const pm: PmName =
+    cachedPm === 'npm' || cachedPm === 'yarn' || cachedPm === 'pnpm'
+      ? cachedPm
+      : 'pnpm'
   // Strip package manager prefix from history items (e.g., "pnpm build" → "build")
   const stripPrefix = (v: string) => v.replace(/^(npm run |pnpm |yarn |bun )/, '')
   const rawHistory = config?.commandHistory?.[selected.path] ?? []
@@ -74,6 +84,24 @@ export function CommandPanel({ filterQuery = '' }: { filterQuery?: string }) {
 
       <div className="pane-sub">
         {t('cmd.title')} · {pm}
+      </div>
+      <div
+        className="pm-switch"
+        role="group"
+        aria-label={t('cmd.pm')}
+        title={t('cmd.pm')}
+      >
+        {PM_NAMES.map((name) => (
+          <button
+            key={name}
+            type="button"
+            className={`pm-switch-btn${pm === name ? ' active' : ''}`}
+            aria-pressed={pm === name}
+            onClick={() => void setProjectPm(selected.path, name)}
+          >
+            {name}
+          </button>
+        ))}
       </div>
       <div className="script-list">
         {scripts.map((name) => (

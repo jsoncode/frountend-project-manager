@@ -45,6 +45,9 @@ pub struct AppConfig {
     /// key: absolute project path → last accessed ms
     #[serde(default)]
     pub project_access: HashMap<String, i64>,
+    /// key: absolute project path → chosen package manager ("npm"|"pnpm"|"yarn")
+    #[serde(default)]
+    pub project_pms: HashMap<String, String>,
     /// UI language: "zh" | "en"
     #[serde(default = "default_locale")]
     pub locale: String,
@@ -72,6 +75,7 @@ impl Default for AppConfig {
             branch_favorites: HashMap::new(),
             search_history: Vec::new(),
             project_access: HashMap::new(),
+            project_pms: HashMap::new(),
             locale: default_locale(),
             editor_theme: default_editor_theme(),
         }
@@ -351,6 +355,23 @@ pub fn touch_project_access(app: &AppHandle, project_path: &str) -> Result<AppCo
     }
     let mut cfg = load_or_default(app)?;
     cfg.project_access.insert(path.to_string(), now_ms());
+    save(app, &cfg)?;
+    Ok(cfg)
+}
+
+/// Remember the package manager the user picked for one project
+/// ("npm" | "pnpm" | "yarn") so the command panel follows it per project.
+pub fn set_project_pm(
+    app: &AppHandle,
+    project_path: &str,
+    pm: &str,
+) -> Result<AppConfig, String> {
+    if !matches!(pm, "npm" | "pnpm" | "yarn") {
+        return Err(format!("unknown package manager: {pm}"));
+    }
+    let mut cfg = load_or_default(app)?;
+    cfg.project_pms
+        .insert(project_path.to_string(), pm.to_string());
     save(app, &cfg)?;
     Ok(cfg)
 }

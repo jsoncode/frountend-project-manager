@@ -41,6 +41,8 @@ export type AppConfig = {
   searchHistory?: HistoryItem[]
   /** project path → last accessed ms */
   projectAccess?: Record<string, number>
+  /** project path → chosen package manager ("npm" | "pnpm" | "yarn") */
+  projectPms?: Record<string, string>
   /** UI language: zh | en — default zh */
   locale?: 'zh' | 'en'
   /** Monaco editor color theme id — default 'vs-dark' */

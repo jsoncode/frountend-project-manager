@@ -249,6 +249,11 @@ description = "Record project access time"
 commands.allow = ["touch_project_access"]
 
 [[permission]]
+identifier = "allow-set-project-pm"
+description = "Set per-project package manager choice"
+commands.allow = ["set_project_pm"]
+
+[[permission]]
 identifier = "allow-set-locale"
 description = "Set UI locale"
 commands.allow = ["set_locale"]

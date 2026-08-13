@@ -108,6 +108,7 @@ const zh = {
   'editor.closeUnsavedConfirm': '当前文件有未保存的更改，关闭后将丢失。确定关闭？',
 
   'cmd.title': '项目命令',
+  'cmd.pm': '包管理器',
   'cmd.selectProject': '请选择一个项目',
   'cmd.noScripts': 'package.json 中没有 scripts',
   'cmd.common': '常用命令',
@@ -608,6 +609,7 @@ const en: Record<MessageKey, string> = {
     'The current file has unsaved changes that will be lost. Close anyway?',
 
   'cmd.title': 'PROJECT COMMANDS',
+  'cmd.pm': 'Package manager',
   'cmd.selectProject': 'Select a project',
   'cmd.noScripts': 'No scripts in package.json',
   'cmd.common': 'Common commands',
