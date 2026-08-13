@@ -1362,10 +1362,6 @@ body.resizing-row * {
   margin-top: 0;
 }
 
-.command-panel-side .history-block {
-  margin-top: 14px;
-}
-
 .ide-open-list {
   display: flex;
   flex-direction: column;
@@ -1589,6 +1585,13 @@ body.resizing-row * {
   margin-top: 12px;
   padding-top: 10px;
   border-top: 1px dashed var(--border);
+}
+
+/* 顶部无内容时去掉虚线分割（如分支面板的“分支历史”） */
+.history-block.no-divider {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
 }
 
 .history-label {
@@ -1840,13 +1843,6 @@ button.history-chip-main:hover {
 .branch-badge.ahead {
   background: rgba(52, 211, 153, 0.18);
   color: var(--ok);
-}
-
-.git-toolbar {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 8px;
-  align-items: center;
 }
 
 .branch-menu {

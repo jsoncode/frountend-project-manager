@@ -78,6 +78,7 @@ export function CommandPanel({ filterQuery = '' }: { filterQuery?: string }) {
         title={t('cmd.history')}
         items={history}
         emptyText={q ? t('actionBar.noMatch') : t('cmd.historyEmpty')}
+        noDivider
         onRun={(cmd) => {
           const full = pm === 'npm' ? `npm run ${cmd}` : `${pm} ${cmd}`
           void useSettingsStore.getState().touchCommandHistory(selected.path, cmd)

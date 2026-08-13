@@ -57,6 +57,8 @@ type Props = {
   emptyText?: string
   /** Highlight the chip matching this value as "current". */
   currentValue?: string
+  /** Omit the dashed top separator (used when nothing sits above the block). */
+  noDivider?: boolean
   onRun?: (value: string) => void
   onDoubleClick?: (value: string) => void
   onContext?: (e: MouseEvent, value: string) => void
@@ -67,6 +69,7 @@ export function HistoryChips({
   items,
   emptyText,
   currentValue,
+  noDivider,
   onRun,
   onDoubleClick,
   onContext,
@@ -74,7 +77,7 @@ export function HistoryChips({
   const { t } = useI18n()
 
   return (
-    <div className="history-block">
+    <div className={`history-block${noDivider ? ' no-divider' : ''}`}>
       <div className="pane-sub">{title}</div>
       {items.length === 0 && (
         <div className="muted">{emptyText ?? t('history.empty')}</div>

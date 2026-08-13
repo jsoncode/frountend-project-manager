@@ -1,4 +1,4 @@
-import { CheckCircleOutlined, LoadingOutlined, ReloadOutlined } from '@ant-design/icons'
+import { CheckCircleOutlined } from '@ant-design/icons'
 import {
   Add,
   ArrowDown,
@@ -82,7 +82,6 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
   const [logBranch, setLogBranch] = useState<string | null>(null)
   const [createState, setCreateState] = useState<CreateState | null>(null)
   const [deleteState, setDeleteState] = useState<DeleteState | null>(null)
-  const [checking, setChecking] = useState(false)
   const [pulling, setPulling] = useState(false)
   const [notice, setNotice] = useState<{
     kind: 'ok' | 'error'
@@ -135,16 +134,6 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
 
   const runGit = (command: string) => {
     void runRaw(selected.path, selected.folderName, command)
-  }
-
-  const checkUpdates = async () => {
-    if (checking) return
-    setChecking(true)
-    try {
-      await refreshGit({ fetch: true })
-    } finally {
-      setChecking(false)
-    }
   }
 
   const localName = (name: string) =>
@@ -453,17 +442,6 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
 
   return (
     <>
-      <div className="git-toolbar">
-        <Button
-          type="primary"
-          size="small"
-          disabled={checking || pulling}
-          onClick={() => void checkUpdates()}
-          icon={checking ? <LoadingOutlined /> : <ReloadOutlined />}
-        >
-          {checking ? t('git.checking') : t('git.checkUpdates')}
-        </Button>
-      </div>
       {notice && (
         <div
           className={`status-banner ${notice.kind === 'ok' ? 'clean' : 'dirty'}`}
@@ -477,6 +455,7 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
         items={filteredBranchHistory}
         emptyText={q ? t('actionBar.noMatch') : t('git.historyEmpty')}
         currentValue={git?.current ?? undefined}
+        noDivider
         onDoubleClick={(branch) => {
           if (git?.current !== branch) void handleBranchSwitch(branch)
         }}
