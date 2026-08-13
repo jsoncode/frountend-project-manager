@@ -924,6 +924,13 @@ export function Explorer() {
                     ? maxBranchBehind(statusSummary.gitInfo)
                     : (statusSummary?.behind ?? 0)
                   const currentBranch = statusSummary?.currentBranch
+                  // A git repo has a gitInfo/gitStatus snapshot; when the scan
+                  // ran and neither exists the project is not a git repo.
+                  const isGitProject = !!(statusSummary?.gitInfo || statusSummary?.gitStatus)
+                  // Repos without a remote URL count as 无git too (nothing to
+                  // push/pull against). Legacy cached data without gitInfo
+                  // simply has no remote → treated as no-git until rescan.
+                  const hasRemoteUrl = (statusSummary?.gitInfo?.remotes?.length ?? 0) > 0
                   const projGitDirty = changedFiles > 0
                   const isScanning = scanningWorkspaces[ws]?.projects.has(p.path) ?? false
 
@@ -980,12 +987,6 @@ export function Explorer() {
                           />
                         )}
                         <span className="explorer-label">{p.folderName}</span>
-                        {currentBranch && (
-                          <span className="proj-branch-label" title={currentBranch}>
-                            <BranchUp className="ui-icon" size={11} color="currentColor" aria-hidden />
-                            {currentBranch}
-                          </span>
-                        )}
                         {changedFiles > 0 ? (
                           <span className="proj-status-badge proj-status-changed" title={`${changedFiles} changed files`}>
                             <ArrowUp className="ui-icon" size={10} color="currentColor" aria-hidden />
@@ -996,6 +997,17 @@ export function Explorer() {
                           <span className="proj-status-badge proj-status-behind" title={t('explorer.behindHint', { n: behind })}>
                             <ArrowDown className="ui-icon" size={10} color="currentColor" aria-hidden />
                             {behind}
+                          </span>
+                        ) : null}
+                        {isGitProject && hasRemoteUrl ? (
+                          currentBranch && (
+                            <span className="proj-branch-label" title={currentBranch}>
+                              {currentBranch}
+                            </span>
+                          )
+                        ) : statusSummary ? (
+                          <span className="proj-branch-label" title={t('explorer.noGit')}>
+                            {t('explorer.noGit')}
                           </span>
                         ) : null}
                       </button>

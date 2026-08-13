@@ -357,7 +357,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
             const behind = maxBranchBehind(gitInfo)
             return [p.path, { changedFiles, behind, currentBranch, gitInfo, gitStatus }] as const
           } catch {
-            return [p.path, { changedFiles: 0, behind: 0 }] as const
+            // Not a git repo (git commands failed) — record it explicitly so
+            // the Explorer can show the "无git" marker instead of a branch.
+            return [p.path, { changedFiles: 0, behind: 0, gitInfo: null, gitStatus: null }] as const
           } finally {
             // Mark this project as done (scoped to this workspace's state).
             set((s) => {

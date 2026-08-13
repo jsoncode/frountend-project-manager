@@ -1071,6 +1071,7 @@ body.resizing-row * {
   align-items: center;
   gap: 2px;
   font-size: 10px;
+  min-width: 45px;
   height: 16px;
   line-height: 1;
   border-radius: 4px;

@@ -74,6 +74,8 @@ export type BranchItem = {
 export type GitInfo = {
   current?: string | null
   branches: BranchItem[]
+  /** Remote URLs (`git remote -v`); empty/missing when no remote is set. */
+  remotes?: string[]
 }
 
 export type GitStatusEntry = {

@@ -124,6 +124,10 @@ pub struct BranchItem {
 pub struct GitInfo {
     pub current: Option<String>,
     pub branches: Vec<BranchItem>,
+    /// Remote URLs from `git remote -v` (deduplicated). Empty when the repo
+    /// has no remote address configured — the Explorer treats such repos as
+    /// "无git" (nothing to push/pull against).
+    pub remotes: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -401,7 +405,36 @@ pub fn git_branches(path: &str) -> Result<Option<GitInfo>, String> {
         }
     }
 
-    Ok(Some(GitInfo { current, branches }))
+    Ok(Some(GitInfo {
+        current,
+        branches,
+        remotes: list_remote_urls(path),
+    }))
+}
+
+/// Remote URLs configured for this repo (`git remote -v`), deduplicated.
+fn list_remote_urls(path: &str) -> Vec<String> {
+    let mut seen = BTreeSet::new();
+    let mut urls = Vec::new();
+    let output = git_command(path)
+        .args(["remote", "-v"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success());
+    let Some(output) = output else {
+        return urls;
+    };
+    for line in String::from_utf8_lossy(&output.stdout).lines() {
+        // Format: "<name>\t<url> (fetch)" and "<name>\t<url> (push)".
+        let mut parts = line.split_whitespace();
+        let (Some(_name), Some(url)) = (parts.next(), parts.next()) else {
+            continue;
+        };
+        if seen.insert(url.to_string()) {
+            urls.push(url.to_string());
+        }
+    }
+    urls
 }
 
 /// Fetch remotes so ahead/behind counts reflect latest remote tips.
