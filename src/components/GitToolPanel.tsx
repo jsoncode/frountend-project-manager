@@ -26,6 +26,7 @@ import type {
 } from '../lib/types'
 import { useProjectStore } from '../stores/projectStore'
 import { useSettingsStore } from '../stores/settingsStore'
+import { useExplorerStore } from '../stores/explorerStore'
 import { useTerminalStore } from '../stores/terminalStore'
 import { showErrorLog } from '../stores/errorLogStore'
 import { CommitModal } from './CommitModal'
@@ -779,6 +780,10 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
           projectName={selected.folderName}
           branch={commitTarget}
           showPush
+          onBusyChange={(busy) => {
+            // Shared with Explorer: spin the project row while committing.
+            useExplorerStore.getState().setCommitting(selected.path, busy)
+          }}
           onClose={() => setCommitTarget(null)}
           onDone={() => {
             setCommitTarget(null)

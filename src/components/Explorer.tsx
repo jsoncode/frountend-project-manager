@@ -128,8 +128,9 @@ export function Explorer() {
   const [gitLoading, setGitLoading] = useState(false)
   // Projects whose "view status" (git status in terminal) is still running.
   const [statusChecking, setStatusChecking] = useState<Set<string>>(() => new Set())
-  // Projects with a commit / commit-and-push operation still running.
-  const [committing, setCommitting] = useState<Set<string>>(() => new Set())
+  // Projects with a commit / commit-and-push operation still running
+  // (shared store so the branch panel can trigger the row spinner too).
+  const committingPaths = useExplorerStore((s) => s.committingPaths)
   // Projects whose context-menu "update" (git_pull_all) is still running.
   const [pulling, setPulling] = useState<Set<string>>(() => new Set())
   // Projects with a context-menu git op (fetch / push / log / checkout) still running.
@@ -962,7 +963,7 @@ export function Explorer() {
                             <ChevronRight size={12} color="currentColor" />
                           )}
                         </span>
-                        {(isScanning || statusChecking.has(p.path) || committing.has(p.path) || pulling.has(p.path) || gitOps.has(p.path)) ? (
+                        {(isScanning || statusChecking.has(p.path) || committingPaths.has(p.path) || pulling.has(p.path) || gitOps.has(p.path)) ? (
                           <Loader
                             className="explorer-icon ui-icon is-spinning"
                             size={14}
@@ -1468,13 +1469,7 @@ export function Explorer() {
           // Show the project-row spinner while the backend commit / commit
           // & push operation is running.
           onBusyChange={(busy) => {
-            const path = commitEntry.projectPath
-            setCommitting((prev) => {
-              const next = new Set(prev)
-              if (busy) next.add(path)
-              else next.delete(path)
-              return next
-            })
+            useExplorerStore.getState().setCommitting(commitEntry.projectPath, busy)
           }}
           onDone={() => {
             setCommitEntry(null)
