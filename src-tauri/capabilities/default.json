@@ -40,8 +40,6 @@
     "allow-git-merge-commit",
     "allow-git-stash-finish-pop",
     "allow-git-diff-head",
-    "allow-list-env-files",
-    "allow-read-env-file",
     "allow-list-directory-entries",
     "allow-create-directory",
     "allow-rename-path",

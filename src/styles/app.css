@@ -3253,24 +3253,6 @@ button.history-chip-main:hover {
   margin-top: 16px;
 }
 
-.env-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-
-.env-table td {
-  border-bottom: 1px solid var(--border-dim);
-  padding: 4px 0;
-  vertical-align: top;
-}
-
-.env-table td:first-child {
-  color: var(--cyan);
-  width: 40%;
-  padding-right: 8px;
-}
-
 .scroll {
   overflow: auto;
   flex: 1;

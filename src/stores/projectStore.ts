@@ -7,8 +7,6 @@ import {
 import { create } from '../lib/createStore'
 import { maxBranchBehind } from '../lib/gitInfo'
 import type {
-  EnvEntry,
-  EnvFileInfo,
   GitInfo,
   GitStatus,
   MergeStatus,
@@ -25,15 +23,9 @@ type ProjectState = {
   gitStatus: GitStatus | null
   mergeStatus: MergeStatus | null
   gitDecorations: GitDecorationIndex
-  envFiles: EnvFileInfo[]
-  envEntries: EnvEntry[]
-  selectedEnvPath: string | null
-  revealEnv: boolean
   loading: boolean
   error: string | null
   selectProject: (project: ProjectSummary | null) => Promise<void>
-  loadEnvEntries: (path: string) => Promise<void>
-  setRevealEnv: (v: boolean) => void
   refresh: () => Promise<void>
   refreshGit: (opts?: { fetch?: boolean }) => Promise<void>
   refreshGitStatus: () => Promise<void>
@@ -65,13 +57,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   gitStatus: null,
   mergeStatus: null,
   gitDecorations: EMPTY_GIT_DECORATIONS,
-  envFiles: [],
-  envEntries: [],
-  selectedEnvPath: null,
-  revealEnv: false,
   loading: false,
   error: null,
-  setRevealEnv: (v) => set({ revealEnv: v }),
   selectProject: async (project) => {
     const seq = ++selectSeq
 
@@ -83,9 +70,6 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         gitStatus: null,
         mergeStatus: null,
         gitDecorations: EMPTY_GIT_DECORATIONS,
-        envFiles: [],
-        envEntries: [],
-        selectedEnvPath: null,
         loading: false,
         error: null,
       })
@@ -102,9 +86,6 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       gitStatus: null,
       mergeStatus: null,
       gitDecorations: EMPTY_GIT_DECORATIONS,
-      envFiles: [],
-      envEntries: [],
-      selectedEnvPath: null,
       loading: true,
       error: null,
     })
@@ -123,7 +104,6 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         selected: project,
         details: { summary: project, packageManager: 'npm' },
         git: cachedGitInfo,
-        envFiles: [],
         mergeStatus: null,
         loading: true,
         error: null,
@@ -139,10 +119,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         : invoke<GitInfo | null>('git_branches', { path: project.path })
       const gitStatusFetch = invoke<GitStatus>('git_status', { path: project.path }).catch(() => null)
 
-      const [details, git, envFiles, gitStatus, mergeStatus] = await Promise.all([
+      const [details, git, gitStatus, mergeStatus] = await Promise.all([
         invoke<ProjectDetails>('scan_project', { path: project.path }),
         gitFetch,
-        invoke<EnvFileInfo[]>('list_env_files', { path: project.path }),
         gitStatusFetch,
         invoke<MergeStatus>('git_merge_status', { path: project.path }).catch(
           () => null,
@@ -152,7 +131,6 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       set({
         details,
         git,
-        envFiles,
         mergeStatus,
         loading: false,
         ...applyGitStatus(project.path, gitStatus),
@@ -168,15 +146,6 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     } catch (e) {
       if (seq !== selectSeq) return
       set({ loading: false, error: String(e) })
-    }
-  },
-  loadEnvEntries: async (path) => {
-    set({ selectedEnvPath: path })
-    try {
-      const envEntries = await invoke<EnvEntry[]>('read_env_file', { path })
-      set({ envEntries })
-    } catch (e) {
-      set({ error: String(e), envEntries: [] })
     }
   },
   refresh: async () => {

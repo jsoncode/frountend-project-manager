@@ -114,16 +114,6 @@ description = "Read file diff between HEAD and working tree"
 commands.allow = ["git_diff_head"]
 
 [[permission]]
-identifier = "allow-list-env-files"
-description = "List env files"
-commands.allow = ["list_env_files"]
-
-[[permission]]
-identifier = "allow-read-env-file"
-description = "Read env file"
-commands.allow = ["read_env_file"]
-
-[[permission]]
 identifier = "allow-run-command"
 description = "Run project command"
 commands.allow = ["run_command"]

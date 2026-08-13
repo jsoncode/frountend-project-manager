@@ -11,7 +11,6 @@ mod bat_view;
 mod config;
 mod console_decode;
 mod db;
-mod env_files;
 mod fs_explorer;
 mod git;
 mod ide;
@@ -458,20 +457,6 @@ async fn git_merge_commit(
 #[tauri::command(async)]
 async fn git_stash_finish_pop(path: String) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || git::git_stash_finish_pop(&path))
-        .await
-        .map_err(|e| e.to_string())?
-}
-
-#[tauri::command(async)]
-async fn list_env_files(path: String) -> Result<Vec<env_files::EnvFileInfo>, String> {
-    tauri::async_runtime::spawn_blocking(move || env_files::list_env_files(&path))
-        .await
-        .map_err(|e| e.to_string())?
-}
-
-#[tauri::command(async)]
-async fn read_env_file(path: String) -> Result<Vec<env_files::EnvEntry>, String> {
-    tauri::async_runtime::spawn_blocking(move || env_files::read_env_file(&path))
         .await
         .map_err(|e| e.to_string())?
 }
@@ -981,8 +966,6 @@ pub fn run() {
             git_merge_abort,
             git_merge_commit,
             git_stash_finish_pop,
-            list_env_files,
-            read_env_file,
             list_directory_entries,
             create_directory,
             rename_path,

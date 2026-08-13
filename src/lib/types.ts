@@ -122,16 +122,6 @@ export type PullBranchResult = {
   merge?: MergeStatus | null
 }
 
-export type EnvFileInfo = {
-  name: string
-  path: string
-}
-
-export type EnvEntry = {
-  key: string
-  value: string
-}
-
 export type TerminalLine = {
   terminalId: string
   projectPath: string

@@ -269,10 +269,6 @@ const zh = {
   'merge.stashFinishHint': '改动已合并到工作区，将丢弃更新前创建的自动暂存（stash）记录',
   'merge.acceptBlock': '采纳此块',
 
-  'env.title': '环境变量',
-  'env.none': '没有 .env 文件',
-  'env.reveal': '显示值',
-
   'meta.title': '元信息',
   'meta.package': '包信息',
   'meta.frameworks': '框架',
@@ -403,7 +399,6 @@ const zh = {
   'tool.strip': '工具窗',
   'tool.cmd': '命令',
   'tool.git': '分支',
-  'tool.env': '环境',
   'tool.ide': 'IDE',
   'tool.needProject': '请先选择一个项目',
   'tool.ideHint': '点击下方 IDE 在当前项目中打开',
@@ -774,10 +769,6 @@ const en: Record<MessageKey, string> = {
   'merge.stashFinishHint': 'Changes are merged into the working tree; the auto-stash entry created before the update will be dropped',
   'merge.acceptBlock': 'Accept block',
 
-  'env.title': 'ENV',
-  'env.none': 'no .env files',
-  'env.reveal': 'reveal values',
-
   'meta.title': 'META',
   'meta.package': 'Package',
   'meta.frameworks': 'Frameworks',
@@ -908,7 +899,6 @@ const en: Record<MessageKey, string> = {
   'tool.strip': 'Tool windows',
   'tool.cmd': 'Cmd',
   'tool.git': 'Git',
-  'tool.env': 'Env',
   'tool.ide': 'IDE',
   'tool.needProject': 'Select a project first',
   'tool.ideHint': 'Open the current project in an IDE below',
