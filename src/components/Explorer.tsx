@@ -1465,7 +1465,16 @@ export function Explorer() {
           onClose={() => setCommitEntry(null)}
           onDone={() => {
             setCommitEntry(null)
-            if (selectedProject) void useProjectStore.getState().refreshGitStatus()
+            // Commit / commit+push moved HEAD and the remote-tracking ref —
+            // refresh the full git state (branches + status + merge) for the
+            // committed project so the branch panel's ahead (待提交) / behind
+            // (待拉取) badges update immediately. Refs are already fresh
+            // locally, so skip the network fetch.
+            void useProjectStore
+              .getState()
+              .refreshProjectGitStatus(commitEntry.projectPath, {
+                fetch: false,
+              })
           }}
         />
       )}
