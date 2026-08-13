@@ -44,6 +44,8 @@
     "allow-read-env-file",
     "allow-list-directory-entries",
     "allow-create-directory",
+    "allow-rename-path",
+    "allow-delete-path",
     "allow-read-text-file",
     "allow-write-text-file",
     "allow-resolve-import",

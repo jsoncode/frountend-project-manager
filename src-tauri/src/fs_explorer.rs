@@ -417,6 +417,49 @@ pub fn create_directory(path: &str) -> Result<String, String> {
     Ok(p.to_string_lossy().to_string())
 }
 
+/// Rename a file or directory within its parent directory.
+/// `new_name` must be a bare file/folder name (no separators).
+/// Returns the new absolute path.
+pub fn rename_path(path: &str, new_name: &str) -> Result<String, String> {
+    let name = new_name.trim();
+    if name.is_empty() {
+        return Err("New name cannot be empty".into());
+    }
+    if name.contains('/') || name.contains('\\') {
+        return Err("New name cannot contain path separators".into());
+    }
+    if name == "." || name == ".." {
+        return Err("Invalid name".into());
+    }
+    let src = Path::new(path);
+    if !src.exists() {
+        return Err(format!("Path not found: {path}"));
+    }
+    let parent = src
+        .parent()
+        .ok_or_else(|| "Cannot rename a root path".to_string())?;
+    let dst = parent.join(name);
+    if dst.exists() {
+        return Err(format!("A file or folder named \"{name}\" already exists"));
+    }
+    fs::rename(src, &dst).map_err(|e| e.to_string())?;
+    Ok(dst.to_string_lossy().to_string())
+}
+
+/// Permanently delete a file or directory (recursive for directories).
+pub fn delete_path(path: &str) -> Result<(), String> {
+    let p = Path::new(path);
+    if !p.exists() {
+        // Already gone — treat as success.
+        return Ok(());
+    }
+    if p.is_dir() {
+        fs::remove_dir_all(p).map_err(|e| e.to_string())
+    } else {
+        fs::remove_file(p).map_err(|e| e.to_string())
+    }
+}
+
 fn ensure_regular_file(path: &str) -> Result<&Path, String> {
     let p = Path::new(path);
     if !p.exists() {

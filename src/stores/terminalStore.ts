@@ -108,7 +108,7 @@ type TerminalState = {
   ) => string
   runInSession: (terminalId: string, projectPath: string, command: string) => Promise<void>
   runScript: (projectPath: string, projectName: string, pm: string, script: string) => Promise<void>
-  runRaw: (projectPath: string, projectName: string, command: string) => Promise<void>
+  runRaw: (projectPath: string, projectName: string, command: string) => Promise<string>
   /** Resolve when the session is no longer marked running (shell back at prompt). */
   waitUntilIdle: (terminalId: string, timeoutMs?: number) => Promise<void>
   markConnected: (id: string, connected: boolean) => void
@@ -273,6 +273,7 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
   runRaw: async (projectPath, projectName, command) => {
     const id = get().ensureRunTarget(projectPath, projectName)
     await get().runInSession(id, projectPath, command)
+    return id
   },
 
   waitUntilIdle: async (terminalId, timeoutMs = 180_000) => {

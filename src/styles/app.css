@@ -76,7 +76,7 @@
 
 @keyframes fpm-spin {
   to {
-    transform: rotate(360deg);
+    transform: rotate(-360deg);
   }
 }
 
@@ -2300,6 +2300,25 @@ button.history-chip-main:hover {
   height: 1px;
   margin: 4px 8px;
   background: var(--border);
+}
+
+.submenu-trigger {
+  display: flex;
+  align-items: center;
+}
+
+.submenu-trigger .submenu-arrow {
+  margin-left: auto;
+  opacity: 0.7;
+}
+
+.submenu-trigger.open {
+  background: var(--accent-soft);
+  color: var(--cyan-soft);
+}
+
+.submenu-panel {
+  min-width: 180px;
 }
 
 .branch-menu-hint,

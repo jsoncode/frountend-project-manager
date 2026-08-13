@@ -189,6 +189,16 @@ description = "Create a directory on disk"
 commands.allow = ["create_directory"]
 
 [[permission]]
+identifier = "allow-rename-path"
+description = "Rename a file or directory within its parent folder"
+commands.allow = ["rename_path"]
+
+[[permission]]
+identifier = "allow-delete-path"
+description = "Permanently delete a file or directory"
+commands.allow = ["delete_path"]
+
+[[permission]]
 identifier = "allow-read-text-file"
 description = "Read a UTF-8 text file for the in-app editor"
 commands.allow = ["read_text_file"]

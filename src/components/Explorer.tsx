@@ -8,6 +8,7 @@ import {
   CheckCircle,
   ChevronDown,
   ChevronRight,
+  Command,
   Document,
   Folder2,
   Loader,
@@ -35,8 +36,10 @@ import { projectMatchesQuery } from '../lib/projectSearch'
 import type { GitInfo, GitStatus, MergeStatus, ProjectSummary, PullBranchResult } from '../lib/types'
 import {
   findWorkspaceForPath,
+  normalizePath,
   shortWorkspaceName,
 } from '../lib/workspacePath'
+import { editorPathKey, useEditorStore } from '../stores/editorStore'
 import { useExplorerStore } from '../stores/explorerStore'
 import { showErrorLog } from '../stores/errorLogStore'
 import { useProjectStore } from '../stores/projectStore'
@@ -50,6 +53,8 @@ import { FileIcon } from './FileIcon'
 import { MergeConflictModal } from './MergeConflictModal'
 import { ModalShell } from './ModalShell'
 import { OpenWithMenu } from './OpenWithMenu'
+import { RenameModal } from './RenameModal'
+import { SubMenuItem } from './SubMenuItem'
 import { Tooltip } from './Tooltip'
 
 type DirEntry = {
@@ -118,6 +123,19 @@ export function Explorer() {
   // Merge conflicts produced by a context-menu pull (opens the 3-way tool).
   const [pullMerge, setPullMerge] = useState<{ projectPath: string; initial: MergeStatus | null } | null>(null)
   const [gitLoading, setGitLoading] = useState(false)
+  // Projects whose "view status" (git status in terminal) is still running.
+  const [statusChecking, setStatusChecking] = useState<Set<string>>(() => new Set())
+  // Pending rename / delete targets from the project & entry context menus.
+  const [renameTarget, setRenameTarget] = useState<
+    | { kind: 'project'; path: string; name: string }
+    | { kind: 'entry'; path: string; projectPath: string; isDir: boolean }
+    | null
+  >(null)
+  const [pendingDelete, setPendingDelete] = useState<
+    | { kind: 'project'; path: string; name: string }
+    | { kind: 'entry'; path: string; isDir: boolean; name: string }
+    | null
+  >(null)
   const rowRefs = useRef(new Map<string, HTMLButtonElement>())
 
   // Debounce click vs dblclick for workspace/project/dir toggle
@@ -269,11 +287,159 @@ export function Explorer() {
   const projLocalName = (name: string) =>
     name.replace(/^remotes\//, '').replace(/^origin\//, '')
 
-  const projRunGit = (projectPath: string, command: string) => {
+  const projRunGit = async (projectPath: string, command: string) => {
     const proj = findProject(projectPath)
     const name = proj?.folderName ?? projectPath.split('/').pop() ?? projectPath
-    void useTerminalStore.getState().runRaw(projectPath, name, command)
+    return useTerminalStore.getState().runRaw(projectPath, name, command)
   }
+
+  // ── Filesystem helpers for project/entry context menus ──
+
+  /** Close editor tabs whose path equals `prefix` or lives under it. */
+  const closeTabsUnder = (prefix: string) => {
+    const editor = useEditorStore.getState()
+    const base = normalizeFsPath(prefix)
+    for (const tab of [...editor.tabs]) {
+      const key = editorPathKey(tab.path)
+      if (key === base || key.startsWith(`${base}/`)) {
+        editor.closeTab(tab.path)
+      }
+    }
+  }
+
+  /** Refuse to delete a configured workspace root itself. */
+  const isWorkspaceRoot = (path: string) => {
+    const norm = normalizePath(path).toLowerCase()
+    return workspaces.some((w) => normalizePath(w).toLowerCase() === norm)
+  }
+
+  const parentDirOf = (path: string) => {
+    const i = path.lastIndexOf('/')
+    return i > 0 ? path.slice(0, i) : path
+  }
+
+  /** Rename a project folder; migrate cached git status, then rescan. */
+  const renameProject = async (oldPath: string, newName: string): Promise<string | null> => {
+    try {
+      const newPath = await invoke<string>('rename_path', { path: oldPath, newName })
+      const wsStore = useWorkspaceStore.getState()
+      const status = wsStore.projectStatuses[oldPath]
+      if (status) {
+        wsStore.updateProjectStatus(newPath, status)
+        useWorkspaceStore.setState((s) => {
+          const projectStatuses = { ...s.projectStatuses }
+          delete projectStatuses[oldPath]
+          return { projectStatuses }
+        })
+      }
+      const workspace = findWorkspaceForPath(oldPath, workspaces)
+      if (workspace) await wsStore.refreshWorkspace(workspace)
+      closeTabsUnder(oldPath)
+      setRenameTarget(null)
+      return null
+    } catch (e) {
+      return String(e)
+    }
+  }
+
+  const deleteProject = async (path: string) => {
+    try {
+      await invoke('delete_path', { path })
+    } catch (e) {
+      showErrorLog(e, t('fs.opFailed'))
+      return
+    }
+    useWorkspaceStore.setState((s) => {
+      const projectStatuses = { ...s.projectStatuses }
+      delete projectStatuses[path]
+      return { projectStatuses }
+    })
+    closeTabsUnder(path)
+    setExpanded((prev) =>
+      prev.filter((id) => id !== `proj:${path}` && !id.startsWith(`dir:${path}/`)),
+    )
+    const workspace = findWorkspaceForPath(path, workspaces)
+    if (workspace) await useWorkspaceStore.getState().refreshWorkspace(workspace)
+  }
+
+  /** Rename a file/dir; migrate tree cache + expansion for directories. */
+  const renameEntry = async (oldPath: string, isDir: boolean, newName: string): Promise<string | null> => {
+    try {
+      const newPath = await invoke<string>('rename_path', { path: oldPath, newName })
+      const parent = parentDirOf(oldPath)
+      const patch = (cache: Record<string, DirEntry[]>) => {
+        const list = cache[parent]
+        if (!list) return cache
+        return {
+          ...cache,
+          [parent]: list.map((e) =>
+            e.path === oldPath ? { ...e, path: newPath, name: newName } : e,
+          ),
+        }
+      }
+      dirCacheRef.current = patch(dirCacheRef.current)
+      setDirCache(patch)
+      if (isDir) {
+        const oldId = `dir:${oldPath}`
+        const newId = `dir:${newPath}`
+        setExpanded((prev) =>
+          prev.map((id) => {
+            if (id === oldId) return newId
+            if (id.startsWith(`${oldId}/`)) return newId + id.slice(oldId.length)
+            return id
+          }),
+        )
+        const moved: Record<string, DirEntry[]> = {}
+        for (const [k, v] of Object.entries(dirCacheRef.current)) {
+          if (k === oldPath) moved[newPath] = v
+          else if (k.startsWith(`${oldPath}/`)) moved[newPath + k.slice(oldPath.length)] = v
+          else moved[k] = v
+        }
+        dirCacheRef.current = moved
+        setDirCache(moved)
+      }
+      closeTabsUnder(oldPath)
+      setRenameTarget(null)
+      return null
+    } catch (e) {
+      return String(e)
+    }
+  }
+
+  const deleteEntry = async (path: string, isDir: boolean) => {
+    try {
+      await invoke('delete_path', { path })
+    } catch (e) {
+      showErrorLog(e, t('fs.opFailed'))
+      return
+    }
+    const parent = parentDirOf(path)
+    const patch = (cache: Record<string, DirEntry[]>) => {
+      const list = cache[parent]
+      if (!list) return cache
+      return { ...cache, [parent]: list.filter((e) => e.path !== path) }
+    }
+    dirCacheRef.current = patch(dirCacheRef.current)
+    setDirCache(patch)
+    if (isDir) {
+      setExpanded((prev) =>
+        prev.filter((id) => id !== `dir:${path}` && !id.startsWith(`dir:${path}/`)),
+      )
+    }
+    closeTabsUnder(path)
+  }
+
+  // Checkout candidates for the project context-menu submenu.
+  const projCheckoutLocals =
+    projGitInfo?.info && projGitInfo.path === menu?.path
+      ? projGitInfo.info.branches
+          .filter((b) => !b.isRemote && b.name !== projGitCurrent)
+          .slice(0, 10)
+      : []
+  const projCheckoutRemotes =
+    projGitInfo?.info && projGitInfo.path === menu?.path
+      ? projGitInfo.info.branches.filter((b) => b.isRemote).slice(0, 5)
+      : []
 
   const fetchProjGitInfo = useCallback(async (projectPath: string) => {
     // First check workspaceStore cache (populated by scanAllProjectStatuses or selectProject)
@@ -763,7 +929,7 @@ export function Explorer() {
                             <ChevronRight size={12} color="currentColor" />
                           )}
                         </span>
-                        {isScanning ? (
+                        {(isScanning || statusChecking.has(p.path)) ? (
                           <Loader
                             className="explorer-icon ui-icon is-spinning"
                             size={14}
@@ -885,129 +1051,16 @@ export function Explorer() {
           x={menu.x}
           y={menu.y}
           onClose={() => setMenu(null)}
+          ideAsSubmenu
         >
-          <button
-            type="button"
-            role="menuitem"
-            className="btn-with-icon"
-            onClick={() => {
-              setCommitEntry({ path: menu.path, projectPath: menu.path })
-              setMenu(null)
-            }}
+          <SubMenuItem
+            id="checkout"
+            icon={<BranchUp className="ui-icon" size={14} color="currentColor" aria-hidden />}
+            label={t('git.ctx.checkoutBranch')}
           >
-            <Pen className="ui-icon" size={14} color="currentColor" aria-hidden />
-            {t('explorer.commitChanges')}
-          </button>
-          <div className="branch-menu-sep" />
-          <button
-            type="button"
-            role="menuitem"
-            className="btn-with-icon"
-            onClick={() => {
-              projRunGit(menu.path, 'git status')
-              setMenu(null)
-            }}
-          >
-            <CheckCircle className="ui-icon" size={14} color="currentColor" aria-hidden />
-            {t('git.ctx.status')}
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className="btn-with-icon"
-            onClick={() => {
-              const branch = projGitCurrent ?? 'HEAD'
-              projRunGit(menu.path, `git log --format="%h %s (%ar)" -10 ${branch}`)
-              setMenu(null)
-            }}
-          >
-            <Document className="ui-icon" size={14} color="currentColor" aria-hidden />
-            {t('git.ctx.log')}
-          </button>
-          <div className="branch-menu-sep" />
-          <button
-            type="button"
-            role="menuitem"
-            className="btn-with-icon"
-            onClick={() => {
-              setMenu(null)
-              void (async () => {
-                try {
-                  // Backend-driven fetch — no terminal session needed.
-                  await invoke<string>('git_fetch', { path: menu.path })
-                } catch { /* ignore */ }
-                // Remote tips changed — refresh cached counts so the badge updates.
-                await refreshProjGitAfterSwitch(menu.path)
-              })()
-            }}
-          >
-            <Refresh className="ui-icon" size={14} color="currentColor" aria-hidden />
-            {t('git.ctx.fetch')}
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className="btn-with-icon"
-            onClick={() => {
-              setMenu(null)
-              void (async () => {
-                try {
-                  // Backend-driven update-all: fast-forwards every pending
-                  // branch (auto-stash for the current one) so the project
-                  // badge actually clears; reports conflicts structurally.
-                  const res = await invoke<PullBranchResult>('git_pull_all', {
-                    path: menu.path,
-                  })
-                  if (res.status === 'conflicts' && res.merge) {
-                    setPullMerge({ projectPath: menu.path, initial: res.merge })
-                  }
-                } catch (e) {
-                  showErrorLog(e, t('error.gitFailed'))
-                }
-                // Recompute behind counts and sync every cache.
-                await refreshProjGitAfterSwitch(menu.path)
-                // Also surface conflicts detected outside our own pull.
-                try {
-                  const status = await invoke<MergeStatus>('git_merge_status', { path: menu.path }).catch(() => null)
-                  if (status && (status.inProgress || status.conflictCount > 0)) {
-                    setPullMerge((prev) => prev ?? { projectPath: menu.path, initial: status })
-                  }
-                } catch { /* ignore */ }
-              })()
-            }}
-          >
-            <ArrowDown className="ui-icon" size={14} color="currentColor" aria-hidden />
-            {t('git.ctx.pull')}
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className="btn-with-icon"
-            onClick={() => {
-              setMenu(null)
-              void (async () => {
-                try {
-                  // Backend-driven push (auto `-u` when no upstream yet).
-                  await invoke<string>('git_push', { path: menu.path, branch: null })
-                } catch (e) {
-                  showErrorLog(e, t('error.gitFailed'))
-                }
-                await refreshProjGitAfterSwitch(menu.path)
-              })()
-            }}
-          >
-            <ArrowUp className="ui-icon" size={14} color="currentColor" aria-hidden />
-            {t('git.ctx.push')}
-          </button>
-          {/* Branch submenu */}
-          {projGitInfo?.info && projGitInfo.path === menu.path && (
-            <>
-              <div className="branch-menu-sep" />
-              {projGitInfo.info.branches
-                .filter((b) => !b.isRemote)
-                .filter((b) => b.name !== projGitCurrent)
-                .slice(0, 10)
-                .map((b) => (
+            {projGitInfo?.info && projGitInfo.path === menu.path ? (
+              <>
+                {projCheckoutLocals.map((b) => (
                   <button
                     key={b.name}
                     type="button"
@@ -1019,16 +1072,13 @@ export function Explorer() {
                     {t('git.ctx.checkout')} {b.name}
                   </button>
                 ))}
-              {projGitInfo.info.branches.filter((b) => b.isRemote).length > 0 && (
-                <>
-                  <div className="branch-menu-sep" />
-                  <span className="muted" style={{ fontSize: 10, padding: '2px 8px' }}>
-                    {t('git.remoteBranches')}
-                  </span>
-                  {projGitInfo.info.branches
-                    .filter((b) => b.isRemote)
-                    .slice(0, 5)
-                    .map((b) => (
+                {projCheckoutRemotes.length > 0 && (
+                  <>
+                    <div className="branch-menu-sep" />
+                    <span className="muted" style={{ fontSize: 10, padding: '2px 8px' }}>
+                      {t('git.remoteBranches')}
+                    </span>
+                    {projCheckoutRemotes.map((b) => (
                       <button
                         key={b.name}
                         type="button"
@@ -1040,21 +1090,188 @@ export function Explorer() {
                         {t('git.ctx.checkout')} {projLocalName(b.name)}
                       </button>
                     ))}
-                </>
-              )}
-              {gitLoading && (
-                <span className="muted" style={{ fontSize: 10, padding: '2px 8px' }}>
-                  <Loader className="ui-icon is-spinning" size={10} color="currentColor" aria-hidden />
-                  {t('ws.scanningStatuses')}
-                </span>
-              )}
-            </>
-          )}
-          {!projGitInfo && gitLoading && (
-            <span className="muted" style={{ fontSize: 10, padding: '2px 8px' }}>
-              <Loader className="ui-icon is-spinning" size={10} color="currentColor" aria-hidden />
-              {t('ws.scanningStatuses')}
-            </span>
+                  </>
+                )}
+                {projCheckoutLocals.length === 0 && projCheckoutRemotes.length === 0 && (
+                  <div className="branch-menu-hint muted">{t('git.ctx.noOtherBranches')}</div>
+                )}
+              </>
+            ) : gitLoading ? (
+              <span className="muted" style={{ fontSize: 10, padding: '2px 8px' }}>
+                <Loader className="ui-icon is-spinning" size={10} color="currentColor" aria-hidden />
+                {t('ws.scanningStatuses')}
+              </span>
+            ) : (
+              <div className="branch-menu-hint muted">{t('git.ctx.noOtherBranches')}</div>
+            )}
+          </SubMenuItem>
+          <SubMenuItem
+            id="git-ops"
+            icon={<Command className="ui-icon" size={14} color="currentColor" aria-hidden />}
+            label={t('git.ctx.operations')}
+          >
+            <button
+              type="button"
+              role="menuitem"
+              className="btn-with-icon"
+              onClick={() => {
+                setCommitEntry({ path: menu.path, projectPath: menu.path })
+                setMenu(null)
+              }}
+            >
+              <Pen className="ui-icon" size={14} color="currentColor" aria-hidden />
+              {t('explorer.commitChanges')}
+            </button>
+            <div className="branch-menu-sep" />
+            <button
+              type="button"
+              role="menuitem"
+              className="btn-with-icon"
+              onClick={() => {
+                const path = menu.path
+                setMenu(null)
+                void (async () => {
+                  setStatusChecking((prev) => new Set(prev).add(path))
+                  try {
+                    // Same behavior as before: run `git status` in the terminal;
+                    // additionally wait for the shell prompt so the row spinner
+                    // clears once the command finishes (capped at 10s).
+                    const id = await projRunGit(path, 'git status')
+                    await useTerminalStore.getState().waitUntilIdle(id, 10_000)
+                  } finally {
+                    setStatusChecking((prev) => {
+                      const next = new Set(prev)
+                      next.delete(path)
+                      return next
+                    })
+                  }
+                })()
+              }}
+            >
+              <CheckCircle className="ui-icon" size={14} color="currentColor" aria-hidden />
+              {t('git.ctx.status')}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="btn-with-icon"
+              onClick={() => {
+                const branch = projGitCurrent ?? 'HEAD'
+                void projRunGit(menu.path, `git log --format="%h %s (%ar)" -10 ${branch}`)
+                setMenu(null)
+              }}
+            >
+              <Document className="ui-icon" size={14} color="currentColor" aria-hidden />
+              {t('git.ctx.log')}
+            </button>
+            <div className="branch-menu-sep" />
+            <button
+              type="button"
+              role="menuitem"
+              className="btn-with-icon"
+              onClick={() => {
+                setMenu(null)
+                void (async () => {
+                  try {
+                    // Backend-driven fetch — no terminal session needed.
+                    await invoke<string>('git_fetch', { path: menu.path })
+                  } catch { /* ignore */ }
+                  // Remote tips changed — refresh cached counts so the badge updates.
+                  await refreshProjGitAfterSwitch(menu.path)
+                })()
+              }}
+            >
+              <Refresh className="ui-icon" size={14} color="currentColor" aria-hidden />
+              {t('git.ctx.fetch')}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="btn-with-icon"
+              onClick={() => {
+                setMenu(null)
+                void (async () => {
+                  try {
+                    // Backend-driven update-all: fast-forwards every pending
+                    // branch (auto-stash for the current one) so the project
+                    // badge actually clears; reports conflicts structurally.
+                    const res = await invoke<PullBranchResult>('git_pull_all', {
+                      path: menu.path,
+                    })
+                    if (res.status === 'conflicts' && res.merge) {
+                      setPullMerge({ projectPath: menu.path, initial: res.merge })
+                    }
+                  } catch (e) {
+                    showErrorLog(e, t('error.gitFailed'))
+                  }
+                  // Recompute behind counts and sync every cache.
+                  await refreshProjGitAfterSwitch(menu.path)
+                  // Also surface conflicts detected outside our own pull.
+                  try {
+                    const status = await invoke<MergeStatus>('git_merge_status', { path: menu.path }).catch(() => null)
+                    if (status && (status.inProgress || status.conflictCount > 0)) {
+                      setPullMerge((prev) => prev ?? { projectPath: menu.path, initial: status })
+                    }
+                  } catch { /* ignore */ }
+                })()
+              }}
+            >
+              <ArrowDown className="ui-icon" size={14} color="currentColor" aria-hidden />
+              {t('git.ctx.pull')}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="btn-with-icon"
+              onClick={() => {
+                setMenu(null)
+                void (async () => {
+                  try {
+                    // Backend-driven push (auto `-u` when no upstream yet).
+                    await invoke<string>('git_push', { path: menu.path, branch: null })
+                  } catch (e) {
+                    showErrorLog(e, t('error.gitFailed'))
+                  }
+                  await refreshProjGitAfterSwitch(menu.path)
+                })()
+              }}
+            >
+              <ArrowUp className="ui-icon" size={14} color="currentColor" aria-hidden />
+              {t('git.ctx.push')}
+            </button>
+          </SubMenuItem>
+          <div className="branch-menu-sep" />
+          <button
+            type="button"
+            role="menuitem"
+            className="btn-with-icon"
+            onClick={() => {
+              const name = findProject(menu.path)?.folderName
+                ?? menu.path.split('/').pop()
+                ?? menu.path
+              setRenameTarget({ kind: 'project', path: menu.path, name })
+              setMenu(null)
+            }}
+          >
+            <Pen className="ui-icon" size={14} color="currentColor" aria-hidden />
+            {t('fs.rename')}
+          </button>
+          {!isWorkspaceRoot(menu.path) && (
+            <button
+              type="button"
+              role="menuitem"
+              className="btn-with-icon danger"
+              onClick={() => {
+                const name = findProject(menu.path)?.folderName
+                  ?? menu.path.split('/').pop()
+                  ?? menu.path
+                setPendingDelete({ kind: 'project', path: menu.path, name })
+                setMenu(null)
+              }}
+            >
+              <Trash className="ui-icon" size={14} color="currentColor" aria-hidden />
+              {t('fs.delete')}
+            </button>
           )}
         </OpenWithMenu>
       )}
@@ -1148,6 +1365,41 @@ export function Explorer() {
               </button>
             </>
           )}
+          <div className="branch-menu-sep" />
+          <button
+            type="button"
+            role="menuitem"
+            className="btn-with-icon"
+            onClick={() => {
+              setRenameTarget({
+                kind: 'entry',
+                path: menu.path,
+                projectPath: menu.projectPath,
+                isDir: menu.isDir,
+              })
+              setMenu(null)
+            }}
+          >
+            <Pen className="ui-icon" size={14} color="currentColor" aria-hidden />
+            {t('fs.rename')}
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="btn-with-icon danger"
+            onClick={() => {
+              setPendingDelete({
+                kind: 'entry',
+                path: menu.path,
+                isDir: menu.isDir,
+                name: menu.path.split('/').pop() ?? menu.path,
+              })
+              setMenu(null)
+            }}
+          >
+            <Trash className="ui-icon" size={14} color="currentColor" aria-hidden />
+            {t('fs.delete')}
+          </button>
         </ContextMenuPortal>
       )}
 
@@ -1252,6 +1504,61 @@ export function Explorer() {
             {t('ws.removeConfirm', {
               name: shortWorkspaceName(pendingRemove),
             })}
+          </p>
+        </ModalShell>
+      )}
+
+      {renameTarget && (
+        <RenameModal
+          initial={
+            renameTarget.kind === 'project'
+              ? renameTarget.name
+              : renameTarget.path.split('/').pop() ?? renameTarget.path
+          }
+          selectStem={renameTarget.kind === 'entry' && !renameTarget.isDir}
+          onSubmit={(newName) =>
+            renameTarget.kind === 'project'
+              ? renameProject(renameTarget.path, newName)
+              : renameEntry(renameTarget.path, renameTarget.isDir, newName)
+          }
+          onClose={() => setRenameTarget(null)}
+        />
+      )}
+
+      {pendingDelete && (
+        <ModalShell
+          title={t('fs.deleteTitle')}
+          onClose={() => setPendingDelete(null)}
+          closeOnEsc={false}
+          footer={
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setPendingDelete(null)}
+              >
+                {t('branch.cancel')}
+              </button>
+              <button
+                type="button"
+                className="btn danger btn-with-icon"
+                onClick={() => {
+                  const target = pendingDelete
+                  setPendingDelete(null)
+                  if (target.kind === 'project') void deleteProject(target.path)
+                  else void deleteEntry(target.path, target.isDir)
+                }}
+              >
+                <Trash className="ui-icon" size={14} color="currentColor" aria-hidden />
+                {t('fs.delete')}
+              </button>
+            </div>
+          }
+        >
+          <p className="muted">
+            {pendingDelete.kind === 'project'
+              ? t('fs.deleteProjectConfirm', { name: pendingDelete.name })
+              : t('fs.deleteEntryConfirm', { name: pendingDelete.name })}
           </p>
         </ModalShell>
       )}

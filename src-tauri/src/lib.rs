@@ -493,6 +493,20 @@ async fn create_directory(path: String) -> Result<String, String> {
 }
 
 #[tauri::command(async)]
+async fn rename_path(path: String, new_name: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || fs_explorer::rename_path(&path, &new_name))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command(async)]
+async fn delete_path(path: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || fs_explorer::delete_path(&path))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command(async)]
 async fn read_text_file(path: String) -> Result<fs_explorer::TextFileResult, String> {
     tauri::async_runtime::spawn_blocking(move || fs_explorer::read_text_file(&path))
         .await
@@ -971,6 +985,8 @@ pub fn run() {
             read_env_file,
             list_directory_entries,
             create_directory,
+            rename_path,
+            delete_path,
             read_text_file,
             write_text_file,
             resolve_import,
