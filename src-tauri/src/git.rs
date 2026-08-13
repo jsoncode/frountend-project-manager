@@ -1015,12 +1015,24 @@ fn pop_auto_stash(path: &str, msg: &mut String) {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct PullBranchItem {
+    pub name: String,
+    /// "updated" | "uptodate" | "conflicts" | "error"
+    pub status: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PullBranchResult {
-    /// "updated" | "uptodate" | "conflicts"
+    /// "updated" | "uptodate" | "conflicts" | "error"
     pub status: String,
     pub message: String,
     /// Present when the pull left conflicts to resolve.
     pub merge: Option<MergeStatus>,
+    /// Per-branch outcomes (populated by `git_pull_all`; a single item for
+    /// `git_pull_branch`). Lets the UI show one status per branch.
+    pub branches: Vec<PullBranchItem>,
 }
 
 /// Pull / fast-forward a branch. Works without checking it out:
@@ -1059,14 +1071,20 @@ pub fn git_pull_branch(path: &str, branch: &str) -> Result<PullBranchResult, Str
         }
 
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let message = if stderr.is_empty() {
+            format!("updated {local} ← origin/{local}")
+        } else {
+            format!("updated {local}: {stderr}")
+        };
         return Ok(PullBranchResult {
             status: "updated".into(),
-            message: if stderr.is_empty() {
-                format!("updated {local} ← origin/{local}")
-            } else {
-                format!("updated {local}: {stderr}")
-            },
+            message: message.clone(),
             merge: None,
+            branches: vec![PullBranchItem {
+                name: local.clone(),
+                status: "updated".into(),
+                message,
+            }],
         });
     }
 
@@ -1096,8 +1114,13 @@ pub fn git_pull_branch(path: &str, branch: &str) -> Result<PullBranchResult, Str
                     }
                     return Ok(PullBranchResult {
                         status: "conflicts".into(),
-                        message,
+                        message: message.clone(),
                         merge: Some(merge),
+                        branches: vec![PullBranchItem {
+                            name: local.clone(),
+                            status: "conflicts".into(),
+                            message,
+                        }],
                     });
                 }
                 if stashed {
@@ -1119,8 +1142,13 @@ pub fn git_pull_branch(path: &str, branch: &str) -> Result<PullBranchResult, Str
         }
         return Ok(PullBranchResult {
             status: "uptodate".into(),
-            message,
+            message: message.clone(),
             merge: None,
+            branches: vec![PullBranchItem {
+                name: local.clone(),
+                status: "uptodate".into(),
+                message,
+            }],
         });
     }
 
@@ -1129,8 +1157,13 @@ pub fn git_pull_branch(path: &str, branch: &str) -> Result<PullBranchResult, Str
     }
     Ok(PullBranchResult {
         status: "updated".into(),
-        message: pull_msg,
+        message: pull_msg.clone(),
         merge: None,
+        branches: vec![PullBranchItem {
+            name: local.clone(),
+            status: "updated".into(),
+            message: pull_msg,
+        }],
     })
 }
 
@@ -1144,8 +1177,9 @@ fn is_conflict_code(code: &str) -> bool {
 ///   only, no checkout needed);
 /// - the current branch → real pull with auto-stash + conflict reporting
 ///   (same behaviour as `git_pull_branch`).
-/// Branches that diverged from their remote cannot fast-forward and are
-/// reported instead of failing the whole operation.
+/// Branches that cannot fast-forward (diverged / fetch failed) are reported
+/// as per-branch "error" items instead of failing the whole operation; the
+/// overall status is "error" when nothing else got updated.
 pub fn git_pull_all(path: &str) -> Result<PullBranchResult, String> {
     let git_dir = std::path::Path::new(path).join(".git");
     if !git_dir.exists() {
@@ -1157,6 +1191,7 @@ pub fn git_pull_all(path: &str) -> Result<PullBranchResult, String> {
 
     let mut updated: Vec<String> = Vec::new();
     let mut skipped: Vec<String> = Vec::new();
+    let mut items: Vec<PullBranchItem> = Vec::new();
     let mut current_behind = 0u32;
 
     if let Some(info) = info {
@@ -1174,15 +1209,39 @@ pub fn git_pull_all(path: &str) -> Result<PullBranchResult, String> {
                 continue;
             }
             let spec = format!("{0}:{0}", b.name);
-            let ok = git_command(path)
+            let output = git_command(path)
                 .args(["fetch", "origin", &spec])
-                .output()
-                .map(|o| o.status.success())
-                .unwrap_or(false);
-            if ok {
-                updated.push(b.name.clone());
-            } else {
-                skipped.push(b.name.clone());
+                .output();
+            match output {
+                Ok(o) if o.status.success() => {
+                    updated.push(b.name.clone());
+                    items.push(PullBranchItem {
+                        name: b.name.clone(),
+                        status: "updated".into(),
+                        message: format!("updated {0} ← origin/{0}", b.name),
+                    });
+                }
+                Ok(o) => {
+                    let err = String::from_utf8_lossy(&o.stderr).trim().to_string();
+                    skipped.push(b.name.clone());
+                    items.push(PullBranchItem {
+                        name: b.name.clone(),
+                        status: "error".into(),
+                        message: if err.is_empty() {
+                            format!("无法快进更新分支 {0}（可能与远端分叉）", b.name)
+                        } else {
+                            err
+                        },
+                    });
+                }
+                Err(e) => {
+                    skipped.push(b.name.clone());
+                    items.push(PullBranchItem {
+                        name: b.name.clone(),
+                        status: "error".into(),
+                        message: e.to_string(),
+                    });
+                }
             }
         }
     }
@@ -1190,18 +1249,43 @@ pub fn git_pull_all(path: &str) -> Result<PullBranchResult, String> {
     // Pull the current branch last — it may stash local changes or merge.
     if current_behind > 0 {
         if let Some(cur) = current.as_deref() {
-            let res = git_pull_branch(path, cur)?;
-            if res.status == "conflicts" {
-                let mut message = res.message;
-                append_pull_all_summary(&mut message, &updated, &skipped);
-                return Ok(PullBranchResult {
-                    status: "conflicts".into(),
-                    message,
-                    merge: res.merge,
-                });
-            }
-            if res.status == "updated" {
-                updated.push(cur.to_string());
+            match git_pull_branch(path, cur) {
+                Ok(res) => {
+                    let branch_status = match res.status.as_str() {
+                        "conflicts" => "conflicts",
+                        "updated" => "updated",
+                        _ => "uptodate",
+                    };
+                    items.push(PullBranchItem {
+                        name: cur.to_string(),
+                        status: branch_status.into(),
+                        message: res.message.clone(),
+                    });
+                    if res.status == "conflicts" {
+                        let mut message = res.message;
+                        append_pull_all_summary(&mut message, &updated, &skipped);
+                        return Ok(PullBranchResult {
+                            status: "conflicts".into(),
+                            message,
+                            merge: res.merge,
+                            branches: items,
+                        });
+                    }
+                    if res.status == "updated" {
+                        updated.push(cur.to_string());
+                    }
+                }
+                Err(e) => {
+                    // The current branch couldn't be updated — record it as a
+                    // per-branch failure instead of failing the whole project.
+                    let message = format!("更新失败：{e}");
+                    skipped.push(cur.to_string());
+                    items.push(PullBranchItem {
+                        name: cur.to_string(),
+                        status: "error".into(),
+                        message,
+                    });
+                }
             }
         }
     }
@@ -1211,6 +1295,7 @@ pub fn git_pull_all(path: &str) -> Result<PullBranchResult, String> {
             status: "uptodate".into(),
             message: "所有分支已是最新".into(),
             merge: None,
+            branches: items,
         });
     }
 
@@ -1227,16 +1312,17 @@ pub fn git_pull_all(path: &str) -> Result<PullBranchResult, String> {
             message.push('；');
         }
         message.push_str(&format!(
-            "{} 个分支与远端分叉，无法快进更新，请签出后手动合并：{}",
+            "{} 个分支更新失败：{}",
             skipped.len(),
             skipped.join("、")
         ));
     }
 
     Ok(PullBranchResult {
-        status: if updated.is_empty() { "uptodate" } else { "updated" }.into(),
+        status: if updated.is_empty() { "error" } else { "updated" }.into(),
         message,
         merge: None,
+        branches: items,
     })
 }
 

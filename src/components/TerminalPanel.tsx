@@ -44,12 +44,16 @@ export function TerminalPanel({
    * Clicking a terminal tab locates its project in the Explorer: clears any
    * active search filter, expands the owning workspace (accordion style),
    * selects the project row, then scrolls it to the top of the view.
+   * Sessions whose cwd is a configured workspace root itself (opened from
+   * the workspace context menu) have no project row — skip the locating.
    */
   const locateProject = (projectPath: string) => {
-    const wsStore = useWorkspaceStore.getState()
-    const exStore = useExplorerStore.getState()
     const workspaces =
       useSettingsStore.getState().config?.workspaces ?? []
+    const norm = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+    if (workspaces.some((w) => norm(w) === norm(projectPath))) return
+    const wsStore = useWorkspaceStore.getState()
+    const exStore = useExplorerStore.getState()
     const ws =
       findWorkspaceForPath(projectPath, workspaces) ?? wsStore.activeWorkspace
     if (!ws) return

@@ -595,3 +595,105 @@
 .mono {
   font-family: var(--mono);
 }
+
+/* ============ 更新所有项目弹窗（UpdateAllProjectsModal） ============ */
+
+.update-all-hint {
+  margin: 2px 0 10px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* 表格玻璃化：与 git-log 弹窗一致 */
+.update-all-modal .git-log-table .ant-table {
+  background: transparent;
+  font-size: 12px;
+}
+
+.update-all-modal .git-log-table .ant-table-container {
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.update-all-modal .git-log-table .ant-table-thead > tr > th {
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text-dim);
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--border-dim);
+  padding: 7px 12px;
+  user-select: none;
+}
+
+.update-all-modal .git-log-table .ant-table-tbody > tr > td {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 6px 12px;
+  color: var(--text);
+}
+
+.update-all-modal .git-log-table .ant-table-tbody > tr:hover > td {
+  background: rgba(45, 212, 191, 0.05);
+}
+
+.update-all-project {
+  font-weight: 500;
+  color: var(--text-bright);
+}
+
+.update-all-branch {
+  font-size: 11px;
+  color: var(--text);
+}
+
+/* 行状态徽标 */
+.update-all-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.update-all-status-running {
+  color: var(--cyan-soft);
+}
+
+.update-all-status-updated {
+  color: var(--ok);
+}
+
+.update-all-status-uptodate {
+  color: var(--text-dim);
+}
+
+.update-all-status-conflicts {
+  color: var(--warn);
+}
+
+.update-all-status-error {
+  color: var(--danger);
+}
+
+.update-all-status-pending {
+  color: var(--text-dim);
+}
+
+/* 底部进度 / 汇总 */
+.update-all-running {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.update-all-summary {
+  font-size: 12px;
+  color: var(--text);
+  margin-right: 14px;
+}
+
+.update-all-conflict-hint {
+  font-size: 12px;
+  margin-left: 10px;
+}

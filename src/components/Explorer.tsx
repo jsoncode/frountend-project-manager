@@ -1,3 +1,4 @@
+import { ConsoleSqlOutlined } from '@ant-design/icons'
 import { Button } from 'antd'
 import {
   ArrowDown,
@@ -57,6 +58,7 @@ import { OpenWithMenu } from './OpenWithMenu'
 import { RenameModal } from './RenameModal'
 import { SubMenuItem } from './SubMenuItem'
 import { Tooltip } from './Tooltip'
+import { UpdateAllProjectsModal } from './UpdateAllProjectsModal'
 
 type DirEntry = {
   name: string
@@ -120,6 +122,8 @@ export function Explorer() {
   const [diffDirList, setDiffDirList] = useState<{ dirPath: string; projectPath: string; files: { absPath: string; relPath: string; label: string }[] } | null>(null)
   // Git info for project context menu
   const [projGitInfo, setProjGitInfo] = useState<{ path: string; info: GitInfo | null } | null>(null)
+  // Workspace whose "update all projects (caution)" confirmation modal is open.
+  const [updateAllWs, setUpdateAllWs] = useState<string | null>(null)
   const [branchSwitchTarget, setBranchSwitchTarget] = useState<{ projectPath: string; branch: string } | null>(null)
   // Merge conflicts produced by a context-menu pull (opens the 3-way tool).
   const [pullMerge, setPullMerge] = useState<{ projectPath: string; initial: MergeStatus | null } | null>(null)
@@ -1081,6 +1085,34 @@ export function Explorer() {
             role="menuitem"
             className="btn-with-icon"
             onClick={() => {
+              // New terminal tab whose cwd is the workspace root itself.
+              const ws = menu.path
+              setMenu(null)
+              useTerminalStore
+                .getState()
+                .createSession(ws, shortWorkspaceName(ws))
+            }}
+          >
+            <ConsoleSqlOutlined className="ui-icon" style={{ fontSize: 13 }} />
+            {t('ws.openTerminal')}
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="btn-with-icon"
+            onClick={() => {
+              setUpdateAllWs(menu.path)
+              setMenu(null)
+            }}
+          >
+            <ArrowDown className="ui-icon" size={14} color="currentColor" aria-hidden />
+            {t('ws.updateAll')}
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="btn-with-icon"
+            onClick={() => {
               setPendingRemove(menu.path)
               setMenu(null)
             }}
@@ -1253,6 +1285,8 @@ export function Explorer() {
                       })
                       if (res.status === 'conflicts' && res.merge) {
                         setPullMerge({ projectPath: path, initial: res.merge })
+                      } else if (res.status === 'error') {
+                        showErrorLog(res.message, t('error.gitFailed'))
                       }
                     } catch (e) {
                       showErrorLog(e, t('error.gitFailed'))
@@ -1632,6 +1666,13 @@ export function Explorer() {
               : t('fs.deleteEntryConfirm', { name: pendingDelete.name })}
           </p>
         </ModalShell>
+      )}
+
+      {updateAllWs && (
+        <UpdateAllProjectsModal
+          workspace={updateAllWs}
+          onClose={() => setUpdateAllWs(null)}
+        />
       )}
 
       {branchSwitchTarget && (

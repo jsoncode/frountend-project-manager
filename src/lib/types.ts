@@ -140,11 +140,20 @@ export type MergeFileSides = {
   working: string
 }
 
+export type PullBranchItem = {
+  name: string
+  /** "updated" | "uptodate" | "conflicts" | "error" */
+  status: string
+  message: string
+}
+
 export type PullBranchResult = {
-  /** "updated" | "uptodate" | "conflicts" */
-  status: 'updated' | 'uptodate' | 'conflicts' | string
+  /** "updated" | "uptodate" | "conflicts" | "error" */
+  status: 'updated' | 'uptodate' | 'conflicts' | 'error' | string
   message: string
   merge?: MergeStatus | null
+  /** Per-branch outcomes (git_pull_all / git_pull_branch). */
+  branches?: PullBranchItem[]
 }
 
 export type TerminalLine = {
