@@ -125,6 +125,10 @@ export function Explorer() {
   const [gitLoading, setGitLoading] = useState(false)
   // Projects whose "view status" (git status in terminal) is still running.
   const [statusChecking, setStatusChecking] = useState<Set<string>>(() => new Set())
+  // Projects whose context-menu "update" (git_pull_all) is still running.
+  const [pulling, setPulling] = useState<Set<string>>(() => new Set())
+  // Projects with a context-menu git op (fetch / push / log / checkout) still running.
+  const [gitOps, setGitOps] = useState<Set<string>>(() => new Set())
   // Pending rename / delete targets from the project & entry context menus.
   const [renameTarget, setRenameTarget] = useState<
     | { kind: 'project'; path: string; name: string }
@@ -291,6 +295,23 @@ export function Explorer() {
     const proj = findProject(projectPath)
     const name = proj?.folderName ?? projectPath.split('/').pop() ?? projectPath
     return useTerminalStore.getState().runRaw(projectPath, name, command)
+  }
+
+  /**
+   * Run a context-menu git op while showing the project-row spinner;
+   * the spinner always clears (success, error, or cancel).
+   */
+  const withGitOp = async (projectPath: string, op: () => Promise<void>) => {
+    setGitOps((prev) => new Set(prev).add(projectPath))
+    try {
+      await op()
+    } finally {
+      setGitOps((prev) => {
+        const next = new Set(prev)
+        next.delete(projectPath)
+        return next
+      })
+    }
   }
 
   // ── Filesystem helpers for project/entry context menus ──
@@ -503,18 +524,22 @@ export function Explorer() {
 
   const handleProjBranchSwitch = async (projectPath: string, branchName: string) => {
     setMenu(null)
-    try {
-      const s = await invoke<GitStatus>('git_status', { path: projectPath })
-      if (s.clean) {
-        await invoke<string>('git_checkout', { path: projectPath, branch: branchName })
-        await useSettingsStore.getState().touchBranchHistory(projectPath, branchName)
-        await refreshProjGitAfterSwitch(projectPath)
-      } else {
-        setBranchSwitchTarget({ projectPath, branch: branchName })
+    await withGitOp(projectPath, async () => {
+      try {
+        const s = await invoke<GitStatus>('git_status', { path: projectPath })
+        if (s.clean) {
+          await invoke<string>('git_checkout', { path: projectPath, branch: branchName })
+          await useSettingsStore.getState().touchBranchHistory(projectPath, branchName)
+          await refreshProjGitAfterSwitch(projectPath)
+        } else {
+          // Dirty working tree — hand over to the confirmation modal;
+          // the actual checkout happens there (with its own spinner).
+          setBranchSwitchTarget({ projectPath, branch: branchName })
+        }
+      } catch (e) {
+        showErrorLog(e, t('error.gitFailed'))
       }
-    } catch (e) {
-      showErrorLog(e, t('error.gitFailed'))
-    }
+    })
   }
 
   const onToggleWorkspace = (ws: string) => {
@@ -929,7 +954,7 @@ export function Explorer() {
                             <ChevronRight size={12} color="currentColor" />
                           )}
                         </span>
-                        {(isScanning || statusChecking.has(p.path)) ? (
+                        {(isScanning || statusChecking.has(p.path) || pulling.has(p.path) || gitOps.has(p.path)) ? (
                           <Loader
                             className="explorer-icon ui-icon is-spinning"
                             size={14}
@@ -1156,9 +1181,15 @@ export function Explorer() {
               role="menuitem"
               className="btn-with-icon"
               onClick={() => {
+                const path = menu.path
                 const branch = projGitCurrent ?? 'HEAD'
-                void projRunGit(menu.path, `git log --format="%h %s (%ar)" -10 ${branch}`)
                 setMenu(null)
+                void withGitOp(path, async () => {
+                  // Run `git log` in the terminal; wait for the shell prompt
+                  // so the row spinner clears once the command finishes.
+                  const id = await projRunGit(path, `git log --format="%h %s (%ar)" -10 ${branch}`)
+                  await useTerminalStore.getState().waitUntilIdle(id, 10_000)
+                })
               }}
             >
               <Document className="ui-icon" size={14} color="currentColor" aria-hidden />
@@ -1170,15 +1201,16 @@ export function Explorer() {
               role="menuitem"
               className="btn-with-icon"
               onClick={() => {
+                const path = menu.path
                 setMenu(null)
-                void (async () => {
+                void withGitOp(path, async () => {
                   try {
                     // Backend-driven fetch — no terminal session needed.
-                    await invoke<string>('git_fetch', { path: menu.path })
+                    await invoke<string>('git_fetch', { path })
                   } catch { /* ignore */ }
                   // Remote tips changed — refresh cached counts so the badge updates.
-                  await refreshProjGitAfterSwitch(menu.path)
-                })()
+                  await refreshProjGitAfterSwitch(path)
+                })
               }}
             >
               <Refresh className="ui-icon" size={14} color="currentColor" aria-hidden />
@@ -1189,30 +1221,40 @@ export function Explorer() {
               role="menuitem"
               className="btn-with-icon"
               onClick={() => {
+                const path = menu.path
                 setMenu(null)
                 void (async () => {
+                  setPulling((prev) => new Set(prev).add(path))
                   try {
-                    // Backend-driven update-all: fast-forwards every pending
-                    // branch (auto-stash for the current one) so the project
-                    // badge actually clears; reports conflicts structurally.
-                    const res = await invoke<PullBranchResult>('git_pull_all', {
-                      path: menu.path,
+                    try {
+                      // Backend-driven update-all: fast-forwards every pending
+                      // branch (auto-stash for the current one) so the project
+                      // badge actually clears; reports conflicts structurally.
+                      const res = await invoke<PullBranchResult>('git_pull_all', {
+                        path,
+                      })
+                      if (res.status === 'conflicts' && res.merge) {
+                        setPullMerge({ projectPath: path, initial: res.merge })
+                      }
+                    } catch (e) {
+                      showErrorLog(e, t('error.gitFailed'))
+                    }
+                    // Recompute behind counts and sync every cache.
+                    await refreshProjGitAfterSwitch(path)
+                    // Also surface conflicts detected outside our own pull.
+                    try {
+                      const status = await invoke<MergeStatus>('git_merge_status', { path }).catch(() => null)
+                      if (status && (status.inProgress || status.conflictCount > 0)) {
+                        setPullMerge((prev) => prev ?? { projectPath: path, initial: status })
+                      }
+                    } catch { /* ignore */ }
+                  } finally {
+                    setPulling((prev) => {
+                      const next = new Set(prev)
+                      next.delete(path)
+                      return next
                     })
-                    if (res.status === 'conflicts' && res.merge) {
-                      setPullMerge({ projectPath: menu.path, initial: res.merge })
-                    }
-                  } catch (e) {
-                    showErrorLog(e, t('error.gitFailed'))
                   }
-                  // Recompute behind counts and sync every cache.
-                  await refreshProjGitAfterSwitch(menu.path)
-                  // Also surface conflicts detected outside our own pull.
-                  try {
-                    const status = await invoke<MergeStatus>('git_merge_status', { path: menu.path }).catch(() => null)
-                    if (status && (status.inProgress || status.conflictCount > 0)) {
-                      setPullMerge((prev) => prev ?? { projectPath: menu.path, initial: status })
-                    }
-                  } catch { /* ignore */ }
                 })()
               }}
             >
@@ -1224,16 +1266,17 @@ export function Explorer() {
               role="menuitem"
               className="btn-with-icon"
               onClick={() => {
+                const path = menu.path
                 setMenu(null)
-                void (async () => {
+                void withGitOp(path, async () => {
                   try {
                     // Backend-driven push (auto `-u` when no upstream yet).
-                    await invoke<string>('git_push', { path: menu.path, branch: null })
+                    await invoke<string>('git_push', { path, branch: null })
                   } catch (e) {
                     showErrorLog(e, t('error.gitFailed'))
                   }
-                  await refreshProjGitAfterSwitch(menu.path)
-                })()
+                  await refreshProjGitAfterSwitch(path)
+                })
               }}
             >
               <ArrowUp className="ui-icon" size={14} color="currentColor" aria-hidden />
@@ -1584,7 +1627,7 @@ export function Explorer() {
                   if (!branchSwitchTarget) return
                   const { projectPath, branch } = branchSwitchTarget
                   setBranchSwitchTarget(null)
-                  void (async () => {
+                  void withGitOp(projectPath, async () => {
                     try {
                       await invoke<string>('git_checkout', { path: projectPath, branch })
                       await useSettingsStore.getState().touchBranchHistory(projectPath, branch)
@@ -1592,7 +1635,7 @@ export function Explorer() {
                     } catch (e) {
                       showErrorLog(e, t('error.gitFailed'))
                     }
-                  })()
+                  })
                 }}
               >
                 <ArrowRight className="ui-icon" size={14} color="currentColor" aria-hidden />
