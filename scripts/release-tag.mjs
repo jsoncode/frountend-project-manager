@@ -36,6 +36,52 @@ const currentVersion = JSON.parse(
   readFileSync(join(root, 'package.json'), 'utf8'),
 ).version
 
+/**
+ * Desktop toast after a successful push (best-effort — never fails the
+ * release). Windows: NotifyIcon balloon via PowerShell; macOS: osascript;
+ * Linux: notify-send.
+ */
+function notify(title, message) {
+  try {
+    if (process.platform === 'win32') {
+      const ps = [
+        'Add-Type -AssemblyName System.Windows.Forms',
+        'Add-Type -AssemblyName System.Drawing',
+        '$n = New-Object System.Windows.Forms.NotifyIcon',
+        '$n.Icon = [System.Drawing.SystemIcons]::Information',
+        '$n.BalloonTipIcon = [System.Windows.Forms.ToolTipIcon]::Info',
+        `$n.BalloonTipTitle = '${title.replace(/'/g, "''")}'`,
+        `$n.BalloonTipText = '${message.replace(/'/g, "''")}'`,
+        '$n.Visible = $true',
+        '$n.ShowBalloonTip(5000)',
+        'Start-Sleep -Seconds 6',
+        '$n.Dispose()',
+      ].join('; ')
+      spawnSync(
+        'powershell',
+        ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-Command', ps],
+        { cwd: root, stdio: 'ignore', timeout: 15000 },
+      )
+    } else if (process.platform === 'darwin') {
+      spawnSync(
+        'osascript',
+        [
+          '-e',
+          `display notification "${message.replace(/"/g, '\\"')}" with title "${title.replace(/"/g, '\\"')}"`,
+        ],
+        { stdio: 'ignore', timeout: 15000 },
+      )
+    } else {
+      spawnSync('notify-send', [title, message], {
+        stdio: 'ignore',
+        timeout: 15000,
+      })
+    }
+  } catch {
+    // Ignore — a failed toast must never block the release.
+  }
+}
+
 function bump(v, kind) {
   const [maj, min, pat] = v.split('.').map(Number)
   if (kind === 'major') return `${maj + 1}.0.0`
@@ -97,3 +143,7 @@ if (!tagOnly) git(['push', 'origin', branch])
 git(['push', 'origin', tag])
 
 console.log(`[release-tag] Done — ${tag} pushed. GitHub Release workflow is running.`)
+notify(
+  'FPM 发布成功',
+  `v${version} 已推送，GitHub Release 工作流正在构建…`,
+)
