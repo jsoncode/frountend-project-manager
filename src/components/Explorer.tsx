@@ -39,7 +39,7 @@ import {
   shortWorkspaceName,
 } from '../lib/workspacePath'
 import { editorPathKey, useEditorStore } from '../stores/editorStore'
-import { useExplorerStore } from '../stores/explorerStore'
+import { explorerRowEls, useExplorerStore } from '../stores/explorerStore'
 import { showErrorLog } from '../stores/errorLogStore'
 import { useProjectStore } from '../stores/projectStore'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -141,7 +141,6 @@ export function Explorer() {
     | { kind: 'entry'; path: string; isDir: boolean; name: string }
     | null
   >(null)
-  const rowRefs = useRef(new Map<string, HTMLButtonElement>())
 
   // Debounce click vs dblclick for workspace/project/dir toggle
   const toggleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -575,7 +574,7 @@ export function Explorer() {
       void touchSearchHistory(p.folderName)
       setSearch('')
       window.setTimeout(() => {
-        const el = rowRefs.current.get(`proj:${p.path}`)
+        const el = explorerRowEls.get(`proj:${p.path}`)
         el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       }, 50)
     }
@@ -928,8 +927,8 @@ export function Explorer() {
                       <button
                           type="button"
                           ref={(node) => {
-                            if (node) rowRefs.current.set(projId, node)
-                            else rowRefs.current.delete(projId)
+                            if (node) explorerRowEls.set(projId, node)
+                            else explorerRowEls.delete(projId)
                           }}
                           className={`explorer-row explorer-project-row ${projActive ? 'active' : ''}${projGitDirty ? ' git-changed' : ''}${isContextTarget(p.path) ? ' context-target' : ''}`}
                           style={{ paddingLeft: 20 }}

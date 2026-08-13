@@ -7,6 +7,13 @@ export type ExplorerSelection =
   | { kind: 'file'; path: string; projectPath: string }
   | null
 
+/**
+ * Live DOM refs of explorer rows (keyed by `proj:<path>` / `ws:<path>`),
+ * registered by Explorer — lets other components (e.g. TerminalPanel)
+ * scroll a project row into view without a shared component ref.
+ */
+export const explorerRowEls = new Map<string, HTMLButtonElement>()
+
 type ExplorerState = {
   selection: ExplorerSelection
   expanded: string[]

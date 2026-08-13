@@ -1,9 +1,13 @@
 import { Add, TerminalSquare, X } from 'reicon-react'
 import { useEffect, useState } from 'react'
 import { useI18n } from '../i18n/useI18n'
+import { findWorkspaceForPath } from '../lib/workspacePath'
 import { focusTerminal } from '../lib/ptyHost'
 import { useProjectStore } from '../stores/projectStore'
+import { explorerRowEls, useExplorerStore } from '../stores/explorerStore'
+import { useSettingsStore } from '../stores/settingsStore'
 import { useTerminalStore } from '../stores/terminalStore'
+import { useWorkspaceStore } from '../stores/workspaceStore'
 import { ModalShell } from './ModalShell'
 import { Tooltip } from './Tooltip'
 import { XtermSession } from './XtermSession'
@@ -33,6 +37,50 @@ export function TerminalPanel({
 
   const activateTab = (id: string) => {
     setActive(id)
+  }
+
+  /**
+   * Clicking a terminal tab locates its project in the Explorer: clears any
+   * active search filter, expands the owning workspace (accordion style),
+   * selects the project row, then scrolls it to the top of the view.
+   */
+  const locateProject = (projectPath: string) => {
+    const wsStore = useWorkspaceStore.getState()
+    const exStore = useExplorerStore.getState()
+    const workspaces =
+      useSettingsStore.getState().config?.workspaces ?? []
+    const ws =
+      findWorkspaceForPath(projectPath, workspaces) ?? wsStore.activeWorkspace
+    if (!ws) return
+
+    // The row only renders without an active search filter.
+    if (wsStore.search.trim()) wsStore.setSearch('')
+    // Load the workspace cache if it was never scanned (rows appear async).
+    if (wsStore.projectCache[ws] === undefined) {
+      void wsStore.ensureWorkspaceCached(ws)
+    }
+    if (ws !== wsStore.activeWorkspace) wsStore.setActiveWorkspace(ws)
+    // Accordion: keep dir expands, ensure only this workspace is open.
+    exStore.setExpanded((prev) => {
+      const next = prev.filter((x) => x.startsWith('dir:'))
+      if (!next.includes(`ws:${ws}`)) next.push(`ws:${ws}`)
+      return next
+    })
+    exStore.setSelection({ kind: 'project', path: projectPath, workspace: ws })
+
+    // Scroll the project row into view (top) once it renders; the row may
+    // appear a few frames later when the workspace just expanded/loaded.
+    const projId = `proj:${projectPath}`
+    let attempts = 0
+    const tryScroll = () => {
+      const el = explorerRowEls.get(projId)
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        return
+      }
+      if (++attempts < 15) window.setTimeout(tryScroll, 100)
+    }
+    tryScroll()
   }
 
   const addTerminal = () => {
@@ -69,7 +117,11 @@ export function TerminalPanel({
               key={s.id}
               type="button"
               className={`terminal-tab ${s.id === activeId ? 'active' : ''}`}
-              onClick={() => activateTab(s.id)}
+              onClick={() => {
+                activateTab(s.id)
+                // Locate the terminal's project in the Explorer.
+                locateProject(s.projectPath)
+              }}
               onMouseDown={(e) => {
                 if (e.button === 1) e.preventDefault()
               }}
