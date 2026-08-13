@@ -129,6 +129,8 @@ export function SearchBox({ autofocus = false }: { autofocus?: boolean }) {
         onClear={clear}
         placeholder={t('top.search')}
         popupClassName="search-suggest-popup"
+        // 弹层宽度自适应内容（默认固定等于输入框宽度，长文案会被截断）
+        popupMatchSelectWidth={false}
       />
     </div>
   )
