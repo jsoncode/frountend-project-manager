@@ -17,9 +17,11 @@ type Props = {
   children?: ReactNode
   /** Collapse the IDE list into a "用 IDE 打开" flyout submenu (project menu). */
   ideAsSubmenu?: boolean
+  /** Extra copy-related actions rendered right after the shared 复制名称 item. */
+  afterCopy?: ReactNode
 }
 
-export function OpenWithMenu({ path, x, y, onClose, children, ideAsSubmenu = false }: Props) {
+export function OpenWithMenu({ path, x, y, onClose, children, ideAsSubmenu = false, afterCopy }: Props) {
   const config = useSettingsStore((s) => s.config)
   const { t } = useI18n()
   const ides = (config?.ides ?? []).filter((i) => i.enabled)
@@ -105,6 +107,7 @@ export function OpenWithMenu({ path, x, y, onClose, children, ideAsSubmenu = fal
           <Copy className="ui-icon" size={14} color="currentColor" aria-hidden />
           {t('explorer.copyName')}
         </button>
+        {afterCopy}
         {children ? (
           <>
             <div className="branch-menu-sep" />

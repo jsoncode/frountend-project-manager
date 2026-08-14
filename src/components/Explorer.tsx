@@ -11,6 +11,7 @@ import {
   ChevronDown,
   ChevronRight,
   Command,
+  Copy,
   Document,
   Folder2,
   Loader,
@@ -1051,6 +1052,24 @@ export function Explorer() {
           y={menu.y}
           onClose={() => setMenu(null)}
           ideAsSubmenu
+          afterCopy={
+            <button
+              type="button"
+              role="menuitem"
+              className="btn-with-icon"
+              disabled={!sortProjects(projectCache[menu.path] ?? []).length}
+              onClick={() => {
+                const names = sortProjects(projectCache[menu.path] ?? [])
+                  .map((p) => p.folderName)
+                  .join('\n')
+                void navigator.clipboard.writeText(names)
+                setMenu(null)
+              }}
+            >
+              <Copy className="ui-icon" size={14} color="currentColor" aria-hidden />
+              {t('ws.copyAllProjectNames')}
+            </button>
+          }
         >
           <SubMenuItem
             id="ws-git"
