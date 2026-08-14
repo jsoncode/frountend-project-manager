@@ -1,4 +1,4 @@
-import { ArrowRight } from 'reicon-react'
+import { ChevronRight } from 'reicon-react'
 import {
   createContext,
   useContext,
@@ -147,7 +147,7 @@ export function SubMenuItem({ id, icon, label, children }: Props) {
       >
         {icon}
         {label}
-        <ArrowRight
+        <ChevronRight
           className="ui-icon submenu-arrow"
           size={12}
           color="currentColor"
