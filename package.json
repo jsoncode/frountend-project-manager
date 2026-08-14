@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build",
+    "tauri:build": "node scripts/setup-nsis.mjs && tauri build",
     "tauri:build:win": "node scripts/setup-nsis.mjs && tauri build --bundles nsis",
     "nsis:setup": "node scripts/setup-nsis.mjs",
     "tauri:build:mac": "tauri build --bundles dmg",
