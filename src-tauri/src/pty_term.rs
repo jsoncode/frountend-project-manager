@@ -69,7 +69,7 @@ fn shell_command(cwd: &Path) -> CommandBuilder {
     }
     #[cfg(not(windows))]
     {
-        let shell = std::env::var("SHELL").unwrap_or_else(|| {
+        let shell = std::env::var("SHELL").unwrap_or_else(|_| {
             #[cfg(target_os = "macos")]
             {
                 "/bin/zsh".into()
