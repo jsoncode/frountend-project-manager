@@ -140,3 +140,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ env.PKG_FILE }}
+          # softprops 默认 draft:false，更新已存在的草稿会把草稿提前发布，
+          # 导致后续 job 的 tauri-action 找不到草稿（"NOT a draft"）。显式保持草稿，
+          # 等所有平台上传完成后由人工发布。
+          draft: true
