@@ -51,6 +51,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # 重跑或重推同 tag 时，先清掉已存在的“已发布”Release：tauri-action 只认
+      # 草稿，遇到已发布 Release 会走错分支导致部分产物丢失。当前这次运行刚
+      # 创建的草稿保留（多 job 并发上传到同一个草稿）。GITHUB_TOKEN 有 contents:write。
+      - name: Remove stale published release for this tag
+        shell: bash
+        run: |
+          if gh release view "$GITHUB_REF_NAME" --json draft -q .draft 2>/dev/null | grep -q false; then
+            gh release delete "$GITHUB_REF_NAME" --yes
+            echo "Deleted stale published release for $GITHUB_REF_NAME"
+          else
+            echo "No stale published release for $GITHUB_REF_NAME"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
