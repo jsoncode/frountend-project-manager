@@ -86,6 +86,11 @@ export function OpenWithMenu({ path, x, y, onClose, children, ideAsSubmenu = fal
             icon={<CodeScan className="ui-icon" size={14} color="currentColor" aria-hidden />}
             label={t('open.inIde')}
           >
+            <button type="button" role="menuitem" className="btn-with-icon" onClick={() => void reveal()}>
+              <FolderOpen className="ui-icon" size={14} color="currentColor" aria-hidden />
+              {t('open.inFileManager')}
+            </button>
+            <div className="branch-menu-sep" />
             {ideButtons}
           </SubMenuItem>
         ) : (
@@ -99,10 +104,6 @@ export function OpenWithMenu({ path, x, y, onClose, children, ideAsSubmenu = fal
         <button type="button" role="menuitem" className="btn-with-icon" onClick={() => void copyText(fileName)}>
           <Copy className="ui-icon" size={14} color="currentColor" aria-hidden />
           {t('explorer.copyName')}
-        </button>
-        <button type="button" role="menuitem" className="btn-with-icon" onClick={() => void reveal()}>
-          <FolderOpen className="ui-icon" size={14} color="currentColor" aria-hidden />
-          {t('open.inFileManager')}
         </button>
         {children ? (
           <>

@@ -1050,24 +1050,44 @@ export function Explorer() {
           x={menu.x}
           y={menu.y}
           onClose={() => setMenu(null)}
+          ideAsSubmenu
         >
-          <button
-            type="button"
-            role="menuitem"
-            className="btn-with-icon"
-            disabled={!!scanningWorkspaces[menu.path]}
-            onClick={() => {
-              void scanAllProjectStatuses(menu.path)
-              setMenu(null)
-            }}
+          <SubMenuItem
+            id="ws-git"
+            icon={<Command className="ui-icon" size={14} color="currentColor" aria-hidden />}
+            label={t('git.ctx.operations')}
           >
-            {scanningWorkspaces[menu.path] ? (
-              <Loader className="ui-icon is-spinning" size={14} color="currentColor" aria-hidden />
-            ) : (
-              <Refresh className="ui-icon" size={14} color="currentColor" aria-hidden />
-            )}
-            {scanningWorkspaces[menu.path] ? t('ws.scanningStatuses') : t('ws.checkAllStatus')}
-          </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="btn-with-icon"
+              disabled={!!scanningWorkspaces[menu.path]}
+              onClick={() => {
+                void scanAllProjectStatuses(menu.path)
+                setMenu(null)
+              }}
+            >
+              {scanningWorkspaces[menu.path] ? (
+                <Loader className="ui-icon is-spinning" size={14} color="currentColor" aria-hidden />
+              ) : (
+                <Refresh className="ui-icon" size={14} color="currentColor" aria-hidden />
+              )}
+              {scanningWorkspaces[menu.path] ? t('ws.scanningStatuses') : t('ws.checkAllStatus')}
+            </button>
+            <div className="branch-menu-sep" />
+            <button
+              type="button"
+              role="menuitem"
+              className="btn-with-icon"
+              onClick={() => {
+                setUpdateAllWs(menu.path)
+                setMenu(null)
+              }}
+            >
+              <ArrowDown className="ui-icon" size={14} color="currentColor" aria-hidden />
+              {t('ws.updateAll')}
+            </button>
+          </SubMenuItem>
           <button
             type="button"
             role="menuitem"
@@ -1096,22 +1116,11 @@ export function Explorer() {
             <ConsoleSqlOutlined className="ui-icon" style={{ fontSize: 13 }} />
             {t('ws.openTerminal')}
           </button>
+          <div className="branch-menu-sep" />
           <button
             type="button"
             role="menuitem"
-            className="btn-with-icon"
-            onClick={() => {
-              setUpdateAllWs(menu.path)
-              setMenu(null)
-            }}
-          >
-            <ArrowDown className="ui-icon" size={14} color="currentColor" aria-hidden />
-            {t('ws.updateAll')}
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className="btn-with-icon"
+            className="btn-with-icon danger"
             onClick={() => {
               setPendingRemove(menu.path)
               setMenu(null)

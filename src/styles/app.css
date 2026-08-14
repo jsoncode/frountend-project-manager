@@ -1684,12 +1684,20 @@ button.history-chip-main:hover {
 }
 
 /* Buttons without an icon keep icon-width indentation for text alignment */
-.branch-menu button:not(.btn-with-icon) {
+.branch-menu button:not(.btn-with-icon):not(.open-with-ide) {
   padding-left: 34px;
 }
 
 .branch-menu button svg {
   flex-shrink: 0;
+}
+
+/* Submenu rows share a fixed 16px icon slot so SVG glyphs line up with
+   IDE image icons (16px) and labels start at the same x. */
+.submenu-panel .btn-with-icon > svg:first-child,
+.submenu-panel .open-with-ide > *:first-child {
+  width: 16px;
+  height: 16px;
 }
 
 .history-chip-icon {
