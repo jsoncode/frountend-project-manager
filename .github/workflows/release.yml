@@ -1,3 +1,18 @@
+# Release: on every `v*` tag push (or manual workflow_dispatch), build the
+# Tauri app on Windows and macOS and publish the installers to a GitHub Release.
+#
+# Outputs:
+#   Windows: NSIS (.exe)
+#   macOS:   .app + .dmg (tauri native, per arch) + .pkg (built from the .app
+#            with macOS' pkgbuild, since tauri does not support pkg natively)
+#
+# Usage:
+#   git tag v0.4.3
+#   git push origin v0.4.3
+#
+# The release is created as a DRAFT — review it in the Releases page and click
+# "Publish" once all platforms have uploaded their installers.
+
 name: Release
 
 on:
@@ -24,10 +39,12 @@ jobs:
             args: '--bundles nsis'
           - platform: macos-latest
             rust_target: aarch64-apple-darwin
-            args: '--target aarch64-apple-darwin --bundles dmg'
+            arch: arm64
+            args: '--target aarch64-apple-darwin --bundles app,dmg'
           - platform: macos-latest
             rust_target: x86_64-apple-darwin
-            args: '--target x86_64-apple-darwin --bundles dmg'
+            arch: x64
+            args: '--target x86_64-apple-darwin --bundles app,dmg'
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -37,12 +54,12 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 11.7.0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: lts/*
+          node-version: 22
           cache: pnpm
 
       - name: Install Rust stable
@@ -90,10 +107,11 @@ jobs:
 
             ### 下载
             - **Windows**：`.exe`（NSIS 安装包）
-            - **macOS Apple Silicon**：`aarch64` `.dmg`
-            - **macOS Intel**：`x86_64` `.dmg`
+            - **macOS Apple Silicon**：`aarch64` `.dmg` + `.pkg`
+            - **macOS Intel**：`x86_64` `.dmg` + `.pkg`
 
             > macOS 未签名时，首次打开可能需在「系统设置 → 隐私与安全性」中允许，或右键选择「打开」。
+            > `.pkg` 会把 App 安装到 `/Applications`（双击安装，或终端执行 `sudo installer -pkg xxx.pkg -target /`）。
 
             ### 本版本包含
             - 多工作区项目管理
@@ -101,6 +119,24 @@ jobs:
             - IDE 打开与 Git 分支工具
 
             完整说明见 [README](../blob/master/README.md)。
-          releaseDraft: false
+          releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+
+      # tauri 不支持 .pkg 目标 —— 用 macOS 的 pkgbuild 把刚打好的 .app 包成
+      # .pkg 安装包，并上传到同一个 Release（按架构区分文件名）。
+      - name: Build .pkg installer (macOS)
+        if: matrix.platform == 'macos-latest'
+        shell: bash
+        run: |
+          VERSION="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+          APP="src-tauri/target/${{ matrix.rust_target }}/release/bundle/macos/Frontend Project Manager.app"
+          pkgbuild --component "$APP" --install-location /Applications \
+            "Frontend Project Manager_${VERSION}_${{ matrix.arch }}.pkg"
+          echo "PKG_FILE=Frontend Project Manager_${VERSION}_${{ matrix.arch }}.pkg" >> "$GITHUB_ENV"
+
+      - name: Upload .pkg to release (macOS)
+        if: matrix.platform == 'macos-latest'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.PKG_FILE }}

@@ -35,9 +35,10 @@ FPM 用一个工作区扫描 `package.json` 项目，把**列表、终端、命�
 | 平台 | 安装包 | 说明 |
 | --- | --- | --- |
 | Windows | `.exe`（NSIS） | 主要开发与发布目标 |
-| macOS Apple Silicon | `.dmg`（arm64） | 支持 |
-| macOS Intel | `.dmg`（x64） | 支持 |
+| macOS Apple Silicon | `.dmg` + `.pkg`（arm64） | 支持 |
+| macOS Intel | `.dmg` + `.pkg`（x64） | 支持 |
 
+> `.pkg` 会把 App 安装到 `/Applications`（双击安装，或终端执行 `sudo installer -pkg xxx.pkg -target /`），`.dmg` 则是把 App 拖入 Applications 的传统方式。
 > 核心逻辑（扫描、终端、Git、打开 IDE）已做跨平台处理；Windows 特有能力（注册表扫描 IDE、从 exe 抽图标）在 macOS 上使用 Applications / `.app` / `sips` 等对应实现。
 
 ## 安装
@@ -46,7 +47,7 @@ FPM 用一个工作区扫描 `package.json` 项目，把**列表、终端、命�
 
 到 [Releases](https://github.com/jsoncode/frountend-project-manager/releases) 下载对应系统的安装包。
 
-> 推送形如 `v0.1.0` 的 tag 后，GitHub Actions 会自动打包 **Windows + macOS（Intel / Apple Silicon）** 安装包。
+> 推送形如 `v0.1.0` 的 tag 后，GitHub Actions 会自动打包 **Windows + macOS（Intel / Apple Silicon）** 安装包（`.exe` / `.dmg` / `.pkg`），发布为**草稿**，在所有平台上传完成后到 Releases 页手动点「Publish release」。
 
 macOS 若提示「无法验证开发者」，可在「系统设置 → 隐私与安全性」中允许，或右键 App 选择「打开」。
 
@@ -76,7 +77,7 @@ pnpm dev
 # Windows 安装包 → src-tauri/target/release/bundle/nsis/
 pnpm tauri:build:win
 
-# macOS DMG → src-tauri/target/release/bundle/dmg/
+# macOS DMG + .app → src-tauri/target/release/bundle/dmg/ 和 bundle/macos/
 pnpm tauri:build:mac
 
 # 仅 .app（不打 dmg）
@@ -86,20 +87,27 @@ pnpm tauri:build:mac:app
 pnpm tauri:build:mac:universal
 ```
 
+> macOS 的 `.pkg` 安装包由 GitHub Actions 构建（tauri 不支持 pkg 目标，工作流里用 `pkgbuild` 从 `.app` 现打），本地不生成。
+
 ## 发布新版本
 
 1. 确认改动已合并到主分支  
-2. 打 tag 并推送：
+2. 打 tag 并推送（推荐用脚本，自动同步版本号并推送）：
 
 ```bash
-pnpm version:sync -- 0.2.0
-git tag v0.2.0
-git push origin v0.2.0
+# 自动 patch 升版（0.4.2 → 0.4.3）并同步 package.json / tauri.conf.json / Cargo.toml，提交后打 tag 推送
+pnpm release
+
+# 指定版本
+pnpm release 0.5.0
+
+# 只打当前版本的 tag（不升版、不提交）
+pnpm release:tag-only
 ```
 
-3. 等待 [Release](https://github.com/jsoncode/frountend-project-manager/actions/workflows/release.yml) 完成后，在 Releases 下载各平台安装包  
+3. 等待 [Release](https://github.com/jsoncode/frountend-project-manager/actions/workflows/release.yml) 构建完成，在 [Releases](https://github.com/jsoncode/frountend-project-manager/releases) 草稿中确认各平台安装包齐全后，点击 **Publish release** 发布
 
-也可在 Actions 里手动 **workflow_dispatch** 触发构建。
+也可在 Actions 里手动 **workflow_dispatch** 触发构建（可指定版本号）。
 
 ## 技术栈
 

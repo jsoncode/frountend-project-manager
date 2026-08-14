@@ -40,6 +40,7 @@
     "active": true,
     "targets": [
       "nsis",
+      "app",
       "dmg"
     ],
     "resources": [
