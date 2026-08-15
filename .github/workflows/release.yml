@@ -10,8 +10,8 @@
 #   git tag v0.4.3
 #   git push origin v0.4.3
 #
-# The release is created as a DRAFT — review it in the Releases page and click
-# "Publish" once all platforms have uploaded their installers.
+# 所有平台的产物都上传完成后，由末尾的 publish job 自动把草稿发布为正式
+# Release（任一平台失败则保持草稿，避免发布不完整的产物）。
 
 name: Release
 
@@ -31,6 +31,8 @@ permissions:
 
 jobs:
   release:
+    outputs:
+      tag: ${{ steps.ver.outputs.tag }}
     strategy:
       fail-fast: false
       matrix:
@@ -159,5 +161,20 @@ jobs:
           files: ${{ env.PKG_FILE }}
           # softprops 默认 draft:false，更新已存在的草稿会把草稿提前发布，
           # 导致后续 job 的 tauri-action 找不到草稿（"NOT a draft"）。显式保持草稿，
-          # 等所有平台上传完成后由人工发布。
+          # 由下方 publish job 在所有平台成功后统一发布。
           draft: true
+
+  # 等 3 个矩阵 job 全部成功后，把草稿转正发布。任一平台失败时 needs 不满足，
+  # Release 保持草稿状态，等人工排查或重跑。
+  publish:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish draft release
+        shell: bash
+        run: |
+          TAG="${{ needs.release.outputs.tag }}"
+          gh release edit "$TAG" --draft=false --repo "$GITHUB_REPOSITORY"
+          echo "Published release $TAG"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
