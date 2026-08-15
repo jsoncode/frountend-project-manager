@@ -1,6 +1,6 @@
 [package]
 name = "frontend-project-manager"
-version = "0.4.3"
+version = "0.4.4"
 description = "Frontend Project Manager"
 authors = ["Frontend Project Manager contributors"]
 edition = "2021"
