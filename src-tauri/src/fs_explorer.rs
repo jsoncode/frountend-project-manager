@@ -584,6 +584,13 @@ pub fn read_text_file(root: &str, path: &str) -> Result<TextFileResult, String> 
     let content = String::from_utf8(bytes).map_err(|_| {
         "File is not valid UTF-8 and cannot be opened in the text editor".to_string()
     })?;
+    // Strip a UTF-8 BOM (EF BB BF) for display/editing. write_text_file never
+    // re-adds it, so open → edit → save round-trips cleanly instead of
+    // duplicating or growing the BOM (common on Windows-produced files).
+    let content = match content.strip_prefix('\u{feff}') {
+        Some(rest) => rest.to_string(),
+        None => content,
+    };
     Ok(TextFileResult {
         path: path_str(&p),
         content,
@@ -723,5 +730,41 @@ mod tests {
             .filter(|e| e.file_name().to_string_lossy().ends_with(".tmp"))
             .collect();
         assert!(leftovers.is_empty(), "temp files must be cleaned: {leftovers:?}");
+    }
+
+    #[test]
+    fn read_text_file_strips_utf8_bom() {
+        let root = temp_root();
+        let target = root.join("bom.txt");
+        // EF BB BF ("\u{feff}") + "hello"
+        let mut bytes = vec![0xEF, 0xBB, 0xBF];
+        bytes.extend_from_slice(b"hello");
+        fs::write(&target, &bytes).unwrap();
+
+        let res = read_text_file(&root.to_string_lossy(), &target.to_string_lossy()).unwrap();
+        assert_eq!(res.content, "hello", "leading BOM must be stripped");
+
+        // Open → save must NOT re-add or duplicate the BOM.
+        write_text_file(
+            &root.to_string_lossy(),
+            &target.to_string_lossy(),
+            "hello".into(),
+        )
+        .unwrap();
+        let on_disk = fs::read(&target).unwrap();
+        assert!(
+            !on_disk.starts_with(&[0xEF, 0xBB, 0xBF]),
+            "save must not re-add a BOM"
+        );
+        assert_eq!(on_disk, b"hello");
+    }
+
+    #[test]
+    fn read_text_file_without_bom_untouched() {
+        let root = temp_root();
+        let target = root.join("plain.txt");
+        fs::write(&target, "hello").unwrap();
+        let res = read_text_file(&root.to_string_lossy(), &target.to_string_lossy()).unwrap();
+        assert_eq!(res.content, "hello");
     }
 }

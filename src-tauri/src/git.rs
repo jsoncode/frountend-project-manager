@@ -551,6 +551,18 @@ fn pretty_push_output(output: &std::process::Output) -> String {
     }
 }
 
+/// Clean a user-supplied commit message before it enters `git commit -m`:
+/// trim whitespace and strip any UTF-8 BOM (U+FEFF) a Windows tool
+/// (PowerShell redirect, Notepad, etc.) may have prepended. A BOM inside a
+/// commit object is permanent and renders as a stray `\uFEFF` in every log
+/// view, so it must never be stored.
+fn clean_commit_message(raw: &str) -> String {
+    raw.trim()
+        .trim_start_matches('\u{feff}')
+        .trim()
+        .to_string()
+}
+
 /// Stage → commit → optional push, all in one backend call (no terminal).
 /// Empty `paths` stages everything (`git add -A`).
 pub fn git_commit(
@@ -560,7 +572,7 @@ pub fn git_commit(
     push: bool,
 ) -> Result<String, String> {
     require_git_repo(path)?;
-    let message = message.trim();
+    let message = clean_commit_message(message);
     if message.is_empty() {
         return Err("提交信息为空".into());
     }
@@ -575,7 +587,7 @@ pub fn git_commit(
     let add_refs: Vec<&str> = add_args.iter().map(String::as_str).collect();
     run_git_collect(path, &add_refs).map_err(|e| format!("git add 失败：{e}"))?;
 
-    let commit_out = run_git_collect(path, &["commit", "-m", message])
+    let commit_out = run_git_collect(path, &["commit", "-m", message.as_str()])
         .map_err(|e| format!("git commit 失败：{e}"))?;
     let commit_note = commit_out.trim().to_string();
     let mut notes = vec![if commit_note.is_empty() {
@@ -1903,7 +1915,7 @@ pub fn git_merge_commit(path: &str, message: Option<String>) -> Result<String, S
     }
 
     let msg = message
-        .map(|s| s.trim().to_string())
+        .map(|s| clean_commit_message(&s))
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| {
             let incoming = status.incoming.unwrap_or_else(|| "branch".into());
