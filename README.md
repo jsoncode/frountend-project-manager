@@ -112,8 +112,8 @@ pnpm release:tag-only
 ## 技术栈
 
 - [Tauri 2](https://tauri.app/) + Rust  
-- React 19 + Vite + Zustand  
-- xterm.js 终端  
+- React 19 + Vite + 手写 createStore（Zustand 兼容 API，无 zustand 依赖）  
+- xterm.js 终端 / Monaco 编辑器
 
 ## 开发文档
 

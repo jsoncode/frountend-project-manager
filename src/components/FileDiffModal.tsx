@@ -42,8 +42,14 @@ export function FileDiffModal({ projectPath, filePath, compareFilePath, onClose 
           setFileName(`${name1} ↔ ${name2}`)
 
           const [r1, r2] = await Promise.all([
-            invoke<{ content: string }>('read_text_file', { path: filePath }),
-            invoke<{ content: string }>('read_text_file', { path: compareFilePath }),
+            invoke<{ content: string }>('read_text_file', {
+              root: projectPath,
+              path: filePath,
+            }),
+            invoke<{ content: string }>('read_text_file', {
+              root: projectPath,
+              path: compareFilePath,
+            }),
           ])
 
           if (disposed) return

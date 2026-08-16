@@ -13,6 +13,13 @@ type OpenFileHandler = (absPath: string) => void
 
 type NavContext = {
   projectRoot: string
+  /**
+   * Containment root for import-target disk reads. Import resolution may
+   * legitimately land OUTSIDE the project root (monorepo sibling packages,
+   * pnpm-hoisted node_modules) — the read gate must use the containing
+   * workspace instead of the project (C1/C2 gate without breaking monorepos).
+   */
+  readRoot: string
   aliases: PathAlias[]
   onOpenFile: OpenFileHandler
 }
@@ -97,8 +104,10 @@ async function registerBarePackageInMonaco(
   projectRoot: string,
   moduleName: string,
   absFile: string,
+  readRoot?: string,
 ): Promise<string | null> {
   resetBareModulePaths(projectRoot)
+  const readFrom = readRoot ?? projectRoot
 
   let typesAbs = normalizePath(absFile)
   // If resolver returned JS (react/index.js), force @types when present.
@@ -112,7 +121,7 @@ async function registerBarePackageInMonaco(
       `${root}/node_modules/${moduleName}/index.d.ts`,
     ]) {
       try {
-        await readTextFile(candidate)
+        await readTextFile(candidate, readFrom)
         typesAbs = candidate
         break
       } catch {
@@ -121,7 +130,7 @@ async function registerBarePackageInMonaco(
     }
   }
 
-  const model = await ensureFileModel(monacoApi, typesAbs)
+  const model = await ensureFileModel(monacoApi, typesAbs, readFrom)
   if (!model) return null
 
   const content = model.getValue()
@@ -138,11 +147,11 @@ async function registerBarePackageInMonaco(
   bareModulePaths[moduleName] = [virtualEntry]
   bareModulePaths[`${moduleName}/*`] = [`${vdir}/*`]
 
-  await loadSiblingDtsIntoVirtual(monacoApi, typesAbs, vdir)
+  await loadSiblingDtsIntoVirtual(monacoApi, typesAbs, vdir, readFrom)
 
   const dir = typesAbs.replace(/\/[^/]+$/, '')
   try {
-    const pkg = await readTextFile(`${dir}/package.json`)
+    const pkg = await readTextFile(`${dir}/package.json`, readFrom)
     publishExtraLib(
       monacoApi,
       normalizeEol(pkg.content),
@@ -173,8 +182,9 @@ export function setMonacoNavContext(
   projectRoot: string,
   aliases: PathAlias[],
   onOpenFile: OpenFileHandler,
+  readRoot?: string,
 ) {
-  ctx = { projectRoot, aliases, onOpenFile }
+  ctx = { projectRoot, readRoot: readRoot ?? projectRoot, aliases, onOpenFile }
 }
 
 export function clearMonacoNavContext() {
@@ -188,7 +198,13 @@ export function modelAbsPath(model: monaco.editor.ITextModel): string {
   }
   let p = model.uri.path
   if (/^\/[a-zA-Z]:/.test(p)) p = p.slice(1)
-  return decodeURIComponent(p)
+  // Malformed percent-encoding throws URIError — degrade to the raw path
+  // instead of crashing the link provider (audit QO-6).
+  try {
+    return decodeURIComponent(p)
+  } catch {
+    return p
+  }
 }
 
 function normalizeEol(text: string) {
@@ -323,6 +339,7 @@ export function aliasesToCompilerPaths(
 export async function ensureFileModel(
   monacoApi: typeof monaco,
   absPath: string,
+  root: string,
 ): Promise<monaco.editor.ITextModel | null> {
   const key = normalizePath(absPath).toLowerCase()
   const uri = monacoApi.Uri.file(absPath)
@@ -333,7 +350,7 @@ export async function ensureFileModel(
     return existing
   }
   try {
-    const res = await readTextFile(absPath)
+    const res = await readTextFile(absPath, root)
     const content = normalizeEol(res.content)
     const lang = languageFromPath(absPath)
     const modelLang =
@@ -353,6 +370,8 @@ export async function ensureFileModel(
 /**
  * Resolve imports in `source` (aliases / relative / packages) and load each
  * target into Monaco so the TS language service stops reporting 2307.
+ * `readRoot` (containing workspace) widens the disk-read containment gate for
+ * import targets that legitimately live outside the project (monorepos).
  */
 export async function preloadImportsForFile(
   monacoApi: typeof monaco,
@@ -362,8 +381,10 @@ export async function preloadImportsForFile(
   aliases: PathAlias[],
   depth = 0,
   seen: Set<string> = new Set(),
+  readRoot?: string,
 ): Promise<void> {
   resetBareModulePaths(projectRoot)
+  const readFrom = readRoot ?? projectRoot
   const specs = extractImportSpecifiers(source)
   const inNodeModules = /[/\\]node_modules[/\\]/.test(fromFile)
   const maxDepth = inNodeModules ? 2 : 1
@@ -385,6 +406,7 @@ export async function preloadImportsForFile(
       fromFile,
       lookup,
       aliases,
+      readFrom,
     )
     if (!abs) return
     const key = normalizePath(abs).toLowerCase()
@@ -399,11 +421,12 @@ export async function preloadImportsForFile(
         projectRoot,
         lookup,
         abs,
+        readFrom,
       )
       if (typesAbs) loadAbs = typesAbs
     }
 
-    const model = await ensureFileModel(monacoApi, loadAbs)
+    const model = await ensureFileModel(monacoApi, loadAbs, readFrom)
     if (!model) return
 
     if (depth < maxDepth) {
@@ -415,6 +438,7 @@ export async function preloadImportsForFile(
         aliases,
         depth + 1,
         seen,
+        readFrom,
       )
     }
   })
@@ -431,6 +455,7 @@ async function loadSiblingDtsIntoVirtual(
   monacoApi: typeof monaco,
   absFile: string,
   virtualDir: string,
+  readRoot: string,
 ): Promise<void> {
   const norm = normalizePath(absFile)
   const dir = norm.replace(/\/[^/]+$/, '')
@@ -443,7 +468,7 @@ async function loadSiblingDtsIntoVirtual(
         .filter((e) => !e.isDir && /\.d\.ts$/i.test(e.name))
         .slice(0, 40)
         .map(async (e) => {
-          const model = await ensureFileModel(monacoApi, e.path)
+          const model = await ensureFileModel(monacoApi, e.path, readRoot)
           if (!model) return
           publishExtraLib(monacoApi, model.getValue(), `${virtualDir}/${e.name}`)
         }),
@@ -548,9 +573,10 @@ export function setupMonacoModuleNavigation(monacoApi: typeof monaco) {
           from,
           hit.specifier,
           c.aliases,
+          c.readRoot,
         ).then(async (abs) => {
           if (!abs) return null
-          await ensureFileModel(monacoApi, abs)
+          await ensureFileModel(monacoApi, abs, c.readRoot)
           return {
             uri: monacoApi.Uri.file(abs),
             range: new monacoApi.Range(1, 1, 1, 1),
@@ -578,9 +604,10 @@ export function setupMonacoModuleNavigation(monacoApi: typeof monaco) {
           from,
           spec,
           c.aliases,
+          c.readRoot,
         )
         if (abs) {
-          await ensureFileModel(monacoApi, abs)
+          await ensureFileModel(monacoApi, abs, c.readRoot)
           c.onOpenFile(abs)
         }
         return link
@@ -609,9 +636,10 @@ export function attachImportClickHandler(
       from,
       hit.specifier,
       ctx.aliases,
+      ctx.readRoot,
     ).then(async (abs) => {
       if (!abs || !ctx) return
-      await ensureFileModel(monacoApi, abs)
+      await ensureFileModel(monacoApi, abs, ctx.readRoot)
       ctx.onOpenFile(abs)
     })
   })

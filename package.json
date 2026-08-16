@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.4.5",
   "type": "module",
+  "packageManager": "pnpm@10.33.2",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -19,7 +20,7 @@
     "version:sync": "node scripts/sync-version.mjs",
     "release": "node scripts/release-tag.mjs",
     "release:tag-only": "node scripts/release-tag.mjs --tag-only",
-    "tauri:preview": "tauri preview"
+    "tauri:preview": "vite preview"
   },
   "dependencies": {
     "@ant-design/icons": "^6.3.2",

@@ -1,4 +1,4 @@
-use config::{tag_key, AppConfig};
+use config::AppConfig;
 use ide::{IdeConfig, InstalledEditor};
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::menu::{Menu, MenuItem};
@@ -7,7 +7,6 @@ use tauri::{AppHandle, Manager, WindowEvent};
 use tauri_plugin_dialog::DialogExt;
 
 mod ai;
-mod bat_view;
 mod config;
 mod console_decode;
 mod db;
@@ -15,7 +14,6 @@ mod fs_explorer;
 mod git;
 mod ide;
 mod jen_cli;
-mod process;
 mod pty_term;
 mod scan;
 
@@ -35,7 +33,6 @@ fn show_main_window(app: &AppHandle) {
 
 fn quit_app(app: &AppHandle) {
     pty_term::kill_all(app);
-    process::kill_all_commands(app);
     ALLOW_EXIT.store(true, Ordering::SeqCst);
     app.exit(0);
 }
@@ -482,38 +479,42 @@ async fn list_directory_entries(
 }
 
 #[tauri::command(async)]
-async fn create_directory(path: String) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || fs_explorer::create_directory(&path))
+async fn create_directory(root: String, path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || fs_explorer::create_directory(&root, &path))
         .await
         .map_err(|e| e.to_string())?
 }
 
 #[tauri::command(async)]
-async fn rename_path(path: String, new_name: String) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || fs_explorer::rename_path(&path, &new_name))
+async fn rename_path(root: String, path: String, new_name: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        fs_explorer::rename_path(&root, &path, &new_name)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command(async)]
+async fn delete_path(root: String, path: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || fs_explorer::delete_path(&root, &path))
         .await
         .map_err(|e| e.to_string())?
 }
 
 #[tauri::command(async)]
-async fn delete_path(path: String) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || fs_explorer::delete_path(&path))
+async fn read_text_file(root: String, path: String) -> Result<fs_explorer::TextFileResult, String> {
+    tauri::async_runtime::spawn_blocking(move || fs_explorer::read_text_file(&root, &path))
         .await
         .map_err(|e| e.to_string())?
 }
 
 #[tauri::command(async)]
-async fn read_text_file(path: String) -> Result<fs_explorer::TextFileResult, String> {
-    tauri::async_runtime::spawn_blocking(move || fs_explorer::read_text_file(&path))
-        .await
-        .map_err(|e| e.to_string())?
-}
-
-#[tauri::command(async)]
-async fn write_text_file(path: String, content: String) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || fs_explorer::write_text_file(&path, content))
-        .await
-        .map_err(|e| e.to_string())?
+async fn write_text_file(root: String, path: String, content: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        fs_explorer::write_text_file(&root, &path, content)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command(async)]
@@ -529,26 +530,6 @@ async fn resolve_import(
     .await
     .ok()
     .flatten()
-}
-
-#[tauri::command]
-fn run_command(
-    app: AppHandle,
-    terminal_id: String,
-    project_path: String,
-    command: String,
-) -> Result<(), String> {
-    process::run_command(app, terminal_id, project_path, command)
-}
-
-#[tauri::command]
-fn kill_command(app: AppHandle, terminal_id: String) -> Result<(), String> {
-    process::kill_command(app, terminal_id)
-}
-
-#[tauri::command]
-fn write_terminal_stdin(terminal_id: String, data: String) -> Result<(), String> {
-    process::write_stdin(terminal_id, data)
 }
 
 #[tauri::command]
@@ -612,27 +593,6 @@ async fn jen_cli_set_path_enabled(app: AppHandle, enabled: bool) -> Result<(), S
         .map_err(|e| e.to_string())?
 }
 
-/// Pretty-print a file with embedded bat (ANSI). Also available via terminal `cat`/`type`/`bat`.
-#[tauri::command]
-fn preview_file(path: String, cwd: Option<String>) -> Result<String, String> {
-    use std::path::PathBuf;
-    let file = if PathBuf::from(&path).is_absolute() {
-        PathBuf::from(&path)
-    } else if let Some(base) = cwd {
-        PathBuf::from(base).join(&path)
-    } else {
-        PathBuf::from(&path)
-    };
-    bat_view::render_files(&[file], None)
-}
-
-#[tauri::command(async)]
-async fn detect_ides() -> Vec<IdeConfig> {
-    tauri::async_runtime::spawn_blocking(ide::detect_ides)
-        .await
-        .unwrap_or_default()
-}
-
 #[tauri::command(async)]
 async fn list_installed_editors() -> Vec<InstalledEditor> {
     tauri::async_runtime::spawn_blocking(ide::list_installed_editors)
@@ -667,29 +627,6 @@ fn save_ides(app: AppHandle, ides: Vec<IdeConfig>) -> Result<AppConfig, String> 
     let mut ides = ides;
     ide::scrub_ides(&mut ides);
     cfg.ides = ides;
-    config::save(&app, &cfg)?;
-    Ok(cfg)
-}
-
-#[tauri::command]
-fn set_project_tags(
-    app: AppHandle,
-    workspace: String,
-    project_folder: String,
-    tags: Vec<String>,
-) -> Result<AppConfig, String> {
-    let mut cfg = config::load_or_default(&app)?;
-    let key = tag_key(&workspace, &project_folder);
-    let cleaned: Vec<String> = tags
-        .into_iter()
-        .map(|t| t.trim().trim_start_matches('#').to_string())
-        .filter(|t| !t.is_empty())
-        .collect();
-    if cleaned.is_empty() {
-        cfg.tags.remove(&key);
-    } else {
-        cfg.tags.insert(key, cleaned);
-    }
     config::save(&app, &cfg)?;
     Ok(cfg)
 }
@@ -781,17 +718,6 @@ fn pick_file_in_directory(app: AppHandle, directory: String) -> Result<Option<St
         .file()
         .set_title("Select File to Compare")
         .set_directory(directory)
-        .blocking_pick_file();
-    Ok(file.map(|p| p.to_string()))
-}
-
-#[tauri::command]
-fn pick_image(app: AppHandle) -> Result<Option<String>, String> {
-    let file = app
-        .dialog()
-        .file()
-        .set_title("Select Icon Image")
-        .add_filter("Image", &["png", "jpg", "jpeg", "gif", "webp", "ico", "svg", "bmp"])
         .blocking_pick_file();
     Ok(file.map(|p| p.to_string()))
 }
@@ -990,9 +916,6 @@ pub fn run() {
             read_text_file,
             write_text_file,
             resolve_import,
-            run_command,
-            kill_command,
-            write_terminal_stdin,
             pty_spawn,
             pty_write,
             pty_resize,
@@ -1002,14 +925,11 @@ pub fn run() {
             jen_cli_save_defaults,
             jen_cli_reset_servers,
             jen_cli_set_path_enabled,
-            preview_file,
-            detect_ides,
             list_installed_editors,
             resolve_typed_executable,
             open_in_ide,
             reveal_in_file_manager,
             save_ides,
-            set_project_tags,
             touch_command_history,
             touch_branch_history,
             touch_search_history,
@@ -1020,7 +940,6 @@ pub fn run() {
             set_locale,
             pick_directory,
             pick_executable,
-            pick_image,
             pick_file_in_directory,
             import_ide_icon,
             import_ide_icon_bytes,

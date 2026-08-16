@@ -39,6 +39,10 @@ let unlistenChunk: UnlistenFn | null = null
 let unlistenFeed: UnlistenFn | null = null
 let streamStartedAt = 0
 let firstTokenAt: number | null = null
+/** Incremental output-token counter for the current stream (avoids O(n²) full rescans). */
+let streamTokens = 0
+/** Listener generation counter — superseded startAiListeners() calls drop their own registrations. */
+let listenersEpoch = 0
 
 function normalizeConfig(cfg: AiConfig | null | undefined): AiConfig {
   return {
@@ -66,13 +70,16 @@ function buildLiveStats(
   modelLabel: string,
   requestId: string,
   streamed: boolean,
+  outputTokensOverride?: number,
 ): AiMessageStats {
   const now = Date.now()
   const started = streamStartedAt || now
   const durationMs = Math.max(0, now - started)
-  const outputTokens = estimateTokens(
-    `${content}${reasoning ? `\n${reasoning}` : ''}`,
-  )
+  // Full-string rescans are O(n²) across a stream; callers pass the
+  // incrementally maintained total when available (audit P2-13).
+  const outputTokens =
+    outputTokensOverride ??
+    estimateTokens(`${content}${reasoning ? `\n${reasoning}` : ''}`)
   const secs = durationMs / 1000
   const tokensPerSec = secs > 0 ? outputTokens / secs : 0
   const ttft =
@@ -464,12 +471,23 @@ export const useAiStore = create<AiState>((set, get) => ({
       return
     }
 
+    // Claim the request slot synchronously, before any await. Without this a
+    // second Enter (keydown auto-repeat) can pass the `generating` guard while
+    // the first call is still awaiting createConversation/ai_append_message
+    // and start two concurrent streams (audit P1-2).
+    const requestId = crypto.randomUUID()
+    set({ generating: true, activeRequestId: requestId, error: null })
+
     let conversationId = state.activeConversationId
     const isFirstUserTurn =
       get().messages.filter((m) => m.role === 'user').length === 0
     if (!conversationId) {
       const conv = await get().createConversation()
-      if (!conv) return
+      if (!conv) {
+        // No conversation was created — release the slot so the composer works.
+        set({ generating: false, activeRequestId: null })
+        return
+      }
       conversationId = conv.id
     }
 
@@ -501,7 +519,6 @@ export const useAiStore = create<AiState>((set, get) => ({
       createdAt: now,
     }
 
-    const requestId = crypto.randomUUID()
     const assistantId = `pending-${requestId}`
     const assistantPlaceholder: AiMessage = {
       id: assistantId,
@@ -512,6 +529,7 @@ export const useAiStore = create<AiState>((set, get) => ({
     }
     streamStartedAt = Date.now()
     firstTokenAt = null
+    streamTokens = 0
 
     try {
       if (isTauri()) {
@@ -550,26 +568,22 @@ export const useAiStore = create<AiState>((set, get) => ({
       } else {
         set((s) => ({
           messages: [...s.messages, userMsg, assistantPlaceholder],
-          generating: true,
-          activeRequestId: requestId,
-          streamingAssistantId: assistantId,
-          error: null,
-        }))
-        get().clearAttachment()
-        set({
           generating: false,
           activeRequestId: null,
           streamingAssistantId: null,
           error: 'ai.error.tauriOnly',
-        })
+        }))
+        get().clearAttachment()
       }
     } catch (e) {
-      set({
+      set((s) => ({
         generating: false,
         activeRequestId: null,
         streamingAssistantId: null,
         error: errMsg(e),
-      })
+        // Remove the placeholder — nothing streamed yet, don't leave a ghost.
+        messages: s.messages.filter((m) => m.id !== assistantId),
+      }))
       console.warn('sendMessage failed', e)
     }
   },
@@ -577,10 +591,20 @@ export const useAiStore = create<AiState>((set, get) => ({
   stopGeneration: async () => {
     const requestId = get().activeRequestId
     if (!requestId) return
-    if (!isTauri()) {
-      set({ generating: false, activeRequestId: null })
-      return
-    }
+    const streamingAssistantId = get().streamingAssistantId
+    // Reset locally first (idempotent). A late backend terminal event is then
+    // dropped naturally by the requestId guard — this is the fallback that
+    // un-sticks the composer even when `ai_chat_cancel` is a silent no-op or
+    // the invoke throws (audit P1-3 / M15).
+    set((s) => ({
+      generating: false,
+      activeRequestId: null,
+      streamingAssistantId: null,
+      messages: streamingAssistantId
+        ? s.messages.filter((m) => m.id !== streamingAssistantId)
+        : s.messages,
+    }))
+    if (!isTauri()) return
     try {
       await invoke('ai_chat_cancel', { requestId })
     } catch (e) {
@@ -589,6 +613,10 @@ export const useAiStore = create<AiState>((set, get) => ({
   },
 
   startAiListeners: async () => {
+    // Generation token: if a newer startAiListeners() call begins (StrictMode
+    // double-mount, HMR), this call is superseded and must not clobber the
+    // shared unlisten slots with a stale registration (audit M20).
+    const epoch = ++listenersEpoch
     const cleanup = () => {
       void unlistenChunk?.()
       void unlistenFeed?.()
@@ -602,130 +630,166 @@ export const useAiStore = create<AiState>((set, get) => ({
 
     cleanup()
 
-    unlistenChunk = await listen<ChatChunkEvent>('ai://chat-chunk', (event) => {
-      const chunk = event.payload
-      const {
-        activeRequestId,
-        streamingAssistantId,
-        generating,
-        activeConversationId,
-      } = get()
-      if (!generating || !activeRequestId || chunk.requestId !== activeRequestId) {
-        return
-      }
+    const chunkUnlisten = await listen<ChatChunkEvent>(
+      'ai://chat-chunk',
+      (event) => {
+        const chunk = event.payload
+        const {
+          activeRequestId,
+          streamingAssistantId,
+          generating,
+          activeConversationId,
+        } = get()
+        if (
+          !generating ||
+          !activeRequestId ||
+          chunk.requestId !== activeRequestId
+        ) {
+          return
+        }
 
-      if (chunk.error) {
-        set({
-          error: chunk.error,
-          generating: false,
-          activeRequestId: null,
-        })
-      }
+        if (chunk.error) {
+          // Terminal error: remove the placeholder bubble and reset every
+          // streaming field, then stop processing this chunk (audit P1-3).
+          set((s) => ({
+            error: chunk.error,
+            generating: false,
+            activeRequestId: null,
+            streamingAssistantId: null,
+            messages: streamingAssistantId
+              ? s.messages.filter((m) => m.id !== streamingAssistantId)
+              : s.messages,
+          }))
+          return
+        }
 
-      const thinkEnabled = get().thinkEnabled
-      const delta = chunk.delta ?? ''
-      const reasoningDelta =
-        thinkEnabled && chunk.reasoningDelta ? chunk.reasoningDelta : ''
-      if (delta || reasoningDelta) {
-        if (firstTokenAt == null) firstTokenAt = Date.now()
-        const model = get().config.models.find(
-          (m) => m.id === get().selectedModelId,
-        )
-        const modelLabel =
-          model?.remark.trim() || model?.modelName || model?.id || '—'
-        set((s) => ({
-          messages: s.messages.map((m) => {
-            if (m.id !== streamingAssistantId) return m
-            const content = delta ? m.content + delta : m.content
-            const reasoning = reasoningDelta
-              ? `${m.reasoning ?? ''}${reasoningDelta}`
-              : m.reasoning
-            return {
-              ...m,
-              content,
-              reasoning,
-              stats: buildLiveStats(
+        const thinkEnabled = get().thinkEnabled
+        const delta = chunk.delta ?? ''
+        const reasoningDelta =
+          thinkEnabled && chunk.reasoningDelta ? chunk.reasoningDelta : ''
+        if (delta || reasoningDelta) {
+          if (firstTokenAt == null) firstTokenAt = Date.now()
+          // Incremental token accounting — avoids re-scanning the entire
+          // accumulated output on every chunk (audit P2-13).
+          streamTokens += estimateTokens(`${delta}${reasoningDelta}`)
+          const model = get().config.models.find(
+            (m) => m.id === get().selectedModelId,
+          )
+          const modelLabel =
+            model?.remark.trim() || model?.modelName || model?.id || '—'
+          set((s) => ({
+            messages: s.messages.map((m) => {
+              if (m.id !== streamingAssistantId) return m
+              const content = delta ? m.content + delta : m.content
+              const reasoning = reasoningDelta
+                ? `${m.reasoning ?? ''}${reasoningDelta}`
+                : m.reasoning
+              return {
+                ...m,
                 content,
                 reasoning,
-                modelLabel,
-                activeRequestId,
-                get().streamEnabled,
-              ),
-            }
-          }),
-        }))
-      }
-
-      if (chunk.done) {
-        const assistant = get().messages.find((m) => m.id === streamingAssistantId)
-        const convId = activeConversationId
-        const placeholderId = streamingAssistantId
-        const model = get().config.models.find(
-          (m) => m.id === get().selectedModelId,
-        )
-        const modelLabel =
-          model?.remark.trim() || model?.modelName || model?.id || '—'
-        const finalStats =
-          assistant && activeRequestId
-            ? buildLiveStats(
-                assistant.content,
-                assistant.reasoning,
-                modelLabel,
-                activeRequestId,
-                get().streamEnabled,
-              )
-            : assistant?.stats
-
-        void (async () => {
-          try {
-            if (
-              assistant &&
-              convId &&
-              isTauri() &&
-              (assistant.content || assistant.reasoning)
-            ) {
-              const toSave: AiMessage = {
-                id: crypto.randomUUID(),
-                conversationId: convId,
-                role: 'assistant',
-                content: assistant.content,
-                reasoning: assistant.reasoning,
-                createdAt: assistant.createdAt,
-                stats: finalStats,
-              }
-              const saved = await invoke<AiMessage>('ai_append_message', {
-                msg: toSave,
-              })
-              set((s) => ({
-                messages: s.messages.map((m) =>
-                  m.id === placeholderId ? { ...saved, stats: finalStats } : m,
+                stats: buildLiveStats(
+                  content,
+                  reasoning,
+                  modelLabel,
+                  activeRequestId,
+                  get().streamEnabled,
+                  streamTokens,
                 ),
-                generating: false,
-                activeRequestId: null,
-                streamingAssistantId: null,
-              }))
-              void get().loadConversations()
-            } else {
-              set({
-                generating: false,
-                activeRequestId: null,
-                streamingAssistantId: null,
-              })
-            }
-          } catch (e) {
-            set({
-              generating: false,
-              activeRequestId: null,
-              streamingAssistantId: null,
-              error: errMsg(e),
-            })
-            console.warn('persist assistant failed', e)
-          }
-        })()
-      }
-    })
+              }
+            }),
+          }))
+        }
 
-    unlistenFeed = await listen<string>('ai://feed', (event) => {
+        if (chunk.done) {
+          const assistant = get().messages.find(
+            (m) => m.id === streamingAssistantId,
+          )
+          const convId = activeConversationId
+          const placeholderId = streamingAssistantId
+          const model = get().config.models.find(
+            (m) => m.id === get().selectedModelId,
+          )
+          const modelLabel =
+            model?.remark.trim() || model?.modelName || model?.id || '—'
+          const finalStats =
+            assistant && activeRequestId
+              ? buildLiveStats(
+                  assistant.content,
+                  assistant.reasoning,
+                  modelLabel,
+                  activeRequestId,
+                  get().streamEnabled,
+                  streamTokens,
+                )
+              : assistant?.stats
+
+          void (async () => {
+            try {
+              if (
+                assistant &&
+                convId &&
+                isTauri() &&
+                (assistant.content || assistant.reasoning)
+              ) {
+                const toSave: AiMessage = {
+                  id: crypto.randomUUID(),
+                  conversationId: convId,
+                  role: 'assistant',
+                  content: assistant.content,
+                  reasoning: assistant.reasoning,
+                  createdAt: assistant.createdAt,
+                  stats: finalStats,
+                }
+                const saved = await invoke<AiMessage>('ai_append_message', {
+                  msg: toSave,
+                })
+                set((s) => ({
+                  messages: s.messages.map((m) =>
+                    m.id === placeholderId
+                      ? { ...saved, stats: finalStats }
+                      : m,
+                  ),
+                  generating: false,
+                  activeRequestId: null,
+                  streamingAssistantId: null,
+                }))
+                void get().loadConversations()
+              } else {
+                // Empty reply / non-Tauri: drop the placeholder instead of
+                // leaving a permanent ghost bubble (audit P1-3).
+                set((s) => ({
+                  generating: false,
+                  activeRequestId: null,
+                  streamingAssistantId: null,
+                  messages: s.messages.filter(
+                    (m) => m.id !== placeholderId,
+                  ),
+                }))
+              }
+            } catch (e) {
+              // Persistence failed — reset state and drop the unsaved
+              // placeholder rather than keeping a fake bubble (audit P1-3).
+              set((s) => ({
+                generating: false,
+                activeRequestId: null,
+                streamingAssistantId: null,
+                error: errMsg(e),
+                messages: s.messages.filter((m) => m.id !== placeholderId),
+              }))
+              console.warn('persist assistant failed', e)
+            }
+          })()
+        }
+      },
+    )
+    if (epoch !== listenersEpoch) {
+      void chunkUnlisten()
+      return cleanup
+    }
+    unlistenChunk = chunkUnlisten
+
+    const feedUnlisten = await listen<string>('ai://feed', (event) => {
       const text = truncateAttachment(String(event.payload ?? ''))
       if (!text) return
       get().setAttachment({
@@ -734,6 +798,11 @@ export const useAiStore = create<AiState>((set, get) => ({
         createdAt: Date.now(),
       })
     })
+    if (epoch !== listenersEpoch) {
+      void feedUnlisten()
+      return cleanup
+    }
+    unlistenFeed = feedUnlisten
 
     try {
       const pending = await invoke<string | null>('ai_take_pending_feed')

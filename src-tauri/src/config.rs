@@ -195,9 +195,6 @@ pub fn save(_app: &AppHandle, cfg: &AppConfig) -> Result<(), String> {
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     crate::db::kv_set_json("app_config", cfg)
 }
-pub fn tag_key(workspace: &str, project_folder: &str) -> String {
-    format!("{workspace}::{project_folder}")
-}
 
 fn sort_history(items: &mut [HistoryItem]) {
     items.sort_by(|a, b| {

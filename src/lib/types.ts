@@ -174,6 +174,8 @@ export type TermSession = {
   running: boolean
   /** User or app has run at least one command in this tab. */
   dirty: boolean
+  /** Shell exited (pty://exit) — never reuse this tab for commands (audit P1-11). */
+  dead?: boolean
 }
 
 export function sortScriptNames(names: string[]): string[] {

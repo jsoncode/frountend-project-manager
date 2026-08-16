@@ -10,6 +10,7 @@ import { JenCliSettingsModal } from './components/JenCliSettingsModal'
 import { ResizeHandle } from './components/ResizeHandle'
 import { SettingsModal } from './components/SettingsModal'
 import { TopBar } from './components/TopBar'
+import { PanelBoundary } from './components/ErrorBoundary'
 import { useLayoutStore } from './stores/layoutStore'
 import { useSessionStore, initSessionAutoSave } from './stores/sessionStore'
 import { useSettingsStore } from './stores/settingsStore'
@@ -42,10 +43,15 @@ export default function App() {
 
   useEffect(() => {
     let unlisten: (() => void) | undefined
+    let alive = true
     void startListening().then((fn) => {
-      unlisten = fn
+      // If the app unmounted while listeners were registering, release them
+      // immediately instead of leaking (audit QO-5).
+      if (alive) unlisten = fn
+      else fn()
     })
     return () => {
+      alive = false
       unlisten?.()
     }
   }, [startListening])
@@ -110,7 +116,12 @@ export default function App() {
           gridTemplateColumns: `${explorerWidth}px 4px ${toolPanelWidth}px 4px minmax(0, 1fr)`,
         }}
       >
-        <Sidebar />
+        {/* Per-panel boundaries: a render crash in one column (Explorer /
+            git panel / editor-terminal) must not blank the other panels and
+            kill pty sessions or unsaved docs (audit P2-3). */}
+        <PanelBoundary>
+          <Sidebar />
+        </PanelBoundary>
         <ResizeHandle
           orientation="vertical"
           onDrag={(d) => {
@@ -119,7 +130,9 @@ export default function App() {
           }}
           onDragEnd={persist}
         />
-        <ActionBar />
+        <PanelBoundary>
+          <ActionBar />
+        </PanelBoundary>
         <ResizeHandle
           orientation="vertical"
           onDrag={(d) => {
@@ -129,7 +142,9 @@ export default function App() {
           }}
           onDragEnd={persist}
         />
-        <DetailPane />
+        <PanelBoundary>
+          <DetailPane />
+        </PanelBoundary>
       </div>
       <SettingsModal />
       <IdeSettingsModal />

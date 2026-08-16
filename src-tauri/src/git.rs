@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::fs;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::OnceLock;
@@ -352,18 +353,46 @@ fn read_remote_branches(path: &str, local_names: &BTreeSet<String>) -> Vec<Branc
         .collect()
 }
 
+/// Resolve the actual git dir, honoring `.git` FILES (linked worktrees,
+/// submodules) in addition to plain `.git` directories (audit L4).
+fn git_dir_path(path: &str) -> Option<PathBuf> {
+    let out = git_command(path)
+        .args(["rev-parse", "--git-dir"])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    let p = PathBuf::from(&s);
+    Some(if p.is_absolute() {
+        p
+    } else {
+        Path::new(path).join(p)
+    })
+}
+
 pub fn git_branches(path: &str) -> Result<Option<GitInfo>, String> {
     let git_dir = std::path::Path::new(path).join(".git");
     if !git_dir.exists() {
         return Ok(None);
     }
 
-    let current = git_command(path)
+    // Surface real git failures instead of silently rendering "no branches"
+    // (audit M7): a corrupt repo / missing git binary should be visible.
+    let current_out = git_command(path)
         .args(["rev-parse", "--abbrev-ref", "HEAD"])
         .output()
-        .ok()
-        .filter(|o| o.status.success())
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
+        .map_err(|e| format!("无法读取 git 仓库状态: {e}"))?;
+    if !current_out.status.success() {
+        let err = String::from_utf8_lossy(&current_out.stderr).trim().to_string();
+        return Err(if err.is_empty() {
+            "git rev-parse 失败".into()
+        } else {
+            err
+        });
+    }
+    let current = String::from_utf8_lossy(&current_out.stdout).trim().to_string();
 
     // Ref name sets first so each branch's count can be computed against
     // its own counterpart (upstream / same-named local ref), never HEAD.
@@ -388,25 +417,23 @@ pub fn git_branches(path: &str) -> Result<Option<GitInfo>, String> {
         }
     }
 
-    if let Some(cur) = current.as_ref() {
-        if !seen.contains(cur) {
-            branches.insert(
-                0,
-                BranchItem {
-                    name: cur.clone(),
-                    is_remote: false,
-                    ahead: 0,
-                    behind: 0,
-                },
-            );
-            if branches.len() > MAX_BRANCHES {
-                branches.truncate(MAX_BRANCHES);
-            }
+    if !current.is_empty() && !seen.contains(&current) {
+        branches.insert(
+            0,
+            BranchItem {
+                name: current.clone(),
+                is_remote: false,
+                ahead: 0,
+                behind: 0,
+            },
+        );
+        if branches.len() > MAX_BRANCHES {
+            branches.truncate(MAX_BRANCHES);
         }
     }
 
     Ok(Some(GitInfo {
-        current,
+        current: Some(current),
         branches,
         remotes: list_remote_urls(path),
     }))
@@ -1346,7 +1373,11 @@ fn append_pull_all_summary(message: &mut String, updated: &[String], skipped: &[
 }
 
 fn merge_head_path(path: &str) -> std::path::PathBuf {
-    std::path::Path::new(path).join(".git").join("MERGE_HEAD")
+    // `.git` may be a FILE (linked worktree / submodule) — resolve the real
+    // git dir first (audit L4), falling back to the plain directory.
+    git_dir_path(path)
+        .unwrap_or_else(|| Path::new(path).join(".git"))
+        .join("MERGE_HEAD")
 }
 
 fn merge_in_progress(path: &str) -> bool {
@@ -1617,7 +1648,7 @@ pub fn git_merge_file_sides(path: &str, file: &str) -> Result<MergeFileSides, St
     let base = git_show_stage(path, 1, &file).unwrap_or_default();
     let ours = git_show_stage(path, 2, &file).unwrap_or_default();
     let theirs = git_show_stage(path, 3, &file).unwrap_or_default();
-    let working_path = std::path::Path::new(path).join(&file);
+    let working_path = repo_file_within(path, &file)?;
     let working = if working_path.is_file() {
         fs::read_to_string(&working_path).unwrap_or_default()
     } else {
@@ -1630,6 +1661,65 @@ pub fn git_merge_file_sides(path: &str, file: &str) -> Result<MergeFileSides, St
         theirs,
         working,
     })
+}
+
+/// Resolve a repo-relative file argument to an absolute path, refusing any
+/// path that escapes the repository root (H1: merge/diff file path traversal).
+/// Works even when `path` itself is not canonicalized.
+fn repo_file_within(repo: &str, rel: &str) -> Result<PathBuf, String> {
+    use std::path::Component;
+
+    let raw = Path::new(repo).join(rel);
+    // Quick lexical check first: reject obvious `..` / absolute components.
+    let mut out = PathBuf::new();
+    for comp in raw.components() {
+        match comp {
+            Component::ParentDir => return Err(format!("文件路径越界: {rel}")),
+            Component::RootDir | Component::Prefix(_) if out.as_os_str().is_empty() => {
+                out.push(comp.as_os_str());
+            }
+            Component::Normal(c) => out.push(c),
+            _ => {}
+        }
+    }
+    // Deep check: canonicalize the deepest existing ancestor of both sides and
+    // require the target to stay inside the repo root.
+    let target = canonicalize_lenient(&raw);
+    let root = canonicalize_lenient(Path::new(repo));
+    if target.starts_with(&root) {
+        Ok(target)
+    } else {
+        Err(format!("文件路径越界: {rel}"))
+    }
+}
+
+fn canonicalize_lenient(p: &Path) -> PathBuf {
+    // Canonicalize the DEEPEST existing ancestor, then re-append the rest —
+    // walking one level at a time keeps 8.3 short-name components canonicalized
+    // so containment compares long names consistently (mirrors fs_explorer).
+    let mut tail: Vec<PathBuf> = Vec::new();
+    let mut cur = p;
+    loop {
+        match cur.canonicalize() {
+            Ok(c) => {
+                let mut base = c;
+                for part in tail.into_iter().rev() {
+                    base.push(part);
+                }
+                return base;
+            }
+            Err(_) => match cur.parent() {
+                Some(parent) if !parent.as_os_str().is_empty() && parent != cur => {
+                    if let Some(name) = cur.file_name() {
+                        tail.push(name.into());
+                    }
+                    cur = parent;
+                }
+                _ => break,
+            },
+        }
+    }
+    cur.to_path_buf()
 }
 
 fn git_show_stage(path: &str, stage: u8, file: &str) -> Result<String, String> {
@@ -1674,7 +1764,7 @@ pub fn git_diff_head(path: &str, file: &str) -> Result<DiffHeadResult, String> {
                 Ok(String::from_utf8_lossy(&output.stdout).to_string())
             }
         })?;
-    let working_path = std::path::Path::new(path).join(&file);
+    let working_path = repo_file_within(path, &file)?;
     let working = if working_path.is_file() {
         fs::read_to_string(&working_path).unwrap_or_default()
     } else {
@@ -1732,7 +1822,7 @@ pub fn git_merge_resolve_content(
     if file.is_empty() {
         return Err("文件路径为空".into());
     }
-    let full = std::path::Path::new(path).join(&file);
+    let full = repo_file_within(path, &file)?;
     if let Some(parent) = full.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }

@@ -2,7 +2,33 @@ import { invoke } from '@tauri-apps/api/core'
 import { create } from '../lib/createStore'
 import { maxBranchBehind } from '../lib/gitInfo'
 import type { GitInfo, GitStatus, ProjectSummary } from '../lib/types'
+// NOTE: settingsStore ↔ workspaceStore form a lazy ESM cycle (audit P2-1/H7).
+// Safe only because every cross-store access below happens at action-call
+// time via .getState() — NEVER dereference the imported store at module top
+// level (creator body, constants) or you hit TDZ/undefined.
 import { useSettingsStore } from './settingsStore'
+
+/** Max simultaneous `git_fetch + git_status + git_branches` scans per workspace
+ *  (audit M14: a 100+ repo workspace must not spawn hundreds of git processes). */
+const SCAN_CONCURRENCY = 4
+
+/** Run `fn` over items with at most `limit` concurrent executions. */
+async function mapLimit<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length)
+  let next = 0
+  const workers = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
+    while (next < items.length) {
+      const i = next++
+      results[i] = await fn(items[i]!)
+    }
+  })
+  await Promise.all(workers)
+  return results
+}
 
 /** Per-project quick status summary (changed files + behind count). */
 export type ProjectStatusSummary = {
@@ -81,7 +107,7 @@ function persistStatuses(statuses: Record<string, ProjectStatusSummary>): Promis
 }
 
 /** Normalise a project path for tolerant lookups (separator + case). */
-function normPath(p: string): string {
+export function normPath(p: string): string {
   return p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
 }
 
@@ -337,8 +363,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       },
     }))
     try {
-      const results = await Promise.all(
-        projects.map(async (p) => {
+      const results = await mapLimit(
+        projects,
+        SCAN_CONCURRENCY,
+        async (p) => {
           try {
             // Fetch remotes first (best effort) so behind counts reflect the
             // latest remote tips; offline repos simply keep their last refs.
@@ -379,7 +407,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
               }
             })
           }
-        }),
+        },
       )
       // Merge results into the shared map atomically — concurrent scans of
       // different workspaces must not overwrite each other's results.
@@ -410,19 +438,18 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     }
   },
   updateProjectStatus: (projectPath, patch) => {
-    set((s) => {
-      const existing = s.projectStatuses[projectPath]
-      if (!existing) {
-        const next = { ...s.projectStatuses, [projectPath]: patch as ProjectStatusSummary }
-        persistStatuses(next)
-        return { projectStatuses: next }
-      }
-      const next = {
-        ...s.projectStatuses,
-        [projectPath]: { ...existing, ...patch },
-      }
-      persistStatuses(next)
-      return { projectStatuses: next }
-    })
+    // Compute the merged map OUTSIDE the set() updater: persisting from inside
+    // an updater runs the side effect during snapshot computation, which
+    // StrictMode double-invokes (audit M17).
+    const statuses = get().projectStatuses
+    const existing = statuses[projectPath]
+    const next = {
+      ...statuses,
+      [projectPath]: existing
+        ? { ...existing, ...patch }
+        : (patch as ProjectStatusSummary),
+    }
+    set({ projectStatuses: next })
+    void persistStatuses(next)
   },
 }))

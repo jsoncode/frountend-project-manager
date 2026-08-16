@@ -41,6 +41,7 @@ type ProjectState = {
 let selectSeq = 0
 let statusSeq = 0
 let mergeSeq = 0
+let gitSeq = 0
 
 function applyGitStatus(
   projectPath: string | undefined,
@@ -160,13 +161,20 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   refreshGit: async (opts) => {
     const selected = get().selected
     if (!selected) return
+    // Stale-response guard: git_fetch can be slow; if the user switches
+    // projects while it runs, the late response must not render project A's
+    // branches into project B's panel (audit P1-4).
+    const seq = ++gitSeq
+    const stillCurrent = () => seq === gitSeq && get().selected?.path === selected.path
     try {
       if (opts?.fetch) {
         await invoke('git_fetch', { path: selected.path })
+        if (!stillCurrent()) return
       }
       const git = await invoke<GitInfo | null>('git_branches', {
         path: selected.path,
       })
+      if (!stillCurrent()) return
       set({ git })
       // Sync git info to workspaceStore (behind included so the Explorer
       // project badge stays in sync with the branch panel after fetch).
@@ -177,6 +185,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       })
       await Promise.all([get().refreshGitStatus(), get().refreshMergeStatus()])
     } catch (e) {
+      if (seq !== gitSeq) return
       set({ error: String(e) })
     }
   },

@@ -30,7 +30,48 @@ permissions:
   contents: write
 
 jobs:
+  # Quality gate (audit H8): lint + type-check + Rust unit tests must pass
+  # before any installer is built. The release matrix below depends on this.
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux system deps (tauri)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint (oxlint)
+        run: pnpm lint
+
+      - name: Type check (tsc -b)
+        run: pnpm exec tsc -b
+
+      - name: Rust unit tests
+        working-directory: src-tauri
+        run: cargo test
+
   release:
+    needs: quality
     outputs:
       tag: ${{ steps.ver.outputs.tag }}
     strategy:

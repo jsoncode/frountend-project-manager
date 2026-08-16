@@ -63,16 +63,25 @@ export function AiModelSettingsModal({ onClose, inline }: Props) {
   }
 
   const removeModel = async (model: AiModel) => {
-    await persistModels(config.models.filter((m) => m.id !== model.id))
-    setPendingDelete(null)
+    try {
+      await persistModels(config.models.filter((m) => m.id !== model.id))
+      setPendingDelete(null)
+    } catch (e) {
+      // Surface persist failures instead of an unhandled rejection (audit L37).
+      setError(e instanceof Error ? e.message : String(e))
+    }
   }
 
   const toggleActive = async (model: AiModel) => {
-    await persistModels(
-      config.models.map((m) =>
-        m.id === model.id ? { ...m, active: !m.active } : m,
-      ),
-    )
+    try {
+      await persistModels(
+        config.models.map((m) =>
+          m.id === model.id ? { ...m, active: !m.active } : m,
+        ),
+      )
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
   }
 
   const content = (

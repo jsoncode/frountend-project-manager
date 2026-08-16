@@ -33,6 +33,22 @@ export function createStore<T extends object>(
   const setState: SetState<T> = (partial) => {
     const nextPartial =
       typeof partial === 'function' ? partial(state) : partial
+    // Skip notifying when every provided key is Object.is-equal to the current
+    // value — unconditional notifications force needless re-renders and, with
+    // an uncached selector, risk render loops (audit P2-2).
+    let changed = false
+    for (const key in nextPartial) {
+      if (
+        !Object.is(
+          (state as Record<string, unknown>)[key],
+          (nextPartial as Record<string, unknown>)[key],
+        )
+      ) {
+        changed = true
+        break
+      }
+    }
+    if (!changed) return
     state = { ...state, ...nextPartial }
     listeners.forEach((l) => l())
   }
@@ -51,9 +67,20 @@ export function createStore<T extends object>(
   function useStore<U>(selector?: (state: T) => U): T | U {
     const selectorRef = useRef(selector)
     selectorRef.current = selector
+    // Cache the selector result keyed by the state object reference. Without
+    // this, `useStore((s) => s.x.filter(...))` returns a fresh array on every
+    // getSnapshot call and drives React into an infinite render loop (the
+    // zustand useSyncExternalStoreWithSelector pattern, audit P2-2).
+    const cachedInputRef = useRef<unknown>(null)
+    const cachedValueRef = useRef<unknown>(null)
     const getSnapshot = useCallback(() => {
       const s = getState()
-      return selectorRef.current ? selectorRef.current(s) : s
+      if (!selectorRef.current) return s
+      if (cachedInputRef.current !== s) {
+        cachedInputRef.current = s
+        cachedValueRef.current = selectorRef.current(s)
+      }
+      return cachedValueRef.current as U
     }, [])
     return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
   }

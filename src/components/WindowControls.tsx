@@ -12,6 +12,7 @@ export function WindowControls() {
     if (!isTauri()) return
     const win = getCurrentWindow()
     let unlisten: (() => void) | undefined
+    let alive = true
 
     void win.isMaximized().then(setMaximized).catch(() => undefined)
     void win
@@ -19,10 +20,14 @@ export function WindowControls() {
         void win.isMaximized().then(setMaximized).catch(() => undefined)
       })
       .then((fn) => {
-        unlisten = fn
+        // If the component unmounted while `onResized` was being awaited, the
+        // listener must be dropped immediately instead of leaking (audit QO-5).
+        if (alive) unlisten = fn
+        else fn()
       })
 
     return () => {
+      alive = false
       unlisten?.()
     }
   }, [])

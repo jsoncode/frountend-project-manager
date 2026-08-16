@@ -78,6 +78,15 @@ export function IdeSettingsModal({ inline, onClosePanel }: IdeSettingsModalProps
 
   const ides = draft ?? config?.ides ?? []
 
+  /**
+   * Functional draft update — every mutation goes through this so async flows
+   * (scan, icon extraction) can never clobber edits the user made meanwhile
+   * with a stale render snapshot (audit P1-9).
+   */
+  const patchDraft = (fn: (cur: IdeConfig[]) => IdeConfig[]) => {
+    setDraft((prev) => fn(prev ?? config?.ides ?? []))
+  }
+
   const close = () => {
     setDraft(null)
     setPendingDelete(null)
@@ -90,12 +99,12 @@ export function IdeSettingsModal({ inline, onClosePanel }: IdeSettingsModalProps
   }
 
   const update = (id: string, patch: Partial<IdeConfig>) => {
-    setDraft(ides.map((i) => (i.id === id ? { ...i, ...patch } : i)))
+    patchDraft((cur) => cur.map((i) => (i.id === id ? { ...i, ...patch } : i)))
   }
 
   const confirmDelete = () => {
     if (!pendingDelete) return
-    setDraft(ides.filter((i) => i.id !== pendingDelete.id))
+    patchDraft((cur) => cur.filter((i) => i.id !== pendingDelete.id))
     setPendingDelete(null)
   }
 
@@ -118,16 +127,20 @@ export function IdeSettingsModal({ inline, onClosePanel }: IdeSettingsModalProps
     try {
       const found = await invoke<InstalledEditor[]>('list_installed_editors')
       const available = found.filter((e) => e.available)
-      const next = [...ides]
+      // Snapshot dedupe keys once; apply additions via a functional update so
+      // edits made while icons are being extracted are preserved.
       const known = new Set(
-        next.map((i) => i.executable.trim().toLowerCase()),
+        (draft ?? config?.ides ?? []).map((i) =>
+          i.executable.trim().toLowerCase(),
+        ),
       )
+      const additions: IdeConfig[] = []
       for (const ed of available) {
         const key = ed.executable.trim().toLowerCase()
         if (known.has(key)) continue
         known.add(key)
         const iconPath = await extractIcon(ed.executable)
-        next.push(
+        additions.push(
           newIde({
             name: ed.name,
             executable: ed.executable,
@@ -138,7 +151,12 @@ export function IdeSettingsModal({ inline, onClosePanel }: IdeSettingsModalProps
           }),
         )
       }
-      setDraft(next)
+      if (additions.length > 0) {
+        patchDraft((cur) => {
+          const have = new Set(cur.map((i) => i.executable.trim().toLowerCase()))
+          return [...cur, ...additions.filter((a) => !have.has(a.executable.trim().toLowerCase()))]
+        })
+      }
     } catch (e) {
       showErrorLog(e)
     } finally {
@@ -147,19 +165,30 @@ export function IdeSettingsModal({ inline, onClosePanel }: IdeSettingsModalProps
   }
 
   const addFromEditor = async (ed: InstalledEditor) => {
-    if (!ed.available || alreadyAdded(ed.executable)) return
+    if (!ed.available) return
     const iconPath = await extractIcon(ed.executable)
-    setDraft([
-      ...ides,
-      newIde({
-        name: ed.name,
-        executable: ed.executable,
-        argsTemplate: '{path}',
-        enabled: true,
-        builtin: false,
-        iconPath,
-      }),
-    ])
+    patchDraft((cur) => {
+      if (
+        cur.some(
+          (i) =>
+            i.executable.trim().toLowerCase() ===
+            ed.executable.trim().toLowerCase(),
+        )
+      ) {
+        return cur
+      }
+      return [
+        ...cur,
+        newIde({
+          name: ed.name,
+          executable: ed.executable,
+          argsTemplate: '{path}',
+          enabled: true,
+          builtin: false,
+          iconPath,
+        }),
+      ]
+    })
     setPickerOpen(false)
     setPickerQuery('')
   }
@@ -168,7 +197,6 @@ export function IdeSettingsModal({ inline, onClosePanel }: IdeSettingsModalProps
   const addFromTypedPath = async (path: string) => {
     const trimmed = path.trim()
     if (!trimmed) return
-    if (alreadyAdded(trimmed)) return
     try {
       const ed = await invoke<InstalledEditor | null>(
         'resolve_typed_executable',
@@ -185,7 +213,7 @@ export function IdeSettingsModal({ inline, onClosePanel }: IdeSettingsModalProps
   }
 
   const addBlank = () => {
-    setDraft([...ides, newIde()])
+    patchDraft((cur) => [...cur, newIde()])
     setPickerOpen(false)
     setPickerQuery('')
   }
@@ -200,14 +228,23 @@ export function IdeSettingsModal({ inline, onClosePanel }: IdeSettingsModalProps
         .pop()
         ?.replace(/\.(exe|cmd|bat)$/i, '') ?? 'Custom IDE'
     const iconPath = await extractIcon(path)
-    setDraft([
-      ...ides,
-      newIde({
-        name: base,
-        executable: path,
-        iconPath,
-      }),
-    ])
+    patchDraft((cur) => {
+      if (
+        cur.some(
+          (i) => i.executable.trim().toLowerCase() === path.trim().toLowerCase(),
+        )
+      ) {
+        return cur
+      }
+      return [
+        ...cur,
+        newIde({
+          name: base,
+          executable: path,
+          iconPath,
+        }),
+      ]
+    })
     setPickerOpen(false)
     setPickerQuery('')
   }

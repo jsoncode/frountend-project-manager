@@ -12,7 +12,7 @@ import { useMemo, useState, type ComponentType, type CSSProperties } from 'react
 import * as monaco from 'monaco-editor'
 import { useI18n } from '../i18n/useI18n'
 import type { Locale } from '../i18n/messages'
-import { EDITOR_THEMS, applyEditorTheme, registerEditorThemes } from '../lib/monacoThemes'
+import { EDITOR_THEMES, applyEditorTheme, registerEditorThemes } from '../lib/monacoThemes'
 import { useSettingsStore } from '../stores/settingsStore'
 import { AiSettingsModal } from './AiSettingsModal'
 import { IdeSettingsModal } from './IdeSettingsModal'
@@ -137,7 +137,7 @@ export function SettingsModal() {
               <div className="settings-group-title">{t('settings.editorTheme')}</div>
               <p className="muted" style={{ marginTop: 0, marginBottom: 12 }}>{t('settings.editorThemeHint')}</p>
               <div className="editor-theme-grid">
-                {EDITOR_THEMS.map((theme) => (
+                {EDITOR_THEMES.map((theme) => (
                   <button
                     key={theme.id}
                     type="button"

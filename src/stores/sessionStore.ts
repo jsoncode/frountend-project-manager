@@ -5,7 +5,7 @@ import { useExplorerStore } from './explorerStore'
 import { useLayoutStore } from './layoutStore'
 import { useProjectStore } from './projectStore'
 import { useTerminalStore } from './terminalStore'
-import { useWorkspaceStore } from './workspaceStore'
+import { normPath, useWorkspaceStore } from './workspaceStore'
 
 type SessionSnapshot = {
   activeWorkspace?: string | null
@@ -106,7 +106,9 @@ export const useSessionStore = create<SessionState>((_set, _get) => ({
         const projects = activeWs
           ? ws.projectCache[activeWs] ?? []
           : []
-        const found = projects.find((p) => p.path === session.selectedProjectPath)
+        const found = projects.find(
+          (p) => normPath(p.path) === normPath(session.selectedProjectPath!),
+        )
         if (found) {
           void useProjectStore.getState().selectProject(found)
         }
@@ -167,12 +169,22 @@ export const useSessionStore = create<SessionState>((_set, _get) => ({
 
 /**
  * Subscribe to all relevant stores and auto-save session on changes.
- * Call once at app startup.
+ * Call once at app startup. Returns an unsubscribe that removes every
+ * listener — previously the subscriptions were dropped, piling up under
+ * HMR / repeated init (audit P2-14).
  */
 export function initSessionAutoSave() {
-  useLayoutStore.subscribe(() => scheduleSave())
-  useWorkspaceStore.subscribe(() => scheduleSave())
-  useExplorerStore.subscribe(() => scheduleSave())
-  useEditorStore.subscribe(() => scheduleSave())
-  useTerminalStore.subscribe(() => scheduleSave())
+  const unsubs = [
+    useLayoutStore.subscribe(() => scheduleSave()),
+    useWorkspaceStore.subscribe(() => scheduleSave()),
+    useExplorerStore.subscribe(() => scheduleSave()),
+    useEditorStore.subscribe(() => scheduleSave()),
+    useTerminalStore.subscribe(() => scheduleSave()),
+    // The snapshot records selectedProjectPath — subscribe so selection
+    // changes reach disk even when the workspace scan path fails (audit P2-14).
+    useProjectStore.subscribe(() => scheduleSave()),
+  ]
+  return () => {
+    for (const unsub of unsubs) unsub()
+  }
 }

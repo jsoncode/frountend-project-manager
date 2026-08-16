@@ -6,8 +6,10 @@ export function languageFromPath(filePath: string): string {
   const ext = dot >= 0 ? lower.slice(dot + 1) : ''
 
   if (lower === 'dockerfile' || lower.startsWith('dockerfile.')) return 'dockerfile'
-  if (lower === 'makefile' || lower === 'gnumakefile') return 'makefile'
-  if (lower === 'cmakelists.txt') return 'cmake'
+  // monaco basic-languages has no makefile/cmake ids — handing Monaco an
+  // unknown id yields no highlighting plus console warnings (audit QO-6).
+  if (lower === 'makefile' || lower === 'gnumakefile') return 'plaintext'
+  if (lower === 'cmakelists.txt') return 'plaintext'
 
   switch (ext) {
     case 'js':

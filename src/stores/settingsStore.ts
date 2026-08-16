@@ -2,6 +2,10 @@ import { invoke } from '@tauri-apps/api/core'
 import { create } from '../lib/createStore'
 import { isTauri } from '../lib/tauri'
 import type { AppConfig, EditorThemeId, IdeConfig } from '../lib/types'
+// NOTE: workspaceStore ↔ settingsStore form a lazy ESM cycle (audit P2-1/H7).
+// Safe only because every cross-store access below happens at action-call
+// time via .getState() — NEVER dereference the imported store at module top
+// level (creator body, constants) or you hit TDZ/undefined.
 import { useWorkspaceStore } from './workspaceStore'
 
 type HistoryKind = 'command' | 'branch' | 'search'
@@ -158,9 +162,20 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   saveWorkspaces: async (workspaces) => {
     const current = get().config
     if (!current) return
-    const next = { ...current, workspaces }
+    if (!isTauri()) {
+      set({ config: { ...current, workspaces } })
+      return
+    }
+    // Read + persist from the LATEST state so a concurrent update to another
+    // field (theme, history, pm) isn't clobbered by our stale snapshot; after
+    // the await, re-merge only our field into whatever the state is now
+    // (audit P2-10).
+    const base = get().config
+    if (!base) return
+    const next: AppConfig = { ...base, workspaces }
     await invoke('save_config', { cfg: next })
-    set({ config: next })
+    const latest = get().config
+    set({ config: latest ? { ...latest, workspaces } : next })
   },
   saveIdes: async (ides) => {
     const cfg = await invoke<AppConfig>('save_ides', { ides })
@@ -296,11 +311,13 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const current = get().config
     if (!current) return
     const next = { ...current, editorTheme: themeId }
-    if (isTauri()) {
-      // save_config returns nothing — applying its (empty) result would null
-      // the whole config and blank the workspace list. Apply `next` instead.
-      await invoke('save_config', { cfg: next })
-    }
+    // Apply optimistically; persist in the background. The old order (await
+    // invoke first) left the theme unapplied on write failure and surfaced an
+    // unhandled rejection to uncatching callers (audit P2-10).
     set({ config: next })
+    if (!isTauri()) return
+    void invoke('save_config', { cfg: next }).catch((e) => {
+      console.warn('save_config (editor theme) failed', e)
+    })
   },
 }))

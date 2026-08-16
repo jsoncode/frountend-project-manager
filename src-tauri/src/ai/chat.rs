@@ -255,6 +255,9 @@ async fn run_stream(
     }
 
     let mut stream = resp.bytes_stream();
+    // Byte-level buffer + incremental UTF-8 decode: a codepoint split across
+    // two network chunks must not become a permanent `�` (audit L19 / H3).
+    let mut bytes_buf: Vec<u8> = Vec::new();
     let mut buffer = String::new();
 
     while let Some(chunk) = stream.next().await {
@@ -262,7 +265,24 @@ async fn run_stream(
             break;
         }
         let bytes = chunk.map_err(|e| e.to_string())?;
-        buffer.push_str(&String::from_utf8_lossy(&bytes));
+        bytes_buf.extend_from_slice(&bytes);
+        // Decode the valid prefix now, keep an incomplete trailing codepoint
+        // in bytes_buf for the next chunk.
+        match std::str::from_utf8(&bytes_buf) {
+            Ok(s) => {
+                buffer.push_str(s);
+                bytes_buf.clear();
+            }
+            Err(e) => {
+                let valid = e.valid_up_to();
+                if valid > 0 {
+                    if let Ok(s) = std::str::from_utf8(&bytes_buf[..valid]) {
+                        buffer.push_str(s);
+                    }
+                    bytes_buf.drain(..valid);
+                }
+            }
+        }
 
         while let Some(pos) = buffer.find('\n') {
             let mut line = buffer[..pos].to_string();

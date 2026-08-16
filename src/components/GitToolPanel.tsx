@@ -13,7 +13,7 @@ import {
   Star,
   Trash,
 } from 'reicon-react'
-import { Button, Checkbox, Input } from 'antd'
+import { App, Button, Checkbox, Input } from 'antd'
 import { invoke } from '@tauri-apps/api/core'
 import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react'
 import { useI18n } from '../i18n/useI18n'
@@ -72,6 +72,8 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
   const runRaw = useTerminalStore((s) => s.runRaw)
   const [switchingBranch, setSwitchingBranch] = useState<string | null>(null)
   const [dirtyConfirm, setDirtyConfirm] = useState<{
+    /** Project path the dirty-status was captured for (audit P1-7). */
+    path: string
     branch: string
     status: GitStatus
   } | null>(null)
@@ -84,21 +86,29 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
   const [createState, setCreateState] = useState<CreateState | null>(null)
   const [deleteState, setDeleteState] = useState<DeleteState | null>(null)
   const [pulling, setPulling] = useState(false)
-  const [notice, setNotice] = useState<{
-    kind: 'ok' | 'error'
-    text: string
-  } | null>(null)
-  const noticeTimer = useRef<number | null>(null)
   const [mergeModal, setMergeModal] = useState<{
     initial: MergeStatus | null
   } | null>(null)
   const { t } = useI18n()
+  const { modal } = App.useApp()
 
-  /** Lightweight inline feedback for backend-driven git operations. */
+  /** Modal feedback for backend-driven git operations (no inline banner). */
   const showNotice = (kind: 'ok' | 'error', text: string) => {
-    setNotice({ kind, text })
-    if (noticeTimer.current) window.clearTimeout(noticeTimer.current)
-    noticeTimer.current = window.setTimeout(() => setNotice(null), 6000)
+    const config = {
+      title: t('git.noticeTitle'),
+      content: (
+        <span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+          {text}
+        </span>
+      ),
+      okText: t('git.noticeOk'),
+      // Above ModalShell base (1000) but below nested modals (1200).
+      zIndex: 1100,
+      width: 420,
+      centered: true,
+    }
+    if (kind === 'ok') modal.success(config)
+    else modal.error(config)
   }
 
   /** Git failures go to a dedicated copyable modal instead of a toast. */
@@ -109,13 +119,33 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
   // Auto-show merge modal when mergeStatus is updated externally (e.g. from terminal listener after pull)
   const autoMergeShownRef = useRef<string | null>(null)
   useEffect(() => {
-    if (!mergeStatus?.inProgress || !selected) return
+    // No merge in progress — a future merge with the same branch pair must be
+    // allowed to auto-show again (audit P2-4).
+    if (!mergeStatus?.inProgress) {
+      autoMergeShownRef.current = null
+      return
+    }
+    if (!selected) return
     // Only auto-show once per merge session (avoid re-triggering on every refresh)
     const key = `${selected.path}:${mergeStatus.current ?? ''}:${mergeStatus.incoming ?? ''}`
     if (autoMergeShownRef.current === key) return
     autoMergeShownRef.current = key
     setMergeModal({ initial: mergeStatus })
-  }, [mergeStatus?.inProgress, mergeStatus?.conflictCount, selected?.path])
+  }, [
+    mergeStatus?.inProgress,
+    mergeStatus?.conflictCount,
+    mergeStatus?.current,
+    mergeStatus?.incoming,
+    selected?.path,
+  ])
+
+  // A pending dirty-confirm captured for another project is stale — drop it
+  // the moment the selected project changes.
+  useEffect(() => {
+    setDirtyConfirm((prev) =>
+      prev && prev.path !== selected?.path ? null : prev,
+    )
+  }, [selected?.path])
 
   const branchHistory =
     selected && config ? (config.branchHistory?.[selected.path] ?? []) : []
@@ -321,7 +351,7 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
           .touchBranchHistory(selected.path, branchName)
         await refreshGit()
       } else {
-        setDirtyConfirm({ branch: branchName, status: s })
+        setDirtyConfirm({ path: selected.path, branch: branchName, status: s })
       }
     } catch (e) {
       showGitError(e)
@@ -332,6 +362,14 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
 
   const doDirtySwitch = async () => {
     if (!dirtyConfirm || !selected) return
+    // The captured dirty status belongs to the project that was selected when
+    // the user double-clicked. If the user has since switched projects, the
+    // confirm dialog must not checkout that branch inside the NEW project
+    // (audit P1-7).
+    if (dirtyConfirm.path !== selected.path) {
+      setDirtyConfirm(null)
+      return
+    }
     setSwitchingBranch(dirtyConfirm.branch)
     try {
       await invoke<string>('git_checkout', {
@@ -443,14 +481,6 @@ export function GitToolPanel({ filterQuery = '' }: { filterQuery?: string }) {
 
   return (
     <>
-      {notice && (
-        <div
-          className={`status-banner ${notice.kind === 'ok' ? 'clean' : 'dirty'}`}
-          style={{ marginTop: 8, whiteSpace: 'pre-wrap' }}
-        >
-          {notice.text}
-        </div>
-      )}
       <HistoryChips
         title={t('git.history')}
         items={filteredBranchHistory}

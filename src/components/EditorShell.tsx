@@ -10,6 +10,29 @@ import { useExplorerStore } from '../stores/explorerStore'
 import { useProjectStore } from '../stores/projectStore'
 import { MonacoEditor } from './MonacoEditor'
 
+/** File reads that never settle (backend hang / panic) must not leave the
+ *  editor stuck in "loading" forever — fail over to the error state with a
+ *  retry button after this timeout (audit P1-10). */
+const LOAD_TIMEOUT_MS = 15000
+
+function withLoadTimeout<T>(p: Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      reject(new Error(`加载超时（${LOAD_TIMEOUT_MS / 1000}s）`))
+    }, LOAD_TIMEOUT_MS)
+    p.then(
+      (v) => {
+        window.clearTimeout(timer)
+        resolve(v)
+      },
+      (e) => {
+        window.clearTimeout(timer)
+        reject(e)
+      },
+    )
+  })
+}
+
 export function EditorShell() {
   const selection = useExplorerStore((s) => s.selection)
   const setSelection = useExplorerStore((s) => s.setSelection)
@@ -59,7 +82,7 @@ export function EditorShell() {
     setSaveError(null)
 
     let cancelled = false
-    void readTextFile(activeTab.path)
+    void withLoadTimeout(readTextFile(activeTab.path, activeTab.projectPath))
       .then((result) => {
         if (cancelled) return
         const content = result.content
@@ -87,18 +110,29 @@ export function EditorShell() {
     if (!activeTab || !activeDoc || activeDoc.status !== 'ready' || saving) {
       return
     }
+    // Snapshot the exact bytes being written. If the user keeps typing while
+    // the write is in flight, the doc must stay dirty (the disk now has the
+    // older snapshot, not the newest keystrokes) — otherwise the exit guard
+    // would silently drop them (audit M11).
+    const savedValue = activeDoc.value
     setSaving(true)
     setSaveError(null)
     try {
-      await writeTextFile(activeTab.path, activeDoc.value)
-      markDocSaved(activeTab.path)
-      void refreshGitStatus()
+      await writeTextFile(activeTab.path, savedValue, activeTab.projectPath)
+      const current = getDoc(activeTab.path)?.value
+      if (current === savedValue) {
+        markDocSaved(activeTab.path)
+        void refreshGitStatus()
+      } else {
+        // Content changed mid-write: don't clear the dirty marker.
+        setSaveError(t('editor.savedWhileTyping'))
+      }
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : String(e))
     } finally {
       setSaving(false)
     }
-  }, [activeTab, activeDoc, saving, markDocSaved, refreshGitStatus])
+  }, [activeTab, activeDoc, saving, markDocSaved, refreshGitStatus, getDoc, t])
 
   const openImportTarget = useCallback(
     (absPath: string) => {
@@ -118,7 +152,7 @@ export function EditorShell() {
     if (!activeTab) return
     loadingRef.current.delete(editorPathKey(activeTab.path))
     setDocLoading(activeTab.path)
-    void readTextFile(activeTab.path)
+    void withLoadTimeout(readTextFile(activeTab.path, activeTab.projectPath))
       .then((result) => {
         const content = result.content
           .replace(/\r\n/g, '\n')

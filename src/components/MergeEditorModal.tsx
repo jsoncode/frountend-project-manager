@@ -231,6 +231,8 @@ export function MergeEditorModal({
   const [busy, setBusy] = useState(false)
   const initialRef = useRef('')
   const syncingScroll = useRef(false)
+  /** Debounce timer for the expensive whole-file side diff decorations. */
+  const sideDecoTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const hunkCount = hunks.length
 
@@ -435,6 +437,18 @@ export function MergeEditorModal({
     applyToSide(editorsRef.current.theirs, theirs, (h) => h.theirs, 'theirs', theirsDecoRef, theirsWidgetRef)
   }, [t, applyHunkAt])
 
+  /** Debounced side-pane decoration recompute (per-keystroke LCS is too hot). */
+  const scheduleSideDecorations = useCallback(
+    (hunkList: ConflictHunk[], activeIdx: number) => {
+      if (sideDecoTimer.current) clearTimeout(sideDecoTimer.current)
+      sideDecoTimer.current = setTimeout(() => {
+        sideDecoTimer.current = null
+        applySideDecorations(hunkList, activeIdx)
+      }, 120)
+    },
+    [applySideDecorations],
+  )
+
   /** Navigate to a specific hunk in the result editor. */
   const goToHunk = useCallback((idx: number) => {
     const ed = editorsRef.current.result
@@ -518,7 +532,10 @@ export function MergeEditorModal({
                 return next
               })
               applyDecorations(ed, v, newHunks, currentHunkRef.current)
-              applySideDecorations(newHunks, currentHunkRef.current)
+              // Whole-file side diffs (base↔ours, base↔theirs) are the costly
+              // O(n·m) part — debounce so typing doesn't recompute per keystroke
+              // (audit P1-1).
+              scheduleSideDecorations(newHunks, currentHunkRef.current)
             })
 
             // Track the active conflict by cursor position (WebStorm-style):
@@ -535,7 +552,7 @@ export function MergeEditorModal({
                 currentHunkRef.current = idx
                 setCurrentHunk(idx)
                 applyDecorations(ed, v, list, idx)
-                applySideDecorations(list, idx)
+                scheduleSideDecorations(list, idx)
               }
             })
 
@@ -578,12 +595,24 @@ export function MergeEditorModal({
 
     return () => {
       cancelled = true
+      if (sideDecoTimer.current) {
+        clearTimeout(sideDecoTimer.current)
+        sideDecoTimer.current = null
+      }
       for (const key of ['ours', 'theirs', 'result'] as const) {
         editorsRef.current[key]?.dispose()
         editorsRef.current[key] = null
       }
     }
   }, [projectPath, file])
+
+  // Re-theme editors live when the user switches the editor theme while the
+  // modal is open (audit P2-5: without this the panes keep the first-render
+  // theme until the modal is reopened).
+  useEffect(() => {
+    if (loading || binary) return
+    monaco.editor.setTheme(editorTheme)
+  }, [editorTheme, loading, binary])
 
   const applyChoice = useCallback((choice: 'ours' | 'theirs' | 'both') => {
     applyHunkAt(currentHunk, choice)
@@ -632,10 +661,18 @@ export function MergeEditorModal({
         content,
       })
       setDirty(false)
-      await onSaved()
     } catch (e) {
       setError(String(e))
+    } finally {
       setBusy(false)
+    }
+    // `onSaved` is deliberately outside the try: a failure here must not be
+    // reported as a save failure (content is already on disk) — the caller
+    // just closes the modal (audit P1-8).
+    try {
+      await onSaved()
+    } catch {
+      /* caller handles */
     }
   }
 

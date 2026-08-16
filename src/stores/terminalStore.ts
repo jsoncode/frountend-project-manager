@@ -217,9 +217,13 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
     const { sessions, activeId, createSession } = get()
     const active = sessions.find((s) => s.id === activeId)
     const same = (s: TermSession) => isSameProject(s.projectPath, projectPath)
+    // A session whose shell exited (dead) must never be treated as "still
+    // booting" — commands routed there would be silently swallowed by the
+    // backend (audit P1-11).
+    const usable = (s: TermSession) => !s.dead
 
     // 1) Current tab, same project, idle (or allowBusy) → reuse
-    if (active && same(active)) {
+    if (active && same(active) && usable(active)) {
       if (!active.connected) {
         // Still booting — never spawn a duplicate for the same click burst
         return active.id
@@ -230,20 +234,27 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
     }
 
     // 2) Any other same-project idle connected tab
-    const idle = sessions.find((s) => same(s) && s.connected && !s.running)
+    const idle = sessions.find((s) => same(s) && usable(s) && s.connected && !s.running)
     if (idle) {
       set({ activeId: idle.id })
       return idle.id
     }
 
     // 3) Same-project tab still connecting
-    const pending = sessions.find((s) => same(s) && !s.connected)
+    const pending = sessions.find((s) => same(s) && usable(s) && !s.connected)
     if (pending) {
       set({ activeId: pending.id })
       return pending.id
     }
 
-    // 4) Busy (or none) → new tab
+    // 4) Busy (or none, or only dead tabs) → new tab; drop stale dead tabs
+    //    for this project so they don't pile up in the tab strip.
+    const deadTabs = sessions.filter((s) => same(s) && s.dead)
+    if (deadTabs.length > 0) {
+      for (const t of deadTabs) {
+        void get().closeSession(t.id)
+      }
+    }
     return createSession(projectPath, projectName)
   },
 
@@ -283,7 +294,10 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
     while (Date.now() - started < timeoutMs) {
       const session = get().sessions.find((s) => s.id === terminalId)
       if (!session) return
-      if (session.connected && !session.running) return
+      // Idle = no foreground command. A disconnected/dead session can never
+      // satisfy `connected && !running` — treat it as idle so callers don't
+      // spin the full timeout (audit P2-12).
+      if (!session.running) return
       await new Promise<void>((r) => window.setTimeout(r, 80))
     }
   },
@@ -332,7 +346,15 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
     })
     const unExit = await listen<PtyExitEvent>('pty://exit', (event) => {
       const id = event.payload.terminalId
+      // Shell exited: mark the tab dead so ensureRunTarget never reuses it
+      // (audit P1-11). A `code: null` event from pty_kill is handled the same
+      // way — closeSession's pty_kill makes the second exit event a no-op.
       get().markConnected(id, false)
+      set((s) => ({
+        sessions: s.sessions.map((t) =>
+          t.id === id ? { ...t, dead: true } : t,
+        ),
+      }))
       const code = event.payload.code
       const msg =
         code == null

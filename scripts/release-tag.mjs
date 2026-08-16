@@ -83,7 +83,10 @@ function notify(title, message) {
 }
 
 function bump(v, kind) {
-  const [maj, min, pat] = v.split('.').map(Number)
+  // Strip any pre-release/build suffix first: "0.4.5-rc.1" would otherwise
+  // produce NaN in the patch position (audit L46).
+  const core = v.replace(/[.-].*$/, '')
+  const [maj, min, pat] = core.split('.').map(Number)
   if (kind === 'major') return `${maj + 1}.0.0`
   if (kind === 'minor') return `${maj}.${min + 1}.0`
   return `${maj}.${min}.${pat + 1}`

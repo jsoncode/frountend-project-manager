@@ -29,9 +29,6 @@ type EditorUiState = {
   setDocValue: (path: string, value: string) => void
   markDocSaved: (path: string) => void
   getDoc: (path: string) => EditorDoc | undefined
-  /** @deprecated use isTabDirty / tabs — kept for transitional callers */
-  dirtyPath: string | null
-  setDirtyPath: (path: string | null) => void
 }
 
 export function editorPathKey(path: string): string {
@@ -47,8 +44,6 @@ export const useEditorStore = create<EditorUiState>((set, get) => ({
   tabs: [],
   activePath: null,
   docs: {},
-  dirtyPath: null,
-  setDirtyPath: (dirtyPath) => set({ dirtyPath }),
 
   openTab: (path, projectPath) => {
     const tabs = get().tabs
@@ -79,13 +74,12 @@ export const useEditorStore = create<EditorUiState>((set, get) => ({
   },
 
   closeTab: (path) => {
-    const { tabs, activePath, docs, dirtyPath } = get()
+    const { tabs, activePath, docs } = get()
     const idx = findTabIndex(tabs, path)
     if (idx < 0) return
-    const key = editorPathKey(tabs[idx]!.path)
     const nextTabs = tabs.filter((_, i) => i !== idx)
     const nextDocs = { ...docs }
-    delete nextDocs[key]
+    delete nextDocs[editorPathKey(tabs[idx]!.path)]
 
     let nextActive = activePath
     if (
@@ -100,8 +94,6 @@ export const useEditorStore = create<EditorUiState>((set, get) => ({
       tabs: nextTabs,
       activePath: nextActive,
       docs: nextDocs,
-      dirtyPath:
-        dirtyPath && editorPathKey(dirtyPath) === key ? null : dirtyPath,
     })
   },
 
@@ -159,10 +151,8 @@ export const useEditorStore = create<EditorUiState>((set, get) => ({
     const key = editorPathKey(path)
     const prev = get().docs[key]
     if (!prev || prev.status !== 'ready') return
-    const dirty = value !== prev.baseline
     set({
       docs: { ...get().docs, [key]: { ...prev, value } },
-      dirtyPath: dirty ? path : get().dirtyPath === path ? null : get().dirtyPath,
     })
   },
 
@@ -170,14 +160,11 @@ export const useEditorStore = create<EditorUiState>((set, get) => ({
     const key = editorPathKey(path)
     const prev = get().docs[key]
     if (!prev || prev.status !== 'ready') return
-    const dirtyPath = get().dirtyPath
     set({
       docs: {
         ...get().docs,
         [key]: { ...prev, baseline: prev.value },
       },
-      dirtyPath:
-        dirtyPath && editorPathKey(dirtyPath) === key ? null : dirtyPath,
     })
   },
 

@@ -36,6 +36,10 @@ pub struct InstalledEditor {
 /// One probe rule: display name, PATH cli names, OS path templates, registry keywords.
 #[derive(Clone)]
 struct IdeProbe {
+    /// Stable probe id; retained as metadata (the legacy detect_ides command
+    /// that consumed it was removed — the live list_installed_editors path
+    /// derives ids from probe names instead).
+    #[allow(dead_code)]
     id: &'static str,
     name: &'static str,
     /// `where` / `which` names
@@ -905,49 +909,6 @@ fn editors_from_applications_folder() -> Vec<InstalledEditor> {
     out
 }
 
-/// Detect available IDEs from the catalog (for「重新探测」).
-pub fn detect_ides() -> Vec<IdeConfig> {
-    let mut configs = Vec::new();
-    for probe in BUILTIN_PROBES {
-        if let Some(exe) = resolve_probe(probe) {
-            if !is_accepted_executable(&exe) {
-                continue;
-            }
-            configs.push(IdeConfig {
-                id: probe.id.into(),
-                name: probe.name.into(),
-                executable: exe,
-                args_template: "{path}".into(),
-                enabled: true,
-                builtin: true,
-                icon_path: None,
-            });
-        }
-    }
-    for (name, cli, paths, _) in probes_from_env_extra() {
-        if let Some(exe) = first_existing_path(&paths).or_else(|| which_cmd(&cli)) {
-            if !is_accepted_executable(&exe) {
-                continue;
-            }
-            let id = name
-                .to_ascii_lowercase()
-                .chars()
-                .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
-                .collect::<String>();
-            configs.push(IdeConfig {
-                id,
-                name,
-                executable: exe,
-                args_template: "{path}".into(),
-                enabled: true,
-                builtin: false,
-                icon_path: None,
-            });
-        }
-    }
-    configs
-}
-
 fn ide_icons_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     use tauri::Manager;
     let dir = app
@@ -1195,6 +1156,42 @@ fn extract_macos_app_icon_png_bytes(source: &PathBuf) -> Result<Vec<u8>, String>
     Ok(bytes)
 }
 
+/// Quote-aware split of an args_template: whitespace outside quotes separates
+/// tokens, surrounding quotes are stripped. `--folder "{path}"` becomes
+/// `["--folder", "{path}"]` — never `["--folder", "\"{path}\""]` with literal
+/// quotes in argv (audit M6).
+fn split_args_template(template: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut cur = String::new();
+    let mut quote: Option<char> = None;
+    for c in template.chars() {
+        match quote {
+            Some(q) => {
+                if c == q {
+                    quote = None;
+                } else {
+                    cur.push(c);
+                }
+            }
+            None => {
+                if c == '"' || c == '\'' {
+                    quote = Some(c);
+                } else if c.is_whitespace() {
+                    if !cur.is_empty() {
+                        out.push(std::mem::take(&mut cur));
+                    }
+                } else {
+                    cur.push(c);
+                }
+            }
+        }
+    }
+    if !cur.is_empty() {
+        out.push(cur);
+    }
+    out
+}
+
 pub fn open_in_ide(ide: &IdeConfig, project_path: &str) -> Result<(), String> {
     if !ide.enabled {
         return Err(format!("{} is disabled", ide.name));
@@ -1204,9 +1201,8 @@ pub fn open_in_ide(ide: &IdeConfig, project_path: &str) -> Result<(), String> {
         return Err(format!("{} executable is empty", ide.name));
     }
 
-    let args: Vec<String> = ide
-        .args_template
-        .split_whitespace()
+    let args: Vec<String> = split_args_template(&ide.args_template)
+        .into_iter()
         .map(|part| part.replace("{path}", project_path))
         .collect();
 

@@ -13,6 +13,7 @@ import {
 } from '../lib/monacoNavigation'
 import { closeActiveEditorFile } from '../lib/closeEditorFile'
 import type { PathAlias } from '../lib/pathAliases'
+import { findWorkspaceForPath } from '../lib/workspacePath'
 import { useI18n } from '../i18n/useI18n'
 import { useSettingsStore } from '../stores/settingsStore'
 
@@ -40,9 +41,20 @@ const PRELOAD_DELAY_MS = 800
 /**
  * Files that have already been preloaded (imports resolved into Monaco models).
  * Avoids redundant disk reads + model creation + TS worker re-validation on
- * every subsequent file switch.
+ * every subsequent file switch. Capped (LRU-ish) so long sessions don't grow
+ * the set without bound (audit L32).
  */
-const preloadedFiles = new Set<string>()
+const preloadedFiles = new Map<string, true>()
+const MAX_PRELOADED_FILES = 500
+
+function markPreloaded(key: string) {
+  preloadedFiles.delete(key)
+  preloadedFiles.set(key, true)
+  if (preloadedFiles.size > MAX_PRELOADED_FILES) {
+    const oldest = preloadedFiles.keys().next().value
+    if (oldest !== undefined) preloadedFiles.delete(oldest)
+  }
+}
 
 function minimapOptions(enabled: boolean): monaco.editor.IEditorMinimapOptions {
   return {
@@ -70,17 +82,32 @@ function normalizeEol(text: string) {
   return text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
 }
 
-function remasureWhenFontsReady(editor: monaco.editor.IStandaloneCodeEditor) {
+/**
+ * Measure fonts and lay out the editor once fonts are ready. Every scheduled
+ * timer and the fonts.ready continuation are tracked and cancelled on dispose
+ * — calling layout() on a disposed editor is undefined behaviour in
+ * monaco 0.52.2 (audit P2-8). Returns a cleanup function.
+ */
+function remasureWhenFontsReady(
+  editor: monaco.editor.IStandaloneCodeEditor,
+): () => void {
+  let disposed = false
+  const timers: number[] = []
   const run = () => {
+    if (disposed) return
     monaco.editor.remeasureFonts()
     editor.layout()
   }
   run()
   if (typeof document !== 'undefined' && document.fonts?.ready) {
-    void document.fonts.ready.then(run)
+    void document.fonts.ready.then(() => run())
   }
-  window.setTimeout(run, 50)
-  window.setTimeout(run, 250)
+  timers.push(window.setTimeout(run, 50))
+  timers.push(window.setTimeout(run, 250))
+  return () => {
+    disposed = true
+    for (const id of timers) window.clearTimeout(id)
+  }
 }
 
 /**
@@ -97,6 +124,7 @@ export function MonacoEditor({
 }: Props) {
   const { t } = useI18n()
   const editorTheme = useSettingsStore((s) => s.config?.editorTheme ?? 'vs-dark')
+  const workspaces = useSettingsStore((s) => s.config?.workspaces)
   const containerRef = useRef<HTMLDivElement>(null)
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
   const pathRef = useRef(path)
@@ -107,11 +135,21 @@ export function MonacoEditor({
   const preloadTimer = useRef<number | null>(null)
   const tRef = useRef(t)
   const lastPushedValueRef = useRef('')
+  /** Model URI strings this component created — disposed on unmount (audit P1-5). */
+  const createdModelsRef = useRef<Set<string>>(new Set())
   pathRef.current = path
   onChangeRef.current = onChange
   onSaveRef.current = onSave
   onOpenFileRef.current = onOpenFile
   tRef.current = t
+
+  /**
+   * Containment root for import-target disk reads: the workspace containing
+   * the project (imports may land in sibling packages or a hoisted
+   * node_modules outside the project — audit C1/C2 gate must not break
+   * monorepos).
+   */
+  const wsRoot = findWorkspaceForPath(projectPath, workspaces ?? []) ?? projectPath
 
   const schedulePreload = (fromFile: string, source: string) => {
     const key = fromFile.toLowerCase()
@@ -120,7 +158,7 @@ export function MonacoEditor({
       window.clearTimeout(preloadTimer.current)
     }
     preloadTimer.current = window.setTimeout(() => {
-      preloadedFiles.add(key)
+      markPreloaded(key)
       const aliases = aliasesRef.current
       if (!aliases.length && !projectPath) return
       void preloadImportsForFile(
@@ -129,6 +167,9 @@ export function MonacoEditor({
         fromFile,
         source,
         aliases,
+        0,
+        undefined,
+        wsRoot,
       )
     }, PRELOAD_DELAY_MS)
   }
@@ -142,7 +183,7 @@ export function MonacoEditor({
       applyAliasCompilerPaths(monaco, projectPath, aliases)
       setMonacoNavContext(projectPath, aliases, (abs) => {
         onOpenFileRef.current?.(abs)
-      })
+      }, wsRoot)
       const ed = editorRef.current
       const model = ed?.getModel()
       if (model) {
@@ -153,13 +194,13 @@ export function MonacoEditor({
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectPath])
+  }, [projectPath, wsRoot])
 
   useEffect(() => {
     setMonacoNavContext(projectPath, aliasesRef.current, (abs) => {
       onOpenFileRef.current?.(abs)
-    })
-  }, [projectPath, onOpenFile])
+    }, wsRoot)
+  }, [projectPath, wsRoot, onOpenFile])
 
   // --- Editor lifecycle: create ONCE on mount, dispose on unmount ---
   useEffect(() => {
@@ -176,6 +217,7 @@ export function MonacoEditor({
     let model = monaco.editor.getModel(uri)
     if (!model) {
       model = monaco.editor.createModel(text, language, uri)
+      createdModelsRef.current.add(model.uri.toString())
     } else if (model.getValue() !== text) {
       model.setValue(text)
     }
@@ -253,8 +295,15 @@ export function MonacoEditor({
 
     const clickSub = attachImportClickHandler(monaco, editor)
 
-    const onWinResize = () => remasureWhenFontsReady(editor)
+    // resize → remeasure + layout only (no re-scheduling of the fonts.ready
+    // timers on every resize — that was a timer pile-up, audit P2-8).
+    const onWinResize = () => {
+      monaco.editor.remeasureFonts()
+      editor.layout()
+    }
     window.addEventListener('resize', onWinResize)
+
+    const cancelRemeasure = remasureWhenFontsReady(editor)
 
     return () => {
       window.removeEventListener('resize', onWinResize)
@@ -266,8 +315,19 @@ export function MonacoEditor({
       clickSub.dispose()
       keySub.dispose()
       sub.dispose()
+      cancelRemeasure()
       editor.dispose()
       editorRef.current = null
+      // Dispose the models this component created so long sessions stop
+      // accumulating file-sized model memory (audit P1-5). Only models we
+      // created are touched — tab-close disposal goes through
+      // closeEditorFile, and the diff editor uses its own anonymous models.
+      const created = createdModelsRef.current
+      for (const uriString of created) {
+        const m = monaco.editor.getModel(monaco.Uri.parse(uriString))
+        if (m) m.dispose()
+      }
+      created.clear()
     }
     // Editor is created once on mount. Path/value changes are handled below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -287,6 +347,7 @@ export function MonacoEditor({
     if (!model) {
       // First time opening this file — create with whatever we have.
       model = monaco.editor.createModel(text, language, uri)
+      createdModelsRef.current.add(model.uri.toString())
     } else if (text) {
       // Model exists and we have real content (doc already loaded).
       monaco.editor.setModelLanguage(model, language)

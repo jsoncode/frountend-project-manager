@@ -55,6 +55,28 @@ const STATUS_KEYS: Record<RowStatus, MessageKey> = {
   error: 'ws.updateStatusError',
 }
 
+/** A hung `git_pull_all` must not lock the modal forever (audit P2-11). */
+const RUN_TIMEOUT_MS = 120_000
+
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(
+      () => reject(new Error(`timeout:${ms}`)),
+      ms,
+    )
+    p.then(
+      (v) => {
+        window.clearTimeout(timer)
+        resolve(v)
+      },
+      (e) => {
+        window.clearTimeout(timer)
+        reject(e)
+      },
+    )
+  })
+}
+
 /**
  * Workspace-level "update all projects" flow:
  * 1. Scan every project under the workspace (fetch-first) and collect the
@@ -147,9 +169,12 @@ export function UpdateAllProjectsModal({ workspace, onClose }: Props) {
         ),
       )
       try {
-        const res = await invoke<PullBranchResult>('git_pull_all', {
-          path: projectPath,
-        })
+        const res = await withTimeout(
+          invoke<PullBranchResult>('git_pull_all', {
+            path: projectPath,
+          }),
+          RUN_TIMEOUT_MS,
+        )
         const byName = new Map(
           (res.branches ?? []).map((b) => [b.name, b]),
         )
@@ -181,7 +206,10 @@ export function UpdateAllProjectsModal({ workspace, onClose }: Props) {
           }),
         )
       } catch (e) {
-        const msg = String(e)
+        const raw = String(e)
+        const msg = raw.startsWith('timeout:')
+          ? t('ws.updateAllTimeout')
+          : raw
         setRows((prev) =>
           prev.map((r) =>
             r.projectPath === projectPath
@@ -216,8 +244,14 @@ export function UpdateAllProjectsModal({ workspace, onClose }: Props) {
   const close = () => {
     // Never close mid-update: the backend loop must finish the current
     // project's pull before the modal (and its row statuses) disappear.
+    // Use the explicit cancel button to stop after the current project.
     if (runningRef.current) return
     onClose()
+  }
+
+  /** Stop the update loop after the current project (modal stays closable). */
+  const cancelUpdates = () => {
+    runningRef.current = false
   }
 
   const summary = useMemo(() => {
@@ -303,6 +337,9 @@ export function UpdateAllProjectsModal({ workspace, onClose }: Props) {
               done: projectsDone,
               total: Math.max(projectsTotal, projectsDone),
             })}
+            <Button size="small" onClick={cancelUpdates}>
+              {t('ws.updateAllCancelRun')}
+            </Button>
           </span>
         ) : finished ? (
           <>

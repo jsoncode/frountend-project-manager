@@ -40,6 +40,9 @@ export function AiComposer() {
   }
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    // IME guard: while composing pinyin/kanji, Enter confirms the candidate
+    // — it must NOT send the half-typed draft (audit H9).
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       onSend()

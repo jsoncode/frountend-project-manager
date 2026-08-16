@@ -60,6 +60,7 @@ import { RenameModal } from './RenameModal'
 import { SubMenuItem } from './SubMenuItem'
 import { Tooltip } from './Tooltip'
 import { UpdateAllProjectsModal } from './UpdateAllProjectsModal'
+import { closeEditorTab } from '../lib/closeEditorFile'
 
 type DirEntry = {
   name: string
@@ -123,6 +124,8 @@ export function Explorer() {
   const [diffDirList, setDiffDirList] = useState<{ dirPath: string; projectPath: string; files: { absPath: string; relPath: string; label: string }[] } | null>(null)
   // Git info for project context menu
   const [projGitInfo, setProjGitInfo] = useState<{ path: string; info: GitInfo | null } | null>(null)
+  /** Monotonic request id for projGitInfo fetches (audit P2-6). */
+  const projGitInfoSeqRef = useRef(0)
   // Workspace whose "update all projects (caution)" confirmation modal is open.
   const [updateAllWs, setUpdateAllWs] = useState<string | null>(null)
   const [branchSwitchTarget, setBranchSwitchTarget] = useState<{ projectPath: string; branch: string } | null>(null)
@@ -155,6 +158,16 @@ export function Explorer() {
   // Debounce click vs dblclick for workspace/project/dir toggle
   const toggleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const togglePathRef = useRef('')
+
+  // Clear the pending click-toggle timer on unmount so it can't setState
+  // after the component is gone (audit QO-1 / L29).
+  useEffect(
+    () => () => {
+      if (toggleTimerRef.current) clearTimeout(toggleTimerRef.current)
+      toggleTimerRef.current = null
+    },
+    [],
+  )
 
   const debouncedToggle = useCallback((id: string, action: () => void) => {
     if (toggleTimerRef.current) clearTimeout(toggleTimerRef.current)
@@ -288,7 +301,14 @@ export function Explorer() {
     if (!config || !pendingRemove) return
     const path = pendingRemove
     const next = config.workspaces.filter((w) => w !== path)
-    await saveWorkspaces(next)
+    try {
+      await saveWorkspaces(next)
+    } catch (e) {
+      // A failed save must not leave the modal stuck (closeOnEsc={false})
+      // or raise an unhandled rejection (audit QO-1 / L27).
+      showErrorLog(e, t('fs.opFailed'))
+      return
+    }
     dropWorkspaceCache(path)
     if (activeWorkspace === path) {
       setActiveWorkspace(next[0] ?? null)
@@ -326,14 +346,18 @@ export function Explorer() {
 
   // ── Filesystem helpers for project/entry context menus ──
 
-  /** Close editor tabs whose path equals `prefix` or lives under it. */
+  /** Close editor tabs whose path equals `prefix` or lives under it.
+   *  Routes through closeEditorTab so dirty tabs get the unsaved-changes
+   *  confirmation — direct closeTab would silently drop them (audit M12). */
   const closeTabsUnder = (prefix: string) => {
     const editor = useEditorStore.getState()
     const base = normalizeFsPath(prefix)
     for (const tab of [...editor.tabs]) {
       const key = editorPathKey(tab.path)
       if (key === base || key.startsWith(`${base}/`)) {
-        editor.closeTab(tab.path)
+        closeEditorTab(tab.path, () =>
+          window.confirm(t('editor.unsavedConfirm')),
+        )
       }
     }
   }
@@ -349,10 +373,44 @@ export function Explorer() {
     return i > 0 ? path.slice(0, i) : path
   }
 
+  /**
+   * Allowed root for destructive fs commands (Rust `ensure_within` gate):
+   * the innermost configured project containing `path`, else the containing
+   * workspace. Returns null when the path belongs to no known root — the
+   * operation is then refused (never falls back to an unconstrained root).
+   */
+  const fsRootFor = (path: string): string | null => {
+    const norm = normalizePath(path).toLowerCase()
+    let best: string | null = null
+    let bestLen = -1
+    const consider = (candidate: string) => {
+      const root = normalizePath(candidate).toLowerCase()
+      if (!root) return
+      if (norm === root || norm.startsWith(`${root}/`)) {
+        if (root.length > bestLen) {
+          best = candidate
+          bestLen = root.length
+        }
+      }
+    }
+    for (const list of Object.values(projectCache)) {
+      for (const p of list) consider(p.path)
+    }
+    if (selectedProject) consider(selectedProject.path)
+    for (const ws of workspaces) consider(ws)
+    return best
+  }
+
   /** Rename a project folder; migrate cached git status, then rescan. */
   const renameProject = async (oldPath: string, newName: string): Promise<string | null> => {
+    const root = fsRootFor(oldPath)
+    if (!root) return t('fs.opFailed') + ': ' + t('fs.notInWorkspace')
     try {
-      const newPath = await invoke<string>('rename_path', { path: oldPath, newName })
+      const newPath = await invoke<string>('rename_path', {
+        root,
+        path: oldPath,
+        newName,
+      })
       const wsStore = useWorkspaceStore.getState()
       const status = wsStore.projectStatuses[oldPath]
       if (status) {
@@ -374,8 +432,13 @@ export function Explorer() {
   }
 
   const deleteProject = async (path: string) => {
+    const root = fsRootFor(path)
+    if (!root) {
+      showErrorLog(t('fs.notInWorkspace'), t('fs.opFailed'))
+      return
+    }
     try {
-      await invoke('delete_path', { path })
+      await invoke('delete_path', { root, path })
     } catch (e) {
       showErrorLog(e, t('fs.opFailed'))
       return
@@ -395,8 +458,14 @@ export function Explorer() {
 
   /** Rename a file/dir; migrate tree cache + expansion for directories. */
   const renameEntry = async (oldPath: string, isDir: boolean, newName: string): Promise<string | null> => {
+    const root = fsRootFor(oldPath)
+    if (!root) return t('fs.opFailed') + ': ' + t('fs.notInWorkspace')
     try {
-      const newPath = await invoke<string>('rename_path', { path: oldPath, newName })
+      const newPath = await invoke<string>('rename_path', {
+        root,
+        path: oldPath,
+        newName,
+      })
       const parent = parentDirOf(oldPath)
       const patch = (cache: Record<string, DirEntry[]>) => {
         const list = cache[parent]
@@ -438,8 +507,13 @@ export function Explorer() {
   }
 
   const deleteEntry = async (path: string, isDir: boolean) => {
+    const root = fsRootFor(path)
+    if (!root) {
+      showErrorLog(t('fs.notInWorkspace'), t('fs.opFailed'))
+      return
+    }
     try {
-      await invoke('delete_path', { path })
+      await invoke('delete_path', { root, path })
     } catch (e) {
       showErrorLog(e, t('fs.opFailed'))
       return
@@ -456,6 +530,17 @@ export function Explorer() {
       setExpanded((prev) =>
         prev.filter((id) => id !== `dir:${path}` && !id.startsWith(`dir:${path}/`)),
       )
+      // Purge the deleted directory's subtree from the dir cache — stale
+      // entries for a removed folder would linger forever (audit QO-1).
+      const norm = normalizePath(path)
+      const next: Record<string, DirEntry[]> = {}
+      for (const [k, v] of Object.entries(dirCacheRef.current)) {
+        const kn = normalizePath(k)
+        if (kn === norm || kn.startsWith(`${norm}/`)) continue
+        next[k] = v
+      }
+      dirCacheRef.current = next
+      setDirCache(next)
     }
     closeTabsUnder(path)
   }
@@ -473,6 +558,10 @@ export function Explorer() {
       : []
 
   const fetchProjGitInfo = useCallback(async (projectPath: string) => {
+    // Request sequence: if the user right-clicks another project while
+    // git_branches is in flight, the late response must not overwrite the
+    // newer menu's data or clear its loading flag (audit P2-6).
+    const seq = ++projGitInfoSeqRef.current
     // First check workspaceStore cache (populated by scanAllProjectStatuses or selectProject)
     const cached = useWorkspaceStore.getState().projectStatuses[projectPath]
     if (cached?.gitInfo) {
@@ -482,6 +571,7 @@ export function Explorer() {
     setGitLoading(true)
     try {
       const info = await invoke<GitInfo | null>('git_branches', { path: projectPath }).catch(() => null)
+      if (seq !== projGitInfoSeqRef.current) return
       setProjGitInfo({ path: projectPath, info })
       // Cache for next time
       if (info) {
@@ -492,9 +582,10 @@ export function Explorer() {
         })
       }
     } catch {
+      if (seq !== projGitInfoSeqRef.current) return
       setProjGitInfo({ path: projectPath, info: null })
     } finally {
-      setGitLoading(false)
+      if (seq === projGitInfoSeqRef.current) setGitLoading(false)
     }
   }, [])
 
@@ -578,7 +669,12 @@ export function Explorer() {
     if (workspace && workspace !== activeWorkspace) {
       setActiveWorkspace(workspace)
     }
-    void selectProject(p)
+    // Re-selecting the already-selected project (collapse, or a second click
+    // on the active row) resets git state and fires 3-4 IPC rescans — only
+    // select when the project actually changes (audit M13).
+    if (selectedProject?.path !== p.path) {
+      void selectProject(p)
+    }
     setSelection({ kind: 'project', path: p.path, workspace })
     if (fromSearch) {
       void touchSearchHistory(p.folderName)
@@ -1285,7 +1381,11 @@ export function Explorer() {
                   try {
                     // Backend-driven fetch — no terminal session needed.
                     await invoke<string>('git_fetch', { path })
-                  } catch { /* ignore */ }
+                  } catch (e) {
+                    // Surface fetch failures instead of swallowing them —
+                    // offline repos deserve a hint, not silence (audit QO-1).
+                    showErrorLog(e, t('error.gitFailed'))
+                  }
                   // Remote tips changed — refresh cached counts so the badge updates.
                   await refreshProjGitAfterSwitch(path)
                 })

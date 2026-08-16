@@ -101,13 +101,19 @@ if (!hasZip || !hasDll) {
 
 const zipHash = sha1(libZip)
 if (zipHash !== NSIS_ZIP_SHA1) {
-  console.warn(`[setup-nsis] Warning: libs/${NSIS_ZIP} SHA1 mismatch (${zipHash}). Deploying anyway.`)
+  // Hard-fail: deploying a mismatched NSIS silently breaks "never touch the
+  // network" and produces unreproducible installers (audit M19).
+  fail(
+    `libs/${NSIS_ZIP} SHA1 mismatch (${zipHash} ≠ ${NSIS_ZIP_SHA1}). ` +
+      'Re-download from https://github.com/tauri-apps/binary-releases/releases.',
+  )
 }
 const dllHash = sha1(libDll)
 if (dllHash !== NSIS_UTILS_SHA1) {
-  console.warn(
-    `[setup-nsis] Warning: libs/${NSIS_UTILS_DLL} SHA1 mismatch (${dllHash}). ` +
-      'tauri will redownload it at build time.',
+  fail(
+    `libs/${NSIS_UTILS_DLL} SHA1 mismatch (${dllHash} ≠ ${NSIS_UTILS_SHA1}). ` +
+      'Re-download from https://github.com/tauri-apps/nsis-tauri-utils/releases, ' +
+      'otherwise tauri silently redownloads it at build time (breaking offline).',
   )
 }
 

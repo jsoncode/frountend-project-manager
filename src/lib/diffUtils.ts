@@ -21,8 +21,45 @@ export type DiffHunk = {
 }
 
 /**
+ * Upper bound for the LCS DP table cell count (m × n). Beyond this the full
+ * DP would allocate hundreds of MB and freeze the UI (see audit P1-1:
+ * 10,000 × 10,000 lines ≈ 800 MB). Larger inputs fall back to a cheap
+ * line-by-line comparison.
+ */
+export const MAX_LCS_CELLS = 2_000_000
+
+/** Cheap O(n) fallback: align by index, mark mismatches as delete+insert. */
+function simpleLineDiff(
+  originalLines: string[],
+  modifiedLines: string[],
+): DiffLine[] {
+  const result: DiffLine[] = []
+  const max = Math.max(originalLines.length, modifiedLines.length)
+  for (let i = 0; i < max; i++) {
+    const o = originalLines[i]
+    const m = modifiedLines[i]
+    if (o !== undefined && m !== undefined && o === m) {
+      result.push({
+        type: 'equal',
+        content: o,
+        lineNo: i + 1,
+        modifiedLineNo: i + 1,
+      })
+    } else {
+      if (o !== undefined) result.push({ type: 'delete', content: o, lineNo: i + 1 })
+      if (m !== undefined) {
+        result.push({ type: 'insert', content: m, lineNo: 0, modifiedLineNo: i + 1 })
+      }
+    }
+  }
+  return result
+}
+
+/**
  * Compute LCS-based diff between two arrays of lines.
  * Returns array of DiffLine with type annotations.
+ * Falls back to an index-aligned comparison when the LCS table would exceed
+ * MAX_LCS_CELLS (prevents OOM / UI freeze on large files).
  */
 export function computeLineDiff(
   originalLines: string[],
@@ -30,6 +67,10 @@ export function computeLineDiff(
 ): DiffLine[] {
   const m = originalLines.length
   const n = modifiedLines.length
+
+  if (m * n > MAX_LCS_CELLS) {
+    return simpleLineDiff(originalLines, modifiedLines)
+  }
 
   // DP table for LCS length
   const dp: number[][] = Array(m + 1)

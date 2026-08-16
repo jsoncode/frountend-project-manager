@@ -14,8 +14,8 @@ export type EditorThemeOption = {
   dark: boolean
 }
 
-/** All available editor themes */
-export const EDITOR_THEMS: EditorThemeOption[] = [
+/** All available editor themes (was misspelled `EDITOR_THEMS`, audit QO-6). */
+export const EDITOR_THEMES: EditorThemeOption[] = [
   { id: 'vs-dark', label: 'Dark (Default)', dark: true },
   { id: 'fpm-dark', label: 'FPM Dark', dark: true },
   { id: 'fpm-midnight', label: 'Midnight', dark: true },
@@ -24,11 +24,16 @@ export const EDITOR_THEMS: EditorThemeOption[] = [
   { id: 'hc-black', label: 'High Contrast', dark: true },
 ]
 
+/** Themes only need defining once — every later call is a no-op (audit QO-4). */
+let themesRegistered = false
+
 /**
  * Register all custom themes with Monaco.
- * Call once after setupMonacoEnvironment().
+ * Call once after setupMonacoEnvironment(). Idempotent.
  */
 export function registerEditorThemes(monacoInstance: typeof monaco) {
+  if (themesRegistered) return
+  themesRegistered = true
   // FPM Dark — warm dark with teal accents
   monacoInstance.editor.defineTheme('fpm-dark', {
     base: 'vs-dark',

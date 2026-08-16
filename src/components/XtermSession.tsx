@@ -304,6 +304,7 @@ export function XtermSession({ sessionId, cwd, active }: Props) {
           if (!disposed) markPtyReady(sessionId)
         }, 8000)
       } catch (e) {
+        if (disposed) return
         term.writeln(`\x1b[31mFailed to start shell: ${String(e)}\x1b[0m`)
         markConnected(sessionId, false)
         markPtyReady(sessionId)

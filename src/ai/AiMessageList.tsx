@@ -34,6 +34,8 @@ export function AiMessageList() {
   const deleteMessage = useAiStore((s) => s.deleteMessage)
   const updateMessageContent = useAiStore((s) => s.updateMessageContent)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLElement>(null)
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [openReasoning, setOpenReasoning] = useState<Record<string, boolean>>(
     {},
   )
@@ -41,11 +43,41 @@ export function AiMessageList() {
   const [editDraft, setEditDraft] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
+  // Streaming: jump straight to the bottom (scrollTop assignment, not a per-chunk
+  // smooth scrollIntoView — the smooth animation is the jank source in long
+  // replies, audit P2-13). Idle: settle to the bottom without animation.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({
-      behavior: generating ? 'smooth' : 'auto',
-    })
+    const el = listRef.current
+    if (!el) return
+    if (generating) {
+      el.scrollTop = el.scrollHeight
+    } else {
+      bottomRef.current?.scrollIntoView({ behavior: 'auto' })
+    }
   }, [messages, generating, error])
+
+  // Clear the copy-confirmation timer on unmount.
+  useEffect(
+    () => () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current)
+    },
+    [],
+  )
+
+  // Drop openReasoning entries for messages that no longer exist (the map
+  // otherwise grows unboundedly across long sessions, audit P2-13).
+  useEffect(() => {
+    setOpenReasoning((prev) => {
+      const ids = new Set(messages.map((m) => m.id))
+      let changed = false
+      const next: Record<string, boolean> = {}
+      for (const [id, open] of Object.entries(prev)) {
+        if (ids.has(id)) next[id] = open
+        else changed = true
+      }
+      return changed ? next : prev
+    })
+  }, [messages])
 
   const errorText =
     error && KNOWN_ERROR_KEYS.has(error) ? t(error as MessageKey) : error
@@ -56,7 +88,9 @@ export function AiMessageList() {
     try {
       await navigator.clipboard.writeText(text)
       setCopiedId(m.id)
-      window.setTimeout(() => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current)
+      copyTimerRef.current = window.setTimeout(() => {
+        copyTimerRef.current = null
         setCopiedId((cur) => (cur === m.id ? null : cur))
       }, 1200)
     } catch {
@@ -92,7 +126,7 @@ export function AiMessageList() {
   }
 
   return (
-    <main className="ai-messages">
+    <main ref={listRef} className="ai-messages">
       <div className="ai-message-list">
         {messages.map((m) => {
           if (m.role === 'system') return null

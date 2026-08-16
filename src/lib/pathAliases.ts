@@ -109,6 +109,56 @@ function aliasesFromTsconfig(
 }
 
 /**
+ * Read the value of an alias entry starting at `from` (the character right
+ * after the `:`). Scans with quote/paren/bracket depth so values such as
+ * `path.resolve(__dirname, 'src')` are captured whole — a naive `[^,}\n]+`
+ * cut them at the first comma, producing the garbage alias
+ * `<root>/path.resolve(__dirname` (audit P1-6).
+ */
+function extractObjectValue(
+  text: string,
+  from: number,
+): { value: string; end: number } | null {
+  let i = from
+  while (i < text.length && /\s/.test(text[i])) i++
+  const start = i
+  let depth = 0
+  let quote: string | null = null
+  while (i < text.length) {
+    const c = text[i]
+    if (quote) {
+      if (c === '\\') {
+        i += 2
+        continue
+      }
+      if (c === quote) quote = null
+      i++
+      continue
+    }
+    if (c === "'" || c === '"') {
+      quote = c
+      i++
+      continue
+    }
+    if (c === '(' || c === '[' || c === '{') {
+      depth++
+      i++
+      continue
+    }
+    if (c === ')' || c === ']' || c === '}') {
+      if (depth === 0) break
+      depth--
+      i++
+      continue
+    }
+    if (depth === 0 && (c === ',' || c === '\n')) break
+    i++
+  }
+  if (start >= i) return null
+  return { value: text.slice(start, i).trim(), end: i }
+}
+
+/**
  * Heuristic parse of vite / webpack / vue alias blocks.
  * Handles common `path.resolve(__dirname, 'src')` and `new URL('./src', …)` forms.
  */
@@ -165,18 +215,21 @@ function aliasesFromBundlerConfig(
   }
 
   // Object form: '@': path.resolve(...), "@/": ...
-  const objRe =
-    /['"](@[\w/-]*|~[\w/-]*)['"]\s*:\s*([^,}\n]+)/g
+  const objRe = /['"](@[\w/-]*|~[\w/-]*)['"]\s*:\s*/g
   let m: RegExpExecArray | null
   while ((m = objRe.exec(text))) {
-    push(m[1], m[2])
+    const val = extractObjectValue(text, objRe.lastIndex)
+    if (val) push(m[1], val.value)
+    objRe.lastIndex = val ? val.end : objRe.lastIndex + 1
   }
 
   // Array form: { find: '@', replacement: '...' }
   const arrRe =
-    /find\s*:\s*(?:\/\^([^/]+)\/[a-z]*|['"]([^'"]+)['"])\s*,\s*replacement\s*:\s*([^,}\n]+)/g
+    /find\s*:\s*(?:\/\^([^/]+)\/[a-z]*|['"]([^'"]+)['"])\s*,\s*replacement\s*:\s*/g
   while ((m = arrRe.exec(text))) {
-    push(m[1] || m[2], m[3])
+    const val = extractObjectValue(text, arrRe.lastIndex)
+    if (val) push(m[1] || m[2], val.value)
+    arrRe.lastIndex = val ? val.end : arrRe.lastIndex + 1
   }
 
   return out
@@ -196,7 +249,7 @@ function mergeAliases(list: PathAlias[]): PathAlias[] {
 async function tryRead(projectRoot: string, name: string): Promise<string | null> {
   try {
     const path = joinRoot(projectRoot, name)
-    const res = await readTextFile(path)
+    const res = await readTextFile(path, projectRoot)
     return res.content
   } catch {
     return null
@@ -243,24 +296,24 @@ const RESOLVE_EXTS = [
   '.scss',
 ]
 
-async function fileExists(path: string): Promise<boolean> {
+async function fileExists(path: string, root: string): Promise<boolean> {
   try {
-    await readTextFile(path)
+    await readTextFile(path, root)
     return true
   } catch {
     return false
   }
 }
 
-async function expandLocalCandidate(base: string): Promise<string | null> {
+async function expandLocalCandidate(base: string, root: string): Promise<string | null> {
   const normalized = normalizePath(base)
-  if (await fileExists(normalized)) return normalized
+  if (await fileExists(normalized, root)) return normalized
   const lower = normalized.toLowerCase()
   const hasExt = RESOLVE_EXTS.some((e) => lower.endsWith(e))
   if (!hasExt) {
     for (const ext of RESOLVE_EXTS) {
       const p = `${normalized}${ext}`
-      if (await fileExists(p)) return p
+      if (await fileExists(p, root)) return p
     }
     for (const name of [
       'index.d.ts',
@@ -271,7 +324,7 @@ async function expandLocalCandidate(base: string): Promise<string | null> {
       'index.vue',
     ]) {
       const p = `${normalized}/${name}`
-      if (await fileExists(p)) return p
+      if (await fileExists(p, root)) return p
     }
   }
   return null
@@ -291,18 +344,21 @@ function joinRelativeLocal(fromFile: string, spec: string): string {
   return parts.join('/')
 }
 
-/** Local fallback when the Tauri command is unavailable or returns null. */
+/** Local fallback when the Tauri command is unavailable or returns null.
+ *  `readRoot` (containing workspace) is the containment gate for disk reads —
+ *  import targets may legitimately sit outside the project (monorepos). */
 async function resolveImportLocally(
   projectRoot: string,
   fromFile: string,
   specifier: string,
   aliases: PathAlias[],
+  readRoot: string,
 ): Promise<string | null> {
   const spec = specifier.trim()
   if (!spec || /^(data:|https?:|node:)/.test(spec)) return null
 
   if (spec.startsWith('./') || spec.startsWith('../')) {
-    return expandLocalCandidate(joinRelativeLocal(fromFile, spec))
+    return expandLocalCandidate(joinRelativeLocal(fromFile, spec), readRoot)
   }
 
   const sorted = [...aliases].sort((a, b) => b.find.length - a.find.length)
@@ -326,40 +382,44 @@ async function resolveImportLocally(
       const joined = rest
         ? `${repl.replace(/\/$/, '')}/${rest}`
         : repl
-      const hit = await expandLocalCandidate(joined)
+      const hit = await expandLocalCandidate(joined, readRoot)
       if (hit) return hit
     }
   }
 
   const inRoot = await expandLocalCandidate(
     `${normalizePath(projectRoot)}/${spec}`,
+    readRoot,
   )
   if (inRoot) return inRoot
 
   // Bare package: prefer @types / package typings (mirrors Rust resolve_node_module).
-  return resolveNodeModuleLocally(projectRoot, spec)
+  return resolveNodeModuleLocally(projectRoot, spec, readRoot)
 }
 
 /** Resolve only typings (.d.ts / .ts / .tsx) — never fall through to index.js. */
-async function expandTypesCandidate(base: string): Promise<string | null> {
+async function expandTypesCandidate(
+  base: string,
+  root: string,
+): Promise<string | null> {
   const normalized = normalizePath(base)
   const lower = normalized.toLowerCase()
   if (
     (lower.endsWith('.d.ts') ||
       lower.endsWith('.ts') ||
       lower.endsWith('.tsx')) &&
-    (await fileExists(normalized))
+    (await fileExists(normalized, root))
   ) {
     return normalized
   }
   for (const ext of ['.d.ts', '.ts', '.tsx']) {
     if (lower.endsWith(ext)) continue
     const p = `${normalized}${ext}`
-    if (await fileExists(p)) return p
+    if (await fileExists(p, root)) return p
   }
   for (const name of ['index.d.ts', 'index.ts', 'index.tsx']) {
     const p = `${normalized}/${name}`
-    if (await fileExists(p)) return p
+    if (await fileExists(p, root)) return p
   }
   return null
 }
@@ -367,6 +427,7 @@ async function expandTypesCandidate(base: string): Promise<string | null> {
 async function resolveNodeModuleLocally(
   projectRoot: string,
   spec: string,
+  readRoot: string,
 ): Promise<string | null> {
   const root = normalizePath(projectRoot)
   let pkgName: string
@@ -394,11 +455,12 @@ async function resolveNodeModuleLocally(
 
   const tryPkgTypes = async (dir: string): Promise<string | null> => {
     if (subpath) {
-      const hit = await expandTypesCandidate(`${dir}/${subpath}`)
+      const hit = await expandTypesCandidate(`${dir}/${subpath}`, readRoot)
       if (hit) return hit
     }
     try {
-      const pkgText = (await readTextFile(`${dir}/package.json`)).content
+      const pkgText = (await readTextFile(`${dir}/package.json`, readRoot))
+        .content
       const pkg = JSON.parse(pkgText) as {
         types?: string
         typings?: string
@@ -413,13 +475,13 @@ async function resolveNodeModuleLocally(
           ? undefined
           : pkg.exports?.['.']?.types || pkg.exports?.['.']?.import?.types)
       if (entry) {
-        const hit = await expandTypesCandidate(`${dir}/${entry}`)
+        const hit = await expandTypesCandidate(`${dir}/${entry}`, readRoot)
         if (hit) return hit
       }
     } catch {
       /* ignore */
     }
-    return expandTypesCandidate(dir)
+    return expandTypesCandidate(dir, readRoot)
   }
 
   // Prefer DefinitelyTyped (@types/*) over package index.js (e.g. react).
@@ -430,10 +492,10 @@ async function resolveNodeModuleLocally(
 
   // Last resort: JS entry (navigation only; Monaco may still lack types).
   if (subpath) {
-    const hit = await expandLocalCandidate(`${nm}/${subpath}`)
+    const hit = await expandLocalCandidate(`${nm}/${subpath}`, readRoot)
     if (hit) return hit
   }
-  return expandLocalCandidate(nm)
+  return expandLocalCandidate(nm, readRoot)
 }
 
 export async function resolveImportPath(
@@ -441,6 +503,7 @@ export async function resolveImportPath(
   fromFile: string,
   specifier: string,
   aliases: PathAlias[],
+  readRoot?: string,
 ): Promise<string | null> {
   try {
     const hit = await invoke<string | null>('resolve_import', {
@@ -453,5 +516,11 @@ export async function resolveImportPath(
   } catch {
     /* fall through to local */
   }
-  return resolveImportLocally(projectRoot, fromFile, specifier, aliases)
+  return resolveImportLocally(
+    projectRoot,
+    fromFile,
+    specifier,
+    aliases,
+    readRoot ?? projectRoot,
+  )
 }

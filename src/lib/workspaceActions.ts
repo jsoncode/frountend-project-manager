@@ -39,7 +39,7 @@ export async function createNewWorkspace(name: string): Promise<string | null> {
   if (!parent) return null
 
   const full = joinPath(parent, trimmed)
-  const created = await invoke<string>('create_directory', { path: full })
+  const created = await invoke<string>('create_directory', { root: parent, path: full })
 
   const config = useSettingsStore.getState().config
   if (!config) return created

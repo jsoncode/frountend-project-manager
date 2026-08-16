@@ -80,16 +80,19 @@ function toCss(s: AnsiStyle): CSSProperties | undefined {
 }
 
 function color256(n: number): string {
-  if (n < 16) return ANSI16_FG[n] ?? '#abb2bf'
-  if (n < 232) {
-    const i = n - 16
+  // Clamp malformed inputs (e.g. `38;5;999`) instead of indexing out of range
+  // (audit P2-7).
+  const clamped = Math.max(0, Math.min(255, n))
+  if (clamped < 16) return ANSI16_FG[clamped] ?? '#abb2bf'
+  if (clamped < 232) {
+    const i = clamped - 16
     const r = Math.floor(i / 36)
     const g = Math.floor((i % 36) / 6)
     const b = i % 6
     const ramp = [0, 95, 135, 175, 215, 255]
     return `rgb(${ramp[r]},${ramp[g]},${ramp[b]})`
   }
-  const v = 8 + (n - 232) * 10
+  const v = 8 + (clamped - 232) * 10
   return `rgb(${v},${v},${v})`
 }
 
@@ -101,7 +104,13 @@ function applySgr(style: AnsiStyle, params: number[]): AnsiStyle {
     const p = params[i] ?? 0
     switch (p) {
       case 0:
-        return {}
+        // Reset then CONTINUE processing the remaining params — `\x1b[0;31m`
+        // must first reset, then apply red. An early return drops the 31
+        // (audit P2-7). A bare `\x1b[0m` (empty remainder) must terminate.
+        {
+          const rest = params.slice(i + 1)
+          return rest.length > 0 ? applySgr({}, rest) : {}
+        }
       case 1:
         next.bold = true
         break
